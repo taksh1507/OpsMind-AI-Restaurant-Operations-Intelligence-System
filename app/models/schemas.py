@@ -229,3 +229,90 @@ class MenuItemUpdate(BaseModel):
         decimal_places=2
     )
     is_available: Optional[bool] = None
+
+
+# =============== SALE SCHEMAS ===============
+
+
+class SaleItemRequest(BaseModel):
+    """Schema for a single line item in a sale request."""
+    
+    menu_item_id: int = Field(
+        ...,
+        description="ID of the menu item being purchased"
+    )
+    quantity: int = Field(
+        ...,
+        gt=0,
+        description="Quantity must be greater than 0"
+    )
+
+
+class SaleCreateRequest(BaseModel):
+    """Schema for creating a new sale (checkout).
+    
+    Accepts a list of items with quantities.
+    The system will fetch current prices, calculate total, and save the transaction.
+    """
+    
+    items: list[SaleItemRequest] = Field(
+        ...,
+        min_items=1,
+        description="List of items being purchased (at least 1)"
+    )
+    payment_method: str = Field(
+        default="cash",
+        description="Payment method: cash, card, digital_wallet, upi, bank_transfer"
+    )
+    tax_rate: Optional[Decimal] = Field(
+        None,
+        ge=0,
+        decimal_places=2,
+        description="Optional tax rate as percentage (e.g., 0.05 for 5%)"
+    )
+
+
+class SaleItemResponse(BaseModel):
+    """Schema for a line item in sale response (read)."""
+    
+    id: int
+    sale_id: int
+    menu_item_id: int
+    quantity: int
+    unit_price_at_sale: Decimal
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+    
+    @property
+    def line_total(self) -> Decimal:
+        """Calculate line total."""
+        return self.quantity * self.unit_price_at_sale
+
+
+class SaleResponse(BaseModel):
+    """Schema for sale response (read)."""
+    
+    id: int
+    tenant_id: int
+    total_amount: Decimal
+    tax_amount: Decimal
+    payment_method: str
+    timestamp: datetime
+    sale_items: list[SaleItemResponse] = []
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+    
+    @property
+    def grand_total(self) -> Decimal:
+        """Calculate grand total (subtotal + tax)."""
+        return self.total_amount + self.tax_amount
+    
+    @property
+    def item_count(self) -> int:
+        """Count total items in this sale."""
+        return sum(item.quantity for item in self.sale_items) if self.sale_items else 0
