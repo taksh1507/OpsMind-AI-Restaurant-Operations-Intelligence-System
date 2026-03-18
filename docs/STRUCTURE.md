@@ -8,6 +8,7 @@
 ├── app/                          # Main application package
 │   ├── __init__.py
 │   ├── main.py                   # FastAPI app initialization & startup events
+│   ├── database.py               # Database connection & session factory
 │   │
 │   ├── api/                      # 🔗 Route Handlers
 │   │   ├── __init__.py
@@ -27,7 +28,9 @@
 │   ├── models/                   # 🗂️ Database Schemas (SQLAlchemy ORM)
 │   │   ├── __init__.py
 │   │   ├── base.py               # Base model & registry
-│   │   ├── restaurant.py         # Restaurant (multi-tenant root)
+│   │   ├── tenant.py             # Tenant (multi-tenant root)
+│   │   ├── user.py               # User accounts
+│   │   ├── schemas.py            # Pydantic request/response schemas
 │   │   ├── menu_item.py          # Menu items
 │   │   ├── daily_sale.py         # Daily sales transactions
 │   │   ├── ingredient.py         # Raw ingredients & costs
@@ -50,7 +53,6 @@
 │   │   ├── scheduler.py          # Agent: Staff scheduling
 │   │   └── state.py              # Shared agent state & schemas
 │   │
-│   ├── database.py               # Database connection & session factory
 │   ├── static/                   # Frontend assets
 │   │   ├── index.html
 │   │   ├── dashboard.js
@@ -68,10 +70,12 @@
 │   │   ├── test_auth_service.py
 │   │   └── test_analytics_service.py
 │   └── test_agents/
-│       └── test_agents.py
+│       └── test_agents.js
 │
 ├── docs/                         # 📖 Documentation
-│   ├── API.md                    # Full API spec
+│   ├── STRUCTURE.md              # Project structure (this file)
+│   ├── DAY2_IMPLEMENTATION.md    # Day 2 implementation details
+│   ├── API.md                    # Full API specification
 │   ├── ARCHITECTURE.md           # Multi-tenant design patterns
 │   ├── AGENTS.md                 # LangGraph agent design
 │   └── DEPLOYMENT.md             # Docker, K8s, cloud deployment
@@ -81,13 +85,13 @@
 │       ├── ci.yml                # GitHub Actions: test, lint
 │       └── deploy.yml            # GitHub Actions: deploy to cloud
 │
+├── .env                          # Local environment config (gitignored)
+├── .env.example                  # Environment config template
 ├── requirements.txt              # Python dependencies
-├── poetry.lock                   # (if using Poetry)
-├── pyproject.toml                # (if using Poetry)
 ├── .gitignore                    # Git ignore rules
 ├── LICENSE                       # MIT License
 ├── README.md                     # Project overview
-└── STRUCTURE.md                  # This file
+└── STRUCTURE.md                  # ⚠️ DEPRECATED - See docs/STRUCTURE.md
 ```
 
 ---
@@ -102,30 +106,30 @@
   ```python
   # app/api/analytics.py
   @router.get("/analytics/summary")
-  def get_summary(db: Session = Depends(get_db), user = Depends(get_current_restaurant)):
-      return analytics_service.build_summary(db, user.restaurant_id)
+  async def get_summary(db: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+      return await analytics_service.build_summary(db, user.tenant_id)
   ```
 
 ### `/app/core` — Configuration & Security
 - **Purpose:** Centralized configuration, JWT logic, constants
 - **Key Files:**
-  - `config.py` — Load env variables (DB_URL, JWT_SECRET, OPENAI_KEY, etc.)
+  - `config.py` — Load env variables (DATABASE_URL, SECRET_KEY, etc.)
   - `security.py` — Hash passwords, encode/decode JWT tokens
   - `dependencies.py` — FastAPI `Depends()` helpers
 - **Pattern:** Imported by routes & services
 
 ### `/app/models` — Database Schemas
-- **Purpose:** SQLAlchemy ORM model definitions
-- **Pattern:** One model per file (Restaurant, MenuItem, DailySale, etc.)
-- **Multi-Tenancy:** Every model has `restaurant_id` FK or inherits from Restaurant
+- **Purpose:** SQLAlchemy ORM model definitions + Pydantic schemas
+- **Pattern:** One model per file (Tenant, User, MenuItem, DailySale, etc.)
+- **Multi-Tenancy:** Every user model has `tenant_id` FK to Tenant
 
 ### `/app/services` — Business Logic
 - **Purpose:** Core algorithms, calculations, orchestration
-- **Pattern:** Stateless functions that operate on DB session
+- **Pattern:** Stateless async functions that operate on DB session
 - **Examples:**
+  - `auth_service.register_user()`
   - `analytics_service.calculate_profit_per_dish()`
   - `pricing_service.simulate_price_change()`
-  - `agent_orchestrator.run_revenue_optimizer_agent()`
 
 ### `/app/agents` — LangGraph Agents
 - **Purpose:** Autonomous AI agents powered by LangGraph
@@ -148,7 +152,7 @@ USER REQUEST
     ↓ queries
 [Models] app/models/daily_sale.py, menu_item.py
     ↓ reads
-[Database] PostgreSQL / SQLite
+[Database] PostgreSQL (async with asyncpg)
     ↓
 [Response] JSON to client
 ```
@@ -161,27 +165,47 @@ Every endpoint follows this pattern:
 
 ```python
 @router.get("/analytics/summary")
-def get_summary(
-    db: Session = Depends(get_db),
-    current_user: Restaurant = Depends(get_current_restaurant)  # ← JWT → restaurant_id
+async def get_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ← JWT → tenant_id
 ):
-    # All queries filtered by restaurant_id
-    result = analytics_service.build_summary(db, current_user.restaurant_id)
+    # All queries filtered by tenant_id
+    result = await analytics_service.build_summary(db, current_user.tenant_id)
     return result
 ```
 
-**Key:** `current_user.restaurant_id` is passed to every service call.
+**Key:** `current_user.tenant_id` is passed to every service call for isolation.
 
 ---
 
-## 🚀 What's Next?
+## 🔐 Security Architecture
 
-1. ✅ **Folder Structure** (Commit #3 — TODAY)
-2. 🚧 **Core Models & Database** (Commit #4)
-3. 🚧 **Authentication Service** (Commit #5)
-4. 🚧 **Analytics Service** (Commit #6)
-5. 🚧 **LangGraph Agent Framework** (Commit #7+)
+- **Authentication:** JWT tokens (HS256)
+- **Password Storage:** Bcrypt hashing with passlib
+- **Multi-Tenancy:** Database-level isolation per tenant
+- **Authorization:** Role-based access control (RBAC) - future implementation
 
 ---
 
-**Last Updated:** March 17, 2026
+## 🚀 Development Roadmap
+
+### Day 1 ✅ — Skeleton
+- [x] FastAPI folder structure
+- [x] Core models package
+- [x] Git initialization
+
+### Day 2 ✅ — Foundation of Trust
+- [x] SQLAlchemy Tenant + User models
+- [x] JWT security utilities
+- [x] Registration & Login endpoints
+
+### Day 3+ — Features (Planned)
+- [ ] Database Migrations (Alembic)
+- [ ] Role-Based Access Control
+- [ ] Analytics Service
+- [ ] LangGraph Agent Framework
+- [ ] Tests & CI/CD
+
+---
+
+**Last Updated:** March 18, 2026
