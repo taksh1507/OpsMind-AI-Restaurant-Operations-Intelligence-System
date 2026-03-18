@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import settings
 from app.database import init_db, close_db
-from app.api import auth, categories, menu_items
+from app.api import auth, categories, menu_items, sales
 
 
 @asynccontextmanager
@@ -57,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(categories.router)
     app.include_router(menu_items.router)
+    app.include_router(sales.router)
     
     # Health check endpoint
     @app.get("/health")
