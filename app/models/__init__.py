@@ -5,16 +5,15 @@ SQLAlchemy ORM models for multi-tenant architecture:
 - tenant.py: Tenant (Restaurant) model
 - user.py: User account model
 - menu.py: Category and MenuItem models for menu management
+- sales.py: Sale and SaleItem models for transaction tracking
 - schemas.py: Pydantic request/response schemas
-- restaurant.py: Restaurant details (future)
-- daily_sale.py: Daily sales tracking
-- ingredient.py: Raw ingredient costs
 """
 
 from .base import Base, BaseModel
 from .tenant import Tenant, SubscriptionStatus
 from .user import User
 from .menu import Category, MenuItem
+from .sales import Sale, SaleItem, PaymentMethod
 from .schemas import (
     RegisterRequest,
     LoginRequest,
@@ -32,6 +31,9 @@ __all__ = [
     "User",
     "Category",
     "MenuItem",
+    "Sale",
+    "SaleItem",
+    "PaymentMethod",
     "RegisterRequest",
     "LoginRequest",
     "TenantSchema",
