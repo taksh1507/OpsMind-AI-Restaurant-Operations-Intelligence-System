@@ -5,7 +5,8 @@ user/tenant context from JWT tokens.
 """
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer
+from starlette.requests import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -19,7 +20,7 @@ security = HTTPBearer()
 
 
 async def get_current_user(
-    credentials: HTTPAuthCredentials = Depends(security),
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Extract and validate JWT token, return authenticated User with tenant context.
@@ -31,7 +32,7 @@ async def get_current_user(
     3. Tenant context (tenant_id) is available for data isolation
     
     Args:
-        credentials: HTTP Bearer token from Authorization header
+        request: HTTP request containing Authorization header
         db: Database session for user lookup
         
     Returns:
@@ -42,7 +43,18 @@ async def get_current_user(
         HTTPException 403: If user account is inactive
     """
     
-    token = credentials.credentials
+    # Extract Authorization header
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    # Extract token from "Bearer <token>"
+    token = auth_header.split(" ")[1]
     
     # Decode JWT token
     payload = decode_access_token(token)
