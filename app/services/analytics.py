@@ -6,9 +6,9 @@ Handles revenue, profit, and sales aggregation for insights.
 
 from datetime import datetime, date, timezone, timedelta
 from decimal import Decimal
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, desc
 
 from app.models import Sale, SaleItem, MenuItem
 
@@ -225,3 +225,86 @@ async def calculate_daily_revenue(
     
     except Exception as e:
         raise ValueError(f"Failed to calculate daily revenue: {str(e)}")
+
+
+async def get_top_selling_items(
+    session: AsyncSession,
+    tenant_id: int,
+    limit: int = 5,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
+    """Get the top-selling menu items for a restaurant.
+    
+    Groups sales by menu item name, sums quantities, and returns top sellers.
+    This identifies the "Stars" of the restaurant's menu.
+    
+    Args:
+        session: AsyncSession for database operations
+        tenant_id: The restaurant's tenant ID
+        limit: Maximum number of items to return (default 5)
+        start_date: Start of date range
+        end_date: End of date range
+        
+    Returns:
+        List of top-selling items with quantities, sorted by sales descending:
+        [
+            {"menu_item_id": 1, "name": "Margherita Pizza", "quantity_sold": 450, "revenue": Decimal("4500.00")},
+            {"menu_item_id": 2, "name": "Caesar Salad", "quantity_sold": 320, "revenue": Decimal("1920.00")},
+            ...
+        ]
+    """
+    
+    # Default date range: last 30 days
+    if end_date is None:
+        end_date = datetime.now(timezone.utc)
+    
+    if start_date is None:
+        start_date = end_date - timedelta(days=30)
+    
+    # Ensure timezone-aware
+    if start_date.tzinfo is None:
+        start_date = start_date.replace(tzinfo=timezone.utc)
+    if end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+    
+    try:
+        result = await session.execute(
+            select(
+                SaleItem.menu_item_id,
+                MenuItem.name,
+                func.sum(SaleItem.quantity).label("quantity_sold"),
+                func.sum(
+                    SaleItem.quantity * SaleItem.unit_price_at_sale
+                ).label("revenue")
+            ).select_from(SaleItem).join(
+                Sale, SaleItem.sale_id == Sale.id
+            ).join(
+                MenuItem, SaleItem.menu_item_id == MenuItem.id
+            ).where(
+                and_(
+                    SaleItem.tenant_id == tenant_id,
+                    Sale.timestamp >= start_date,
+                    Sale.timestamp <= end_date
+                )
+            ).group_by(
+                SaleItem.menu_item_id,
+                MenuItem.name
+            ).order_by(
+                desc(func.sum(SaleItem.quantity))
+            ).limit(limit)
+        )
+        
+        top_items = []
+        for row in result:
+            top_items.append({
+                "menu_item_id": row.menu_item_id,
+                "name": row.name,
+                "quantity_sold": row.quantity_sold,
+                "revenue": row.revenue or Decimal("0.00")
+            })
+        
+        return top_items
+    
+    except Exception as e:
+        raise ValueError(f"Failed to get top-selling items: {str(e)}")
