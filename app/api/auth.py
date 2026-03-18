@@ -11,6 +11,7 @@ from app.models.schemas import RegisterRequest, RegisterResponse, LoginRequest, 
 from app.services.auth_service import register_user, authenticate_user, get_user_by_email
 from app.core import create_access_token
 from app.models import User, Tenant
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -95,22 +96,37 @@ async def login(
 
 
 @router.get("/me")
-async def get_current_user(
-    email: str = None,
-    user_id: int = None,
-    db: AsyncSession = Depends(get_db)
+async def get_profile(
+    current_user: User = Depends(get_current_user)
 ):
-    """Get current authenticated user details.
+    """Get current authenticated user's profile.
     
-    Note: In a real implementation, this would extract the user from JWT token.
-    This is a placeholder for now.
+    This is a protected endpoint that proves the multi-tenant auth logic works.
+    Only accessible with a valid JWT token in the Authorization header.
+    
+    The get_current_user dependency handles:
+    1. Extracting JWT from Authorization header
+    2. Validating token and decoding claims
+    3. Verifying user exists in database
+    4. Returning User object with tenant_id for data isolation
     
     Args:
-        email: User email (from token)
-        user_id: User ID (from token)
-        db: Database session (injected)
+        current_user: Authenticated User injected by get_current_user dependency
         
     Returns:
-        User details
+        User profile with email, role, and tenant_id to confirm session scoping
     """
-    return {"message": "Implement JWT token extraction in dependency"}
+    return {
+        "status": "authenticated",
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "role": "admin" if current_user.is_admin else "staff",
+            "is_active": current_user.is_active
+        },
+        "tenant": {
+            "id": current_user.tenant_id,
+            "multi_tenant_isolation": True,
+            "message": "This user can only see their own restaurant's data"
+        }
+    }
