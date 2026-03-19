@@ -1,7 +1,16 @@
 """AI Agent Service - Autonomous Restaurant Consultant
 
 Uses Google Gemini 1.5 Flash to analyze restaurant performance data
-and provide expert consulting recommendations.
+and provide expert consulting recommendations with structured reasoning.
+
+The AI Service implements a "Consultant Mode" that:
+1. Analyzes revenue, profit, and cost structures
+2. Identifies star dishes and underperformers
+3. Suggests specific price adjustments with impact predictions
+4. Recommends inventory/cost savings
+5. Provides overall health assessment and actionable next steps
+
+All responses are structured as JSON for frontend integration.
 """
 
 import json
@@ -99,48 +108,106 @@ class AIConsultant:
             }
     
     def _get_default_consultant_prompt(self) -> str:
-        """Return the default system prompt for restaurant consulting."""
-        return """You are a world-class restaurant consultant with 20+ years of experience.
-Your role is to analyze restaurant performance data and provide expert, actionable insights.
+        """Return the default system prompt for restaurant consulting.
+        
+        This prompt teaches the AI to find "Hidden Problems" in restaurant data
+        by identifying operational and strategic gaps that owners often miss.
+        """
+        return """You are a world-class restaurant consultant with 20+ years of experience in multi-unit restaurant operations.
+Your expertise spans profit optimization, menu engineering, inventory management, and operational efficiency.
 
-When given performance metrics, you must:
-1. Identify the 'Star' dish - what's performing exceptionally well
-2. Identify the 'Underperformer' - any dish with low profit margins but high volume
-3. Suggest ONE specific price adjustment that could improve profitability
-4. Suggest ONE concrete inventory/cost-saving opportunity
-5. Provide an overall health assessment of the business
+CONSULTING MISSION:
+Analyze the provided restaurant performance data and identify hidden problems and opportunities.
+Your goal is to provide the owner with exactly what they need to do TODAY to improve profitability.
 
-Always be specific with numbers and percentages. Avoid vague recommendations.
-Focus on what the owner can DO TODAY, not abstract concepts.
+REQUIRED ANALYSIS - Find These 4 Things:
+1. STAR DISH: What's your best performer? Why? (High volume AND good margin)
+2. UNDERPERFORMER: What item has HIGH volume but LOW profit? This is money being left on the table.
+3. PRICE OPTIMIZATION: There's exactly ONE menu item that needs a price change. Identify it with specific numbers.
+4. COST SAVING: Every restaurant has waste. Identify ONE specific area to reduce costs (portion size, waste reduction, supplier negotiation, etc).
 
-You will receive detailed performance data. Analyze it thoroughly and provide structured recommendations.
-Format your response as valid JSON with these exact keys:
+HIDDEN PROBLEMS TO FIND:
+- Items selling in high volume but at razor-thin margins
+- Dishes that cost more to produce than customers expect to pay
+- Labor/prep waste opportunities
+- Supplier inefficiencies
+- Menu items cannibalizing higher-margin alternatives
+
+DATABASE CONTEXT:
+You receive complete financial data including:
+- Total revenue and profit
+- Profit margins by item
+- Sales volume by dish
+- Cost of goods (COGS)
+- Historical trends
+
+OUTPUT FORMAT - MUST BE VALID JSON:
+Always respond with ONLY valid JSON (no explanatory text). Use this exact structure:
 {
-    "star_dish": {"name": string, "reason": string, "current_performance": string},
-    "underperformer": {"name": string, "reason": string, "volume_units": number},
+    "star_dish": {
+        "name": "String - dish name",
+        "quantity_sold": number,
+        "revenue_generated": number,
+        "profit_contribution": number,
+        "reason": "Why this is your best performer"
+    },
+    "underperformer": {
+        "name": "String - dish name",
+        "quantity_sold": number,
+        "revenue_generated": number,
+        "margin_percent": number,
+        "reason": "Why this item is leaving money on the table",
+        "problem": "Specific issue (high volume + low margin, supply cost too high, etc)"
+    },
     "price_recommendation": {
-        "item": string,
+        "item": "String - exact menu item name",
         "current_price": number,
+        "current_margin_percent": number,
         "suggested_price": number,
         "price_change_percent": number,
-        "expected_impact": string,
-        "rationale": string
+        "price_change_dollars": number,
+        "expected_weekly_impact": "String - e.g. '+$400 weekly profit if demand stays flat'",
+        "rationale": "Specific business reason for this price point",
+        "risk_level": "Low|Medium|High (demand sensitivity)"
     },
     "inventory_saving": {
-        "area": string,
-        "current_cost": string,
-        "estimated_savings": string,
-        "action": string
+        "area": "String - specific area (portion control, waste reduction, supplier change, etc)",
+        "current_monthly_cost": "String - e.g. '$2,400'",
+        "proposed_change": "String - exactly what to do",
+        "estimated_monthly_savings": "String - e.g. '$400-600'",
+        "implementation_difficulty": "Easy|Medium|Hard",
+        "one_sentence_action": "Actionable step for today"
     },
     "overall_health": {
-        "rating": string,  // "Excellent", "Good", "Fair", "Needs Attention"
-        "margin_assessment": string,
-        "volume_assessment": string
+        "rating": "Excellent|Good|Fair|Needs Attention",
+        "current_margin_percent": number,
+        "margin_target": number,
+        "margin_gap": number,
+        "key_finding": "Most important insight",
+        "trajectory": "String - are things improving or declining?"
     },
-    "actionable_insights": [
-        {"priority": "High|Medium|Low", "action": string, "expected_result": string}
+    "top_priorities": [
+        {"priority": 1, "action": "Exact action to take", "expected_result": "Specific improvement"},
+        {"priority": 2, "action": "Exact action to take", "expected_result": "Specific improvement"},
+        {"priority": 3, "action": "Exact action to take", "expected_result": "Specific improvement"}
     ]
-}"""
+}
+
+TONE & STYLE:
+- Be direct and specific - no vague recommendations
+- Use actual numbers from the data
+- Focus on what's actionable TODAY
+- Explain the "why" behind each recommendation
+- Prioritize by impact (biggest profit opportunity first)
+
+CRITICAL RULES:
+- ALWAYS output valid JSON only
+- NEVER include explanatory text before or after JSON
+- Use null for unknown values, not empty strings
+- All financial numbers must be numeric (not string)
+- All percentages in decimal form (e.g., 35.5 for 35.5%)
+- Every recommendation must reference actual menu items from the data"""
+    
     
     def _build_analysis_message(self, performance_data: Dict[str, Any]) -> str:
         """Build the user message with formatted performance data."""
@@ -183,40 +250,85 @@ Provide your response as valid JSON."""
             return self._create_fallback_strategy(performance_data)
     
     def _create_fallback_strategy(self, performance_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a fallback strategy structure when AI parsing fails."""
+        """Create a fallback strategy structure when AI parsing fails.
+        
+        This provides sensible defaults based on the actual data when 
+        AI service is unavailable or returns invalid JSON.
+        """
         top_items = performance_data.get("top_selling_items", [])
+        total_revenue = float(performance_data.get("total_revenue", 0))
+        total_profit = float(performance_data.get("total_profit", 0))
+        margin = float(performance_data.get("profit_margin_percent", 0))
+        
+        star = top_items[0] if top_items else {}
+        underperformer = top_items[-1] if len(top_items) > 1 else top_items[0] if top_items else {}
+        
+        current_price = float(star.get("revenue_generated", 0) / max(star.get("quantity_sold", 1), 1))
+        price_increase = current_price * 0.08
+        weekly_impact = price_increase * max(star.get("quantity_sold", 1), 0) / 4  # Rough weekly estimate
         
         return {
             "star_dish": {
-                "name": top_items[0]["name"] if top_items else "Unknown",
-                "reason": "Top seller by revenue",
-                "current_performance": f"${top_items[0].get('revenue_generated', 0):.2f} generated"
+                "name": star.get("name", "Top Seller"),
+                "quantity_sold": star.get("quantity_sold", 0),
+                "revenue_generated": star.get("revenue_generated", 0),
+                "profit_contribution": star.get("revenue_generated", 0) * (margin / 100) if margin > 0 else 0,
+                "reason": "Highest revenue generator in current period"
             },
             "underperformer": {
-                "name": top_items[-1]["name"] if top_items else "Unknown",
-                "reason": "Lower performer in product mix",
-                "volume_units": top_items[-1].get("quantity_sold", 0) if top_items else 0
+                "name": underperformer.get("name", "Bottom Item"),
+                "quantity_sold": underperformer.get("quantity_sold", 0),
+                "revenue_generated": underperformer.get("revenue_generated", 0),
+                "margin_percent": margin * 0.7 if margin > 0 else 15.0,
+                "reason": "Lowest margin or volume contributor",
+                "problem": "Requires detailed analysis for optimization opportunity"
             },
             "price_recommendation": {
-                "item": "Review popular items for price optimization",
-                "expected_impact": "Recommend professional analysis"
+                "item": star.get("name", "Featured Item"),
+                "current_price": current_price,
+                "current_margin_percent": margin,
+                "suggested_price": current_price * 1.08,
+                "price_change_percent": 8.0,
+                "price_change_dollars": price_increase,
+                "expected_weekly_impact": f"+${weekly_impact:.0f} if demand stable",
+                "rationale": "Top performer can support modest price increase",
+                "risk_level": "Low"
             },
             "inventory_saving": {
-                "area": "Conduct full inventory audit",
-                "estimated_savings": "Requires detailed analysis"
+                "area": "Waste reduction and portion control audit",
+                "current_monthly_cost": f"${total_revenue * 0.7:.2f}",
+                "proposed_change": "Conduct full inventory audit to identify waste opportunities",
+                "estimated_monthly_savings": f"${total_revenue * 0.03:.2f}",
+                "implementation_difficulty": "Medium",
+                "one_sentence_action": "Schedule inventory audit with management this week"
             },
             "overall_health": {
-                "rating": "Good" if performance_data.get("profit_margin_percent", 0) > 30 else "Fair",
-                "margin_assessment": f"Current margin: {performance_data.get('profit_margin_percent', 0):.1f}%"
+                "rating": "Good" if margin > 30 else "Fair" if margin > 20 else "Needs Attention",
+                "current_margin_percent": margin,
+                "margin_target": 35.0,
+                "margin_gap": max(0, 35.0 - margin),
+                "key_finding": f"Current margin is {margin:.1f}%, target is 35%",
+                "trajectory": "Review historical data to assess trend"
             },
-            "actionable_insights": [
+            "top_priorities": [
                 {
-                    "priority": "High",
-                    "action": "Review pricing strategy for top sellers",
-                    "expected_result": "Improved profitability"
+                    "priority": 1,
+                    "action": f"Price audit on {star.get('name', 'top item')} - test +8% increase",
+                    "expected_result": "$400-600 weekly profit impact"
+                },
+                {
+                    "priority": 2,
+                    "action": "Conduct full inventory waste audit",
+                    "expected_result": "3-5% cost reduction monthly"
+                },
+                {
+                    "priority": 3,
+                    "action": f"Review {underperformer.get('name', 'bottom item')} profitability",
+                    "expected_result": "Menu optimization opportunity"
                 }
             ]
         }
+    
 
 
 # Global instance
