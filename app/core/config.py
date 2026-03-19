@@ -47,6 +47,12 @@ class Settings(BaseSettings):
         description="CORS allowed origins"
     )
     
+    # AI/LLM Configuration
+    google_api_key: Optional[str] = Field(
+        default=None,
+        description="Google Gemini API key for AI consulting features"
+    )
+    
     class Config:
         """Pydantic config."""
         env_file = ".env"
