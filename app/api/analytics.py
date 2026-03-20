@@ -19,7 +19,11 @@ from app.services.analytics import (
     get_top_selling_items,
     get_daily_sales_trend
 )
-from app.services.ai_agent import forecast_revenue
+from app.services.ai_agent import forecast_revenue, analyze_profit_margins
+from app.services.margin_analysis import (
+    get_all_menu_items_with_costs,
+    get_margin_report_summary
+)
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -582,4 +586,108 @@ async def get_revenue_forecast(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate revenue forecast: {str(e)}"
+        )
+
+
+@router.get("/margin-report")
+async def get_margin_report(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get AI-powered margin optimization and waste report.
+    
+    Analyzes all menu items' profitability based on ingredient costs.
+    Identifies items priced below healthy margins (< 3x cost) and provides
+    specific recommendations for price adjustments or cost reductions.
+    
+    This endpoint calculates:
+    - Cost of Goods Sold (COGS) for each menu item based on recipes
+    - Profit margins with ingredient accuracy
+    - Price-to-cost ratios (healthy = >3x)
+    - Items in danger zones (losing money after overhead)
+    - AI-generated optimization plan with specific actions
+    
+    The AI recommends:
+    - Which items to price increase (with exact new prices)
+    - Which ingredients to substitute or source differently
+    - Product discontinuation if necessary
+    - Estimated profit improvement from each action
+    
+    Args:
+        current_user: Authenticated user (injected)
+        db: Database session (injected)
+        
+    Returns:
+        Comprehensive margin report with risk analysis and AI optimization plan
+        
+    Raises:
+        HTTPException 401: If user is not authenticated
+        HTTPException 404: If no menu items exist
+        HTTPException 500: If analysis fails
+    """
+    
+    try:
+        # Get all menu items with calculated COGS
+        menu_items = await get_all_menu_items_with_costs(db, current_user.tenant_id)
+        
+        if not menu_items:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No menu items found for this restaurant. Add menu items and recipes first."
+            )
+        
+        # Get summary metrics
+        summary = await get_margin_report_summary(db, current_user.tenant_id)
+        
+        # Use AI to generate optimization plan
+        ai_result = await analyze_profit_margins(menu_items)
+        
+        if ai_result.get("status") == "error":
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=ai_result.get("message", "Failed to generate margin analysis")
+            )
+        
+        margin_analysis = ai_result.get("analysis", {})
+        
+        # Format the response
+        return {
+            "status": "success",
+            "tenant_id": current_user.tenant_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "summary": {
+                "total_menu_items": summary["total_items"],
+                "items_with_healthy_margins": summary["items_healthy"],
+                "items_in_danger_zone": summary["items_at_risk"],
+                "average_margin_percent": summary["average_margin_percent"],
+                "total_revenue_from_risky_items": summary["total_revenue_at_risk"],
+                "potential_monthly_improvement": summary["potential_improvement"]
+            },
+            "menu_items": menu_items,
+            "margin_analysis": margin_analysis,
+            "ai_reasoning": ai_result.get("reasoning", ""),
+            "recommendations": {
+                "immediate_actions": margin_analysis.get("optimization_plan", {}).get("top_3_actions", []),
+                "executive_summary": margin_analysis.get("optimization_plan", {}).get("executive_summary", ""),
+                "cost_strategies": margin_analysis.get("cost_strategies", [])
+            },
+            "message": "AI-powered margin analysis and waste optimization report",
+            "action_items": [
+                f"Review {summary['items_at_risk']} menu items with margin concerns",
+                f"Potential to improve margins by ${summary['potential_improvement']}/month",
+                "Implement suggested price changes and ingredient cost reductions"
+            ]
+        }
+    
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate margin report: {str(e)}"
         )
