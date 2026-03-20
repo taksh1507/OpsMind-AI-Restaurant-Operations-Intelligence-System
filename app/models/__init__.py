@@ -4,7 +4,7 @@ SQLAlchemy ORM models for multi-tenant architecture:
 - base.py: Base model with common fields (created_at, updated_at)
 - tenant.py: Tenant (Restaurant) model
 - user.py: User account model
-- menu.py: Category and MenuItem models for menu management
+- menu.py: Category, MenuItem, Ingredient, and Recipe models
 - sales.py: Sale and SaleItem models for transaction tracking
 - schemas.py: Pydantic request/response schemas
 """
@@ -12,7 +12,7 @@ SQLAlchemy ORM models for multi-tenant architecture:
 from .base import Base, BaseModel
 from .tenant import Tenant, SubscriptionStatus
 from .user import User
-from .menu import Category, MenuItem
+from .menu import Category, MenuItem, Ingredient, Recipe
 from .sales import Sale, SaleItem, PaymentMethod
 from .schemas import (
     RegisterRequest,
@@ -31,6 +31,8 @@ __all__ = [
     "User",
     "Category",
     "MenuItem",
+    "Ingredient",
+    "Recipe",
     "Sale",
     "SaleItem",
     "PaymentMethod",
