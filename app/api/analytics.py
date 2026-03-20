@@ -16,8 +16,10 @@ from app.models import User
 from app.services.analytics import (
     calculate_revenue_and_profit,
     calculate_profit_margin,
-    get_top_selling_items
+    get_top_selling_items,
+    get_daily_sales_trend
 )
+from app.services.ai_agent import forecast_revenue
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -471,4 +473,113 @@ async def get_ai_briefing(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate AI briefing: {str(e)}"
+        )
+
+
+@router.get("/forecast")
+async def get_revenue_forecast(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    days: int = 14
+):
+    """Get AI-powered revenue forecast for the next 3 days.
+    
+    Uses historical trends from the past N days to predict future revenue.
+    The AI forecaster analyzes patterns (weekday vs weekend, growth trends, etc.)
+    and provides a confidence score for the predictions.
+    
+    This endpoint gives restaurant owners a "Crystal Ball" view of their 
+    expected revenue, enabling better resource planning and marketing timing.
+    
+    Args:
+        current_user: Authenticated user (injected)
+        db: Database session (injected)
+        days: Number of historical days to analyze (default 14)
+        
+    Returns:
+        Forecast with predictions for next 3 days:
+        - next_day_1_revenue: Predicted revenue for tomorrow
+        - next_day_2_revenue: Predicted revenue for day after tomorrow
+        - next_day_3_revenue: Predicted revenue for 3 days from now
+        - confidence_score: 0-100 confidence level
+        - growth_rate_percent: Daily trend as percentage
+        - business_impact: Actionable insight for owner
+        
+    Raises:
+        HTTPException 401: If user is not authenticated
+        HTTPException 404: If no historical data found
+        HTTPException 500: If forecast generation fails
+    """
+    
+    try:
+        # Get historical trend data
+        trend_data = await get_daily_sales_trend(
+            db,
+            current_user.tenant_id,
+            days=days
+        )
+        
+        if not trend_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No sales data found for the past {days} days. A forecast requires at least 3 days of historical data."
+            )
+        
+        if len(trend_data) < 3:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Insufficient historical data for accurate forecasting. Need at least 3 days of sales data."
+            )
+        
+        # Generate forecast using AI
+        forecast_result = await forecast_revenue(trend_data)
+        
+        if forecast_result.get("status") == "error":
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=forecast_result.get("message", "Failed to generate forecast")
+            )
+        
+        # Format the response
+        forecast = forecast_result.get("forecast", {})
+        
+        return {
+            "status": "success",
+            "tenant_id": current_user.tenant_id,
+            "forecast_period": {
+                "historical_days": days,
+                "data_points": len(trend_data),
+                "generated_at": datetime.now(timezone.utc).isoformat()
+            },
+            "predictions": {
+                "next_day_1_revenue": forecast.get("next_day_1_revenue", 0),
+                "next_day_2_revenue": forecast.get("next_day_2_revenue", 0),
+                "next_day_3_revenue": forecast.get("next_day_3_revenue", 0)
+            },
+            "confidence": {
+                "score": forecast.get("confidence_score", 0),
+                "reasoning": forecast.get("confidence_reasoning", ""),
+                "growth_rate_percent": forecast.get("growth_rate_percent", 0),
+                "growth_direction": forecast.get("growth_direction", "Stable")
+            },
+            "pattern": {
+                "detected": forecast.get("pattern_detected", "No pattern detected"),
+                "risk_factors": forecast.get("risk_factors", [])
+            },
+            "business_impact": forecast.get("business_impact", ""),
+            "message": "Revenue forecast based on AI analysis of historical trends",
+            "recommendation": "Use this forecast to plan staffing, inventory, and marketing campaigns"
+        }
+    
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate revenue forecast: {str(e)}"
         )
