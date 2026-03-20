@@ -308,3 +308,72 @@ async def get_top_selling_items(
     
     except Exception as e:
         raise ValueError(f"Failed to get top-selling items: {str(e)}")
+
+
+async def get_daily_sales_trend(
+    session: AsyncSession,
+    tenant_id: int,
+    days: int = 14
+) -> Dict[str, float]:
+    """Get historical daily revenue trends for time-series analysis.
+    
+    Returns the last N days of total revenue, grouped by date.
+    This data is used by the AI to identify patterns and predict future sales.
+    
+    Args:
+        session: AsyncSession for database operations
+        tenant_id: The restaurant's tenant ID
+        days: Number of historical days to retrieve (default 14)
+        
+    Returns:
+        Dictionary mapping dates to revenue totals:
+        {
+            "2026-03-19": 450.0,
+            "2026-03-20": 510.0,
+            "2026-03-21": 485.5,
+            ...
+        }
+        Ordered chronologically from earliest to latest date.
+    """
+    
+    # Calculate date range: last N days up to today
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days)
+    
+    # Ensure timezone-aware
+    if start_date.tzinfo is None:
+        start_date = start_date.replace(tzinfo=timezone.utc)
+    if end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+    
+    try:
+        result = await session.execute(
+            select(
+                func.date(Sale.timestamp).label("sale_date"),
+                func.sum(
+                    SaleItem.quantity * SaleItem.unit_price_at_sale
+                ).label("daily_revenue")
+            ).select_from(SaleItem).join(
+                Sale, SaleItem.sale_id == Sale.id
+            ).where(
+                and_(
+                    SaleItem.tenant_id == tenant_id,
+                    Sale.timestamp >= start_date,
+                    Sale.timestamp <= end_date
+                )
+            ).group_by(func.date(Sale.timestamp)).order_by(
+                func.date(Sale.timestamp).asc()
+            )
+        )
+        
+        # Build dictionary mapping date strings to revenue floats
+        trend_data = {}
+        for row in result:
+            date_key = str(row.sale_date)
+            revenue = float(row.daily_revenue or Decimal("0.00"))
+            trend_data[date_key] = revenue
+        
+        return trend_data
+    
+    except Exception as e:
+        raise ValueError(f"Failed to get daily sales trend: {str(e)}")
