@@ -15,6 +15,7 @@ All responses are structured as JSON for frontend integration.
 
 import json
 import os
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import google.generativeai as genai
 from app.core.config import settings
@@ -33,7 +34,12 @@ class AIConsultant:
             )
         
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        # Use gemini-2.0-flash (latest) or gemini-pro as fallback
+        try:
+            self.model = genai.GenerativeModel("gemini-2.0-flash")
+        except:
+            # Fallback to gemini-pro if latest version not available
+            self.model = genai.GenerativeModel("gemini-pro")
     
     async def generate_strategy(
         self,
@@ -329,6 +335,221 @@ Provide your response as valid JSON."""
             ]
         }
     
+    async def predict_revenue(
+        self,
+        trend_data: Dict[str, float]
+    ) -> Dict[str, Any]:
+        """Predict revenue for the next 3 days based on historical trends.
+        
+        Uses AI to analyze 14-day sales patterns and predict future revenue.
+        Provides growth/decline rates and confidence scoring based on data consistency.
+        
+        Args:
+            trend_data: Dictionary mapping date strings to daily revenue floats
+                       (e.g., {"2026-03-19": 450.0, "2026-03-20": 510.0, ...})
+        
+        Returns:
+            Dictionary with:
+            - status: "success" or "error"
+            - predictions: List of 3 days with predicted revenue
+            - confidence_score: 0-100 score based on data consistency
+            - growth_rate: Average daily growth/decline percentage
+            - analysis: AI's textual analysis of trends and business impact
+            - business_impact: Human-readable summary (e.g., "Expect 15% surge Saturday")
+        """
+        if not trend_data:
+            return {
+                "status": "error",
+                "message": "No historical trend data provided"
+            }
+        
+        system_prompt = self._get_forecasting_system_prompt()
+        user_message = self._build_forecasting_message(trend_data)
+        
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [system_prompt]},
+                    {"role": "user", "parts": [user_message]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    top_k=40,
+                    max_output_tokens=1500
+                )
+            )
+            
+            ai_response = response.text
+            forecast = self._parse_forecast_response(ai_response, trend_data)
+            
+            return {
+                "status": "success",
+                "forecast": forecast,
+                "reasoning": ai_response,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to generate revenue forecast: {str(e)}",
+                "forecast": None
+            }
+    
+    def _get_forecasting_system_prompt(self) -> str:
+        """Return the system prompt for revenue forecasting."""
+        return """You are an expert revenue forecnist and time-series analyst for restaurants.
+Your expertise includes:
+- Identifying daily revenue patterns (weekday vs weekend trends)
+- Detecting growth/decline trajectories
+- Predicting short-term revenue fluctuations
+- Quantifying forecast confidence based on data consistency
+
+FORECASTING TASK:
+Analyze the provided 14-day historical revenue data and predict revenue for the next 3 days.
+
+YOUR ANALYSIS SHOULD INCLUDE:
+1. Daily Revenue Predictions: Specific dollar amounts for the next 3 days
+2. Confidence Score: 0-100 indicating your confidence in predictions
+   - 90-100: Very consistent pattern with high confidence
+   - 70-89: Mostly consistent with minor fluctuations
+   - 50-69: Mixed signals, moderate confidence
+   - Below 50: Highly volatile, low confidence
+3. Growth/Decline Rate: Overall percentage change pattern (e.g., "+2.5% daily growth" or "-1.8% weekly decline")
+4. Business Impact: Key actionable insight for restaurant owner (e.g., "Expect 15% surge Saturday due to weekend pattern")
+5. Pattern Analysis: What trend you observe (weekend spike, steady decline, seasonal pattern, etc)
+
+CONFIDENCE FACTORS TO CONSIDER:
+- Data consistency: How similar are recent days?
+- Volatility: Are revenue swings predictable or random?
+- Clear trends: Is there a consistent up/down pattern?
+- Special days: Do you detect weekday patterns (e.g., Fridays busier)?
+
+OUTPUT FORMAT - MUST BE VALID JSON:
+Always respond with ONLY valid JSON (no explanatory text). Use this exact structure:
+{
+    "next_day_1_revenue": number (predicted revenue for tomorrow),
+    "next_day_2_revenue": number (predicted revenue for day after tomorrow),
+    "next_day_3_revenue": number (predicted revenue for 3 days from now),
+    "confidence_score": number (0-100),
+    "confidence_reasoning": "Brief explanation of confidence level",
+    "growth_rate_percent": number (e.g., 2.5 for +2.5% daily, -1.8 for -1.8%),
+    "growth_direction": "Up|Down|Stable",
+    "pattern_detected": "String describing the pattern (e.g., 'Weekend spike pattern', 'Steady decline', 'High volatility')",
+    "business_impact": "String with actionable insight for owner (e.g., 'Expect 15% surge on Saturday based on historical weekly pattern')",
+    "risk_factors": "List of potential risks to forecast accuracy"
+}
+
+CRITICAL RULES:
+- ALWAYS output valid JSON only
+- NEVER include explanatory text before or after JSON
+- Predictions must be reasonable (within 30% of average historical revenue)
+- All numbers must be numeric (not strings)
+- Confidence score must be 0-100"""
+    
+    def _build_forecasting_message(self, trend_data: Dict[str, float]) -> str:
+        """Build the user message for forecasting."""
+        dates = sorted(trend_data.keys())
+        revenues = [trend_data[d] for d in dates]
+        
+        avg_revenue = sum(revenues) / len(revenues) if revenues else 0
+        max_revenue = max(revenues) if revenues else 0
+        min_revenue = min(revenues) if revenues else 0
+        
+        return f"""Analyze this {len(trend_data)}-day historical revenue data and predict the next 3 days:
+
+HISTORICAL DATA:
+{json.dumps(trend_data, indent=2)}
+
+SUMMARY STATISTICS:
+- Average Daily Revenue: ${avg_revenue:.2f}
+- Max Daily Revenue: ${max_revenue:.2f}
+- Min Daily Revenue: ${min_revenue:.2f}
+- Total Period Revenue: ${sum(revenues):.2f}
+- Data Points: {len(revenues)} days
+
+Please analyze patterns (especially weekday vs weekend differences) and predict tomorrow, day after, and 3 days from now.
+Include your confidence score and business impact assessment.
+
+Respond with ONLY valid JSON."""
+    
+    def _parse_forecast_response(
+        self,
+        ai_response: str,
+        trend_data: Dict[str, float]
+    ) -> Dict[str, Any]:
+        """Parse the AI's JSON forecast response."""
+        try:
+            json_start = ai_response.find('{')
+            json_end = ai_response.rfind('}') + 1
+            
+            if json_start == -1 or json_end == 0:
+                return self._create_fallback_forecast(trend_data)
+            
+            json_str = ai_response[json_start:json_end]
+            forecast = json.loads(json_str)
+            
+            return forecast
+        
+        except (json.JSONDecodeError, ValueError):
+            return self._create_fallback_forecast(trend_data)
+    
+    def _create_fallback_forecast(self, trend_data: Dict[str, float]) -> Dict[str, Any]:
+        """Create a fallback forecast when AI parsing fails."""
+        revenues = list(trend_data.values())
+        
+        if not revenues:
+            return {
+                "next_day_1_revenue": 0,
+                "next_day_2_revenue": 0,
+                "next_day_3_revenue": 0,
+                "confidence_score": 0,
+                "confidence_reasoning": "Insufficient data for forecast",
+                "growth_rate_percent": 0,
+                "growth_direction": "Stable",
+                "pattern_detected": "No data available",
+                "business_impact": "Unable to generate forecast - no historical data",
+                "risk_factors": ["No historical data provided"]
+            }
+        
+        # Calculate simple statistics
+        avg_revenue = sum(revenues) / len(revenues)
+        recent_avg = sum(revenues[-3:]) / 3 if len(revenues) >= 3 else avg_revenue
+        
+        # Estimate trend (last 3 days vs previous average)
+        if len(revenues) >= 3:
+            overall_avg = sum(revenues[:-3]) / (len(revenues) - 3)
+            growth_rate = ((recent_avg - overall_avg) / overall_avg * 100) if overall_avg > 0 else 0
+        else:
+            growth_rate = 0
+        
+        # Generate basic predictions
+        prediction_1 = recent_avg * (1 + growth_rate / 100)
+        prediction_2 = prediction_1 * (1 + growth_rate / 100)
+        prediction_3 = prediction_2 * (1 + growth_rate / 100)
+        
+        # Calculate volatility for confidence
+        if len(revenues) > 1:
+            variance = sum((r - avg_revenue) ** 2 for r in revenues) / len(revenues)
+            std_dev = variance ** 0.5
+            volatility_ratio = std_dev / avg_revenue if avg_revenue > 0 else 0
+            confidence = max(0, 100 - (volatility_ratio * 100))
+        else:
+            confidence = 50
+        
+        return {
+            "next_day_1_revenue": round(prediction_1, 2),
+            "next_day_2_revenue": round(prediction_2, 2),
+            "next_day_3_revenue": round(prediction_3, 2),
+            "confidence_score": round(confidence),
+            "confidence_reasoning": "Based on recent trend and volatility analysis",
+            "growth_rate_percent": round(growth_rate, 1),
+            "growth_direction": "Up" if growth_rate > 0.5 else "Down" if growth_rate < -0.5 else "Stable",
+            "pattern_detected": "Trend-based forecast (limited data)",
+            "business_impact": f"Average revenue: ${avg_revenue:.2f}. Current trend: {'Growing' if growth_rate > 0 else 'Declining'}",
+            "risk_factors": ["Limited historical data for accurate forecasting", "No pattern detection available"]
+        }
 
 
 # Global instance
@@ -349,3 +570,11 @@ async def generate_restaurant_strategy(
     """Convenience function to generate strategy using the global consultant."""
     consultant = get_ai_consultant()
     return await consultant.generate_strategy(performance_data)
+
+
+async def forecast_revenue(
+    trend_data: Dict[str, float]
+) -> Dict[str, Any]:
+    """Convenience function to generate revenue forecast using the global consultant."""
+    consultant = get_ai_consultant()
+    return await consultant.predict_revenue(trend_data)
