@@ -550,6 +550,276 @@ Respond with ONLY valid JSON."""
             "business_impact": f"Average revenue: ${avg_revenue:.2f}. Current trend: {'Growing' if growth_rate > 0 else 'Declining'}",
             "risk_factors": ["Limited historical data for accurate forecasting", "No pattern detection available"]
         }
+    
+    async def check_profit_margins(
+        self,
+        menu_items_with_costs: list[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Analyze menu item profit margins and identify pricing dangers.
+        
+        Evaluates each menu item's margin health:
+        - If price < 3x cost: Flag as "Low Margin Risk"
+        - Suggests price adjustments or cheaper ingredient alternatives
+        - Provides AI-powered optimization recommendations
+        
+        Args:
+            menu_items_with_costs: List of menu items with:
+                {
+                    "id": int,
+                    "name": str,
+                    "price": float,
+                    "cost_of_goods": float,
+                    "margin_percent": float
+                }
+        
+        Returns:
+            Dictionary with:
+            - status: "success" or "error"
+            - risk_items: List of items with low margins
+            - total_at_risk_revenue: Estimated revenue from risky items
+            - optimization_plan: AI-generated improvement recommendations
+        """
+        if not menu_items_with_costs:
+            return {
+                "status": "error",
+                "message": "No menu items provided for margin analysis"
+            }
+        
+        system_prompt = self._get_margin_analysis_prompt()
+        user_message = self._build_margin_analysis_message(menu_items_with_costs)
+        
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [system_prompt]},
+                    {"role": "user", "parts": [user_message]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    top_k=40,
+                    max_output_tokens=2000
+                )
+            )
+            
+            ai_response = response.text
+            margin_analysis = self._parse_margin_response(ai_response, menu_items_with_costs)
+            
+            return {
+                "status": "success",
+                "analysis": margin_analysis,
+                "reasoning": ai_response,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to analyze margins: {str(e)}",
+                "analysis": None
+            }
+    
+    def _get_margin_analysis_prompt(self) -> str:
+        """System prompt for margin analysis and danger zone detection."""
+        return """You are a restaurant financial analyst specializing in profit margin optimization.
+Your expertise includes:
+- Identifying underpriced menu items (pricing danger zones)
+- COGS (Cost of Goods Sold) analysis
+- Margin health assessment
+- Strategic pricing recommendations
+- Cost reduction opportunities
+
+MARGIN ANALYSIS MISSION:
+Analyze the provided menu items and their costs. Identify which items are priced dangerously low.
+
+DANGER ZONE DEFINITION:
+- LOW MARGIN RISK: Price-to-Cost Ratio < 3:1 (i.e., selling price less than 3x the cost)
+  Example: If cost is $3.00 and price is $8.00 (ratio 2.67:1), this is a danger zone
+- These items are losing money when overhead costs are considered
+- Even seemingly healthy margins can hide profitability issues
+
+YOUR ANALYSIS MUST:
+1. Identify all items with price < 3x cost
+2. Calculate the financial impact (lost profit per item)
+3. Estimate total revenue at risk from low-margin items
+4. Suggest specific remedies:
+   - Price increase: How much can this item support without losing customers?
+   - Cost reduction: Can ingredients be substituted? Portion sizes adjusted?
+   - Discontinuation: Is it better to remove this item entirely?
+
+OUTPUT FORMAT - MUST BE VALID JSON:
+{
+    "risk_items": [
+        {
+            "item_name": "String - exact menu item name",
+            "current_price": number,
+            "cost_of_goods": number,
+            "price_to_cost_ratio": number (e.g., 2.5 means price is 2.5x cost),
+            "margin_percent": number,
+            "danger_level": "Critical|High|Medium",
+            "estimated_loss_per_item": number (estimated loss considering overhead),
+            "recommendation": "Specific action (price increase X%, reduce ingredient cost Y, or discontinue)",
+            "suggested_price": number (if price increase recommended),
+            "price_increase_percent": number,
+            "alternative_action": "String describing cost reduction opportunity"
+        }
+    ],
+    "healthy_items": [
+        {
+            "item_name": "String",
+            "margin_percent": number,
+            "price_to_cost_ratio": number
+        }
+    ],
+    "optimization_plan": {
+        "total_items_analyzed": number,
+        "items_at_risk": number,
+        "total_current_revenue_at_risk": number,
+        "potential_monthly_margin_improvement": number,
+        "top_3_actions": [
+            {"action": "Exact action", "expected_monthly_impact": "String with $amount"},
+            {"action": "Exact action", "expected_monthly_impact": "String with $amount"},
+            {"action": "Exact action", "expected_monthly_impact": "String with $amount"}
+        ],
+        "executive_summary": "One paragraph summary of findings and recommendations"
+    },
+    "cost_strategies": [
+        {
+            "ingredient_name_or_item": "String",
+            "current_strategy": "Current approach",
+            "proposed_change": "What to change",
+            "estimated_savings": "String with $ amount per month",
+            "implementation": "How to execute"
+        }
+    ]
+}
+
+CRITICAL RULES:
+- ALWAYS output valid JSON only
+- Price-to-cost ratio = selling_price / cost_of_goods
+- All financial numbers MUST be numeric (not strings)
+- Flag items where ratio < 3.0 as danger zones
+- Suggest specific prices, not ranges
+- Consider pricing psychology (customers expect "nice" prices like $9.99)
+- Every recommendation must be actionable TODAY"""
+    
+    def _build_margin_analysis_message(self, menu_items_with_costs: list[Dict[str, Any]]) -> str:
+        """Build the user message for margin analysis."""
+        total_items = len(menu_items_with_costs)
+        total_revenue = sum(float(item.get("price", 0)) for item in menu_items_with_costs)
+        
+        danger_count = 0
+        for item in menu_items_with_costs:
+            price = float(item.get("price", 0))
+            cogs = float(item.get("cost_of_goods", 0))
+            if cogs > 0 and price / cogs < 3.0:
+                danger_count += 1
+        
+        return f"""Analyze the following {total_items} menu items and their cost of goods sold (COGS).
+Identify which items are in the "Danger Zone" (price less than 3x cost) and recommend actions.
+
+MENU ITEMS WITH COSTS:
+{json.dumps(menu_items_with_costs, indent=2, default=str)}
+
+SUMMARY:
+- Total items: {total_items}
+- Combined daily selling price total: ${total_revenue:.2f}
+- Items potentially in danger zone: {danger_count}
+
+Analyze margin health, identify danger zones, and provide specific recommendations.
+Calculate price-to-cost ratios and determine which items need immediate action.
+
+RESPOND WITH VALID JSON ONLY."""
+    
+    def _parse_margin_response(
+        self,
+        ai_response: str,
+        menu_items_with_costs: list[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Parse the AI's margin analysis response."""
+        try:
+            json_start = ai_response.find('{')
+            json_end = ai_response.rfind('}') + 1
+            
+            if json_start == -1 or json_end == 0:
+                return self._create_fallback_margin_analysis(menu_items_with_costs)
+            
+            json_str = ai_response[json_start:json_end]
+            analysis = json.loads(json_str)
+            
+            return analysis
+        
+        except (json.JSONDecodeError, ValueError):
+            return self._create_fallback_margin_analysis(menu_items_with_costs)
+    
+    def _create_fallback_margin_analysis(self, menu_items_with_costs: list[Dict[str, Any]]) -> Dict[str, Any]:
+        """Create fallback margin analysis."""
+        risk_items = []
+        healthy_items = []
+        total_revenue_at_risk = 0.0
+        total_improvement = 0.0
+        
+        for item in menu_items_with_costs:
+            name = item.get("name", "Unknown Item")
+            price = float(item.get("price", 0))
+            cogs = float(item.get("cost_of_goods", 0))
+            margin = float(item.get("margin_percent", 0))
+            
+            if cogs > 0:
+                ratio = price / cogs
+                if ratio < 3.0:
+                    suggested_price = cogs * 3.2  # 3.2x multiplier adds margin
+                    increase = ((suggested_price - price) / price) * 100
+                    potential_gain = (suggested_price - price)
+                    total_revenue_at_risk += price
+                    total_improvement += potential_gain
+                    
+                    risk_items.append({
+                        "item_name": name,
+                        "current_price": price,
+                        "cost_of_goods": cogs,
+                        "price_to_cost_ratio": round(ratio, 2),
+                        "margin_percent": margin,
+                        "danger_level": "Critical" if ratio < 2.0 else "High" if ratio < 2.5 else "Medium",
+                        "estimated_loss_per_item": round(cogs * 0.5, 2),
+                        "recommendation": f"Increase price by {increase:.0f}%",
+                        "suggested_price": round(suggested_price, 2),
+                        "price_increase_percent": round(increase, 1),
+                        "alternative_action": "Review ingredient sourcing to reduce COGS"
+                    })
+                else:
+                    healthy_items.append({
+                        "item_name": name,
+                        "margin_percent": margin,
+                        "price_to_cost_ratio": round(ratio, 2)
+                    })
+        
+        return {
+            "risk_items": risk_items,
+            "healthy_items": healthy_items,
+            "optimization_plan": {
+                "total_items_analyzed": len(menu_items_with_costs),
+                "items_at_risk": len(risk_items),
+                "total_current_revenue_at_risk": round(total_revenue_at_risk, 2),
+                "potential_monthly_margin_improvement": round(total_improvement * 30, 2),  # Rough estimate
+                "top_3_actions": [
+                    {
+                        "action": f"Price adjustment for {min(3, len(risk_items))} high-risk items" if risk_items else "Review menu pricing",
+                        "expected_monthly_impact": f"${round(total_improvement * 30, 2)}"
+                    },
+                    {
+                        "action": "Conduct supplier negotiation for top 5 ingredients",
+                        "expected_monthly_impact": "$500-$1000"
+                    },
+                    {
+                        "action": "Review portion sizes on COGS-heavy items",
+                        "expected_monthly_impact": "$300-$500"
+                    }
+                ],
+                "executive_summary": f"Analysis of {len(menu_items_with_costs)} menu items identified {len(risk_items)} items with margin concerns. These items are priced below the healthy 3:1 cost-to-price ratio. Immediate price increases on top items could improve monthly margins by ${round(total_improvement * 30, 2)}."
+            },
+            "cost_strategies": []
+        }
 
 
 # Global instance
@@ -578,3 +848,11 @@ async def forecast_revenue(
     """Convenience function to generate revenue forecast using the global consultant."""
     consultant = get_ai_consultant()
     return await consultant.predict_revenue(trend_data)
+
+
+async def analyze_profit_margins(
+    menu_items_with_costs: list[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Convenience function to analyze profit margins using the global consultant."""
+    consultant = get_ai_consultant()
+    return await consultant.check_profit_margins(menu_items_with_costs)
