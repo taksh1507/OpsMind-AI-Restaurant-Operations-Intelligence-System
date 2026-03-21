@@ -24,6 +24,7 @@ from app.services.margin_analysis import (
     get_all_menu_items_with_costs,
     get_margin_report_summary
 )
+from app.core.math_utils import calculate_confidence_score
 from sqlalchemy import select, func, desc, and_
 
 
@@ -487,11 +488,16 @@ async def get_revenue_forecast(
     db: AsyncSession = Depends(get_db),
     days: int = 14
 ):
-    """Get AI-powered revenue forecast for the next 3 days.
+    """Get AI-powered revenue forecast for the next 3 days with mathematical confidence scoring.
     
     Uses historical trends from the past N days to predict future revenue.
     The AI forecaster analyzes patterns (weekday vs weekend, growth trends, etc.)
-    and provides a confidence score for the predictions.
+    and combines mathematical confidence with AI insights.
+    
+    MATHEMATICAL GROUNDING:
+    - Calculates Linear Regression slope to objectively measure revenue trends
+    - Computes confidence score based on data variance and R-squared fit quality
+    - Provides "Trust Factor" showing how reliable the prediction is
     
     This endpoint gives restaurant owners a "Crystal Ball" view of their 
     expected revenue, enabling better resource planning and marketing timing.
@@ -506,7 +512,8 @@ async def get_revenue_forecast(
         - next_day_1_revenue: Predicted revenue for tomorrow
         - next_day_2_revenue: Predicted revenue for day after tomorrow
         - next_day_3_revenue: Predicted revenue for 3 days from now
-        - confidence_score: 0-100 confidence level
+        - confidence_score: 0-100 confidence level (now with mathematical backing)
+        - mathematical_confidence: High/Medium/Low based on data variance
         - growth_rate_percent: Daily trend as percentage
         - business_impact: Actionable insight for owner
         
@@ -536,6 +543,12 @@ async def get_revenue_forecast(
                 detail="Insufficient historical data for accurate forecasting. Need at least 3 days of sales data."
             )
         
+        # Convert trend data to list for statistical analysis
+        revenue_values = list(trend_data.values())
+        
+        # Calculate mathematical confidence score
+        mathematical_confidence_level, mathematical_confidence_percentage = calculate_confidence_score(revenue_values)
+        
         # Generate forecast using AI
         forecast_result = await forecast_revenue(trend_data)
         
@@ -545,8 +558,12 @@ async def get_revenue_forecast(
                 detail=forecast_result.get("message", "Failed to generate forecast")
             )
         
-        # Format the response
+        # Format the response with mathematical confidence
         forecast = forecast_result.get("forecast", {})
+        
+        # Combine AI confidence with mathematical confidence
+        ai_confidence = forecast.get("confidence_score", 50)
+        combined_confidence = round((ai_confidence * 0.5 + mathematical_confidence_percentage * 0.5), 1)
         
         return {
             "status": "success",
@@ -562,18 +579,29 @@ async def get_revenue_forecast(
                 "next_day_3_revenue": forecast.get("next_day_3_revenue", 0)
             },
             "confidence": {
-                "score": forecast.get("confidence_score", 0),
-                "reasoning": forecast.get("confidence_reasoning", ""),
+                "ai_score": ai_confidence,
+                "mathematical_score": mathematical_confidence_percentage,
+                "combined_score": combined_confidence,
+                "confidence_level": "High" if combined_confidence >= 75 else "Medium" if combined_confidence >= 50 else "Low",
+                "confidence_reasoning": forecast.get("confidence_reasoning", ""),
+                "mathematical_basis": f"Data variance analysis shows {mathematical_confidence_level} confidence. {mathematical_confidence_percentage:.1f}% trust factor.",
                 "growth_rate_percent": forecast.get("growth_rate_percent", 0),
                 "growth_direction": forecast.get("growth_direction", "Stable")
+            },
+            "mathematical_analysis": {
+                "confidence_level": mathematical_confidence_level,
+                "trust_factor": f"{mathematical_confidence_percentage:.1f}%",
+                "data_consistency": "High" if mathematical_confidence_percentage >= 75 else "Medium" if mathematical_confidence_percentage >= 50 else "Low",
+                "interpretation": f"Based on {len(revenue_values)} days of sales data. {mathematical_confidence_level} confidence indicates {'stable and predictable revenue' if mathematical_confidence_level == 'High' else 'moderate volatility in revenue' if mathematical_confidence_level == 'Medium' else 'high volatility, predictions less reliable'}"
             },
             "pattern": {
                 "detected": forecast.get("pattern_detected", "No pattern detected"),
                 "risk_factors": forecast.get("risk_factors", [])
             },
             "business_impact": forecast.get("business_impact", ""),
-            "message": "Revenue forecast based on AI analysis of historical trends",
-            "recommendation": "Use this forecast to plan staffing, inventory, and marketing campaigns"
+            "mathematical_reasoning": forecast.get("mathematical_reasoning", ""),
+            "message": "Revenue forecast grounded in mathematical trend analysis and AI insights",
+            "recommendation": "Use this forecast to plan staffing, inventory, and marketing campaigns. Higher confidence scores indicate more reliable predictions."
         }
     
     except HTTPException:
