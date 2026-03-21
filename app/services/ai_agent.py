@@ -18,6 +18,7 @@ import os
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import google.generativeai as genai
+from app.core.math_utils import calculate_trend_slope, calculate_trend_metrics
 from app.core.config import settings
 
 
@@ -398,46 +399,59 @@ Provide your response as valid JSON."""
             }
     
     def _get_forecasting_system_prompt(self) -> str:
-        """Return the system prompt for revenue forecasting."""
-        return """You are an expert revenue forecnist and time-series analyst for restaurants.
+        """Return the system prompt for revenue forecasting grounded in mathematical analysis."""
+        return """You are an expert revenue forecaster and time-series analyst for restaurants.
 Your expertise includes:
 - Identifying daily revenue patterns (weekday vs weekend trends)
-- Detecting growth/decline trajectories
-- Predicting short-term revenue fluctuations
+- Detecting growth/decline trajectories using data science
+- Predicting short-term revenue fluctuations with mathematical rigor
 - Quantifying forecast confidence based on data consistency
+- Grounding AI predictions in observed mathematical trends (Linear Regression slopes)
 
-FORECASTING TASK:
-Analyze the provided 14-day historical revenue data and predict revenue for the next 3 days.
+MATHEMATICAL GROUNDING:
+You will receive a Linear Regression slope value. This is an OBJECTIVE mathematical measure of the revenue trend.
+- Positive slope: Revenue is mathematically proven to be growing
+- Negative slope: Revenue is mathematically proven to be declining
+- Slope value tells you the rate of change (dollars per day)
+- R² value tells you how reliably this slope explains the data (0-1, higher = more reliable)
 
 YOUR ANALYSIS SHOULD INCLUDE:
 1. Daily Revenue Predictions: Specific dollar amounts for the next 3 days
+   - BASE these on the provided slope or derived trend
+   - ADJUST for detected day-of-week patterns (weekends typically busier)
+   - Predictions should explain how slope influenced the forecast
 2. Confidence Score: 0-100 indicating your confidence in predictions
-   - 90-100: Very consistent pattern with high confidence
-   - 70-89: Mostly consistent with minor fluctuations
-   - 50-69: Mixed signals, moderate confidence
-   - Below 50: Highly volatile, low confidence
-3. Growth/Decline Rate: Overall percentage change pattern (e.g., "+2.5% daily growth" or "-1.8% weekly decline")
-4. Business Impact: Key actionable insight for restaurant owner (e.g., "Expect 15% surge Saturday due to weekend pattern")
-5. Pattern Analysis: What trend you observe (weekend spike, steady decline, seasonal pattern, etc)
+   - Higher R² from slope = More confidence
+   - Consistent patterns = More confidence
+   - Volatility = Less confidence
+3. Growth/Decline Rate: Overall percentage change pattern tied to the mathematical slope
+4. Business Impact: Key actionable insight derived from the trend (e.g., "Slope of +$25/day indicates strong growth trajectory")
+5. Pattern Analysis: What trend you observe + how it aligns with the mathematical slope
 
-CONFIDENCE FACTORS TO CONSIDER:
+CRITICAL INSTRUCTION:
+Always explain how you used the provided slope in your forecast.
+Do NOT ignore the mathematical slope - incorporate it into your reasoning.
+If slope conflicts with day-of-week patterns, explain the conflict and how you weighted each factor.
+
+CONFIDENCE FACTORS:
+- Mathematical fit (R²): How well does the slope capture historical data?
 - Data consistency: How similar are recent days?
-- Volatility: Are revenue swings predictable or random?
-- Clear trends: Is there a consistent up/down pattern?
-- Special days: Do you detect weekday patterns (e.g., Fridays busier)?
+- Clear trends: Is the slope stable or changing?
+- Special days: Do you detect weekday patterns that align/conflict with slope?
 
 OUTPUT FORMAT - MUST BE VALID JSON:
 Always respond with ONLY valid JSON (no explanatory text). Use this exact structure:
 {
-    "next_day_1_revenue": number (predicted revenue for tomorrow),
+    "next_day_1_revenue": number (predicted revenue for tomorrow, explain how slope influenced this),
     "next_day_2_revenue": number (predicted revenue for day after tomorrow),
     "next_day_3_revenue": number (predicted revenue for 3 days from now),
     "confidence_score": number (0-100),
-    "confidence_reasoning": "Brief explanation of confidence level",
+    "confidence_reasoning": "Brief explanation of confidence level - reference the slope R² value and data consistency",
     "growth_rate_percent": number (e.g., 2.5 for +2.5% daily, -1.8 for -1.8%),
     "growth_direction": "Up|Down|Stable",
-    "pattern_detected": "String describing the pattern (e.g., 'Weekend spike pattern', 'Steady decline', 'High volatility')",
-    "business_impact": "String with actionable insight for owner (e.g., 'Expect 15% surge on Saturday based on historical weekly pattern')",
+    "pattern_detected": "String describing the pattern (e.g., 'Weekend spike pattern', 'Steady decline per slope', 'High volatility')",
+    "business_impact": "String with actionable insight - mention the slope and what it means for business (e.g., 'Mathematical slope shows +$25/day growth, indicating strong upward trajectory')",
+    "mathematical_reasoning": "Explain how you used the provided slope to arrive at these predictions",
     "risk_factors": "List of potential risks to forecast accuracy"
 }
 
@@ -446,10 +460,11 @@ CRITICAL RULES:
 - NEVER include explanatory text before or after JSON
 - Predictions must be reasonable (within 30% of average historical revenue)
 - All numbers must be numeric (not strings)
-- Confidence score must be 0-100"""
+- Confidence score must be 0-100
+- ALWAYS reference the slope and R² value in your reasoning"""
     
     def _build_forecasting_message(self, trend_data: Dict[str, float]) -> str:
-        """Build the user message for forecasting."""
+        """Build the user message for forecasting with mathematical trend analysis."""
         dates = sorted(trend_data.keys())
         revenues = [trend_data[d] for d in dates]
         
@@ -457,10 +472,34 @@ CRITICAL RULES:
         max_revenue = max(revenues) if revenues else 0
         min_revenue = min(revenues) if revenues else 0
         
+        # Calculate mathematical trend metrics
+        metrics = calculate_trend_metrics(revenues)
+        slope = metrics["slope"]
+        r_squared = metrics["r_squared"]
+        
+        # Determine trend direction
+        if slope > 50:
+            trend_direction = "RAPIDLY GROWING"
+        elif slope > 10:
+            trend_direction = "GROWING"
+        elif slope > 0:
+            trend_direction = "SLIGHTLY GROWING"
+        elif slope > -10:
+            trend_direction = "STABLE"
+        elif slope > -50:
+            trend_direction = "DECLINING"
+        else:
+            trend_direction = "RAPIDLY DECLINING"
+        
         return f"""Analyze this {len(trend_data)}-day historical revenue data and predict the next 3 days:
 
 HISTORICAL DATA:
 {json.dumps(trend_data, indent=2)}
+
+MATHEMATICAL TREND ANALYSIS (Linear Regression):
+- Growth Slope: ${slope:.2f} per day (this is the mathematical trend)
+- Fit Quality (R²): {r_squared:.3f} (1.0 = perfect fit, closer to 1.0 = more reliable trend)
+- Trend Direction: {trend_direction}
 
 SUMMARY STATISTICS:
 - Average Daily Revenue: ${avg_revenue:.2f}
@@ -469,7 +508,13 @@ SUMMARY STATISTICS:
 - Total Period Revenue: ${sum(revenues):.2f}
 - Data Points: {len(revenues)} days
 
-Please analyze patterns (especially weekday vs weekend differences) and predict tomorrow, day after, and 3 days from now.
+IMPORTANT: Use the mathematical slope (${slope:.2f} per day) to ground your predictions.
+This is calculated using linear regression and provides an objective basis for your forecast.
+If the slope is positive, revenue is growing at ${slope:.2f} per day.
+If the slope is negative, revenue is declining at ${abs(slope):.2f} per day.
+
+Analyze patterns (especially weekday vs weekend differences) and predict tomorrow, day after, and 3 days from now.
+Use the slope as a foundation for your forecasts - adjust based on day-of-week patterns if evident.
 Include your confidence score and business impact assessment.
 
 Respond with ONLY valid JSON."""
