@@ -14,6 +14,7 @@ from .tenant import Tenant, SubscriptionStatus
 from .user import User
 from .menu import Category, MenuItem, Ingredient, Recipe
 from .sales import Sale, SaleItem, PaymentMethod
+from .review import Review
 from .schemas import (
     RegisterRequest,
     LoginRequest,
@@ -36,6 +37,7 @@ __all__ = [
     "Sale",
     "SaleItem",
     "PaymentMethod",
+    "Review",
     "RegisterRequest",
     "LoginRequest",
     "TenantSchema",
