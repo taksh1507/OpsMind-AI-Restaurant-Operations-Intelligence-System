@@ -22,7 +22,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 - [x] Core FastAPI Backend Setup
 - [x] Multi-Tenant Architecture (isolated data per restaurant)
 - [x] JWT-based Authentication & Authorization
-- [x] Database Schema (11 tables: Tenants, Users, Categories, MenuItems, Ingredients, Recipes, Sales, SaleItems, Reviews, Staff, Shifts)
+- [x] Database Schema (12 tables: Tenants, Users, Categories, MenuItems, Ingredients, Recipes, Sales, SaleItems, Reviews, Staff, Shifts, Recommendations)
 - [x] API Route Structure
 
 ### **Day 7 — AI Strategy (Brain) Agent** ✅
@@ -62,6 +62,29 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 - [x] 24-hour staffing heatmap
 - [x] AI-powered staffing optimization recommendations
 
+### **Day 12 — Mathematical Forecasting (Predictive Intelligence)** ✅
+- [x] Linear regression in `app/core/math_utils.py`
+- [x] Confidence scoring for predictions
+- [x] Multi-period forecasting (1-7 days ahead)
+- [x] Collection of confidence levels (High/Medium/Low)
+- [x] Enhanced AI-powered forecast endpoints with mathematical backing
+
+### **Day 13 — Environmental Awareness (Context-Aware Intelligence)** ✅
+- [x] OpenWeatherMap API integration in `app/services/weather.py`
+- [x] Weather-to-sales correlation analysis
+- [x] Weather-aware AI strategy generation
+- [x] Weather-informed system prompts for Gemini
+- [x] `GET /analytics/daily-tip` endpoint (weather-optimized promotions)
+- [x] 30-minute weather context caching with fallback support
+
+### **Day 14 — Agentic Feedback & Learning Loop (Accountability AI)** ✅
+- [x] Recommendation model to track AI suggestions
+- [x] `POST /recommendations`, `GET /recommendations`, `PATCH /recommendations/{id}` endpoints
+- [x] Accept/Reject recommendation status tracking
+- [x] `verify_impact()` method to measure recommendation effectiveness
+- [x] Gemini-powered success reports showing actual ROI
+- [x] Annual ROI projection for implemented recommendations
+
 ### **Upcoming — Front-End & Deployment**
 - [ ] Interactive React Dashboard
 - [ ] Real-Time Sales Monitoring
@@ -71,7 +94,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 
 ---
 
-## 🏗️ Core Features (11 Systems)
+## 🏗️ Core Features (15 Systems)
 
 | System | Status | Description |
 |--------|--------|-------------|
@@ -85,7 +108,11 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Cost Intelligence (Day 9)** | ✅ | Waste detection & cost optimization |
 | **Customer Sentiment (Day 10)** | ✅ | AI analysis of reviews & reputation tracking |
 | **Labor Optimization (Day 11)** | ✅ | Staffing heatmap & efficiency analysis |
-| **REST API** | ✅ | 30+ endpoints across all systems |
+| **Mathematical Forecasting (Day 12)** | ✅ | Linear regression & confidence scoring |
+| **Environmental Awareness (Day 13)** | ✅ | Weather-aware recommendations & context |
+| **Recommendation Tracking (Day 14)** | ✅ | Save, accept/reject, and verify AI suggestions |
+| **Impact Verification (Day 14)** | ✅ | Measure ROI of implemented recommendations |
+| **REST API** | ✅ | 40+ endpoints across all systems |
 
 ---
 
@@ -101,6 +128,149 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Async Driver** | asyncpg | Non-blocking PostgreSQL connection pooling |
 | **Validation** | Pydantic | Request/response schema validation |
 | **Frontend** | React (TBD) | Vite + TypeScript (upcoming) |
+
+---
+
+## 🏗️ System Architecture
+
+### Data Flow Diagram
+
+```mermaid
+graph TB
+    User["👤 Restaurant Owner<br/>(Web/Mobile Client)"]
+    Auth["🔐 JWT Authentication<br/>(Token-Based Access)"]
+    FastAPI["⚡ FastAPI Backend<br/>(Async Routes)"]
+    
+    Router1["🍽️ Menu Management<br/>(Categories, Items, Recipes)"]
+    Router2["💳 Sales Tracking<br/>(Transactions, Line Items)"]
+    Router3["📊 Analytics Engine<br/>(Forecasts, Insights)"]
+    Router4["✅ Recommendations<br/>(AI Suggestions + Tracking)"]
+    
+    SQLAlchemy["🗄️ SQLAlchemy ORM<br/>(Type-Safe Queries)"]
+    Database["🔷 PostgreSQL/SQLite<br/>(12 Tables, Multi-Tenant)"]
+    
+    Gemini["🤖 Google Gemini 1.5<br/>(Strategy, Sentiment, Analysis)"]
+    Weather["🌡️ OpenWeatherMap API<br/>(Context Integration)"]
+    
+    Cache["⚡ In-Memory Cache<br/>(Weather, Predictions)"]
+    Response["✨ JSON Response<br/>(Insights & Recommendations)"]
+    
+    User -->|OAuth/Register| Auth
+    Auth -->|Validated Token| FastAPI
+    
+    FastAPI --> Router1
+    FastAPI --> Router2
+    FastAPI --> Router3
+    FastAPI --> Router4
+    
+    Router1 --> SQLAlchemy
+    Router2 --> SQLAlchemy
+    Router3 --> SQLAlchemy
+    Router4 --> SQLAlchemy
+    
+    SQLAlchemy <-->|Async Queries| Database
+    
+    Router3 -->|Analysis Request| Gemini
+    Router4 -->|Decision Reasoning| Gemini
+    Router3 -.->|Cache Lookup| Cache
+    Router3 -->|Weather Context| Weather
+    Weather -->|Cached Response| Cache
+    
+    Router3 -->|AI Insights| Response
+    Router4 -->|Verified Recommendations| Response
+    Response -->|JSON + Status| User
+    
+    style User fill:#e1f5ff
+    style Auth fill:#fff9c4
+    style FastAPI fill:#f3e5f5
+    style Router1 fill:#c8e6c9
+    style Router2 fill:#c8e6c9
+    style Router3 fill:#c8e6c9
+    style Router4 fill:#c8e6c9
+    style SQLAlchemy fill:#ffe0b2
+    style Database fill:#ffccbc
+    style Gemini fill:#f8bbd0
+    style Weather fill:#d1c4e9
+    style Cache fill:#fff9c4
+    style Response fill:#b2dfdb
+```
+
+### Architecture Layers
+
+| Layer | Component | Technology | Purpose |
+|-------|-----------|-----------|---------|
+| **Presentation** | FastAPI Routes | Python FastAPI | HTTP endpoints with OpenAPI/Swagger docs |
+| **Authentication** | JWT middleware | Python-Jose | Token validation & tenant isolation |
+| **Application Logic** | Service Layer | AsyncIO | Business logic (forecasting, sentiment, strategy) |
+| **Data Access** | SQLAlchemy ORM | SQLAlchemy 2.0 | Type-safe async database queries |
+| **Persistence** | Database | PostgreSQL / SQLite | 12-table schema with relationships & constraints |
+| **AI Intelligence** | Gemini Integration | google.generativeai | NLP, strategy reasoning, impact analysis |
+| **External Context** | Weather API | OpenWeatherMap | Environmental data for context-aware decisions |
+
+### Multi-Tenant Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                          FastAPI App                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────  Restaurant A (Tenant 1) ──────────────┐ │
+│  │  User: Owner1  Menus: [Items...]  Sales: [Trans...]  │ │
+│  │  Isolated Data Access via JWT + tenant_id validation │ │
+│  └────────────────────────────────────────────────────┘ │
+│                                                             │
+│  ┌──────────────  Restaurant B (Tenant 2) ──────────────┐ │
+│  │  User: Owner2  Menus: [Items...]  Sales: [Trans...]  │ │
+│  │  Isolated Data Access via JWT + tenant_id validation │ │
+│  └────────────────────────────────────────────────────┘ │
+│                                                             │
+│  ┌──────────────  Restaurant N (Tenant N) ──────────────┐ │
+│  │  User: OwnerN  Menus: [Items...]  Sales: [Trans...]  │ │
+│  │  Isolated Data Access via JWT + tenant_id validation │ │
+│  └────────────────────────────────────────────────────┘ │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│           Shared Infrastructure (Gemini, DB, Cache)        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Request-Response Flow Example
+
+**User requests AI strategy (Autonomous Agent)**
+
+```
+1. POST /analytics/daily-strategy
+2. FastAPI validates JWT token → extracts tenant_id
+3. Service calls app/services/ai_agent.py
+4. AI Agent:
+   - Fetches last 7 days of sales (filtered by tenant_id)
+   - Fetches today's weather (cached)
+   - Extracts star dishes, underperformers, pricing insights
+   - Calls Gemini with strategy prompt + context
+5. Gemini returns structured recommendations
+6. Service formats response with:
+   - Strategy (natural language from AI)
+   - Actionable recommendations (pricing, staffing, menu)
+   - Confidence levels & reasoning
+7. Response returned to client as JSON
+```
+
+### Data Security & Isolation
+
+- **JWT Authentication**: Validates every request, extracts `tenant_id`
+- **Database Queries**: All queries filtered by `WHERE tenant_id = ?`
+- **Foreign Keys**: `restaurant_id`/`tenant_id` enforced at schema level
+- **Cascade Deletes**: Deleting a restaurant deletes all related data
+- **No Cross-Tenant Data Leakage**: Impossible for Owner A to see Owner B's data
+
+### Performance & Caching
+
+| Feature | Technology | TTL | Use Case |
+|---------|-----------|-----|----------|
+| **Weather Context** | In-memory cache | 30 min | Avoid unnecessary API calls |
+| **Forecast Predictions** | Cached NumPy arrays | 1 hour | Recurring forecast requests |
+| **Database Connections** | asyncpg pool | N/A | Connection pooling for efficiency |
+| **Async I/O** | FastAPI + asyncio | N/A | Non-blocking request handling |
 
 ---
 
@@ -128,7 +298,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 
 ---
 
-## � Database Schema (11 Tables)
+## 🗄️ Database Schema (12 Tables)
 
 ```
 1. tenants          → Restaurant organizations (parent)
@@ -142,9 +312,10 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 9. reviews          → Customer feedback & AI sentiment
 10. staff           → Employee records & hourly rates
 11. shifts          → Work shifts & cost calculations
+12. recommendations → AI suggestions with impact tracking (Day 14)
 ```
 
-**Multi-Tenant Architecture:** All 11 tables scoped by `tenant_id` for complete data isolation.
+**Multi-Tenant Architecture:** All 12 tables scoped by `tenant_id` for complete data isolation.
 
 ---
 
