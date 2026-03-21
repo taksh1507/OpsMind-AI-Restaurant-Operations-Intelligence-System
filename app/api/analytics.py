@@ -12,18 +12,19 @@ from decimal import Decimal
 
 from app.database import get_db
 from app.api.deps import get_current_user
-from app.models import User
+from app.models import User, Review
 from app.services.analytics import (
     calculate_revenue_and_profit,
     calculate_profit_margin,
     get_top_selling_items,
     get_daily_sales_trend
 )
-from app.services.ai_agent import forecast_revenue, analyze_profit_margins
+from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review
 from app.services.margin_analysis import (
     get_all_menu_items_with_costs,
     get_margin_report_summary
 )
+from sqlalchemy import select, func, desc
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -691,3 +692,267 @@ async def get_margin_report(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate margin report: {str(e)}"
         )
+
+
+@router.get("/reputation")
+async def get_reputation_analytics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    days: int = 30
+):
+    """Get AI-powered customer reputation and sentiment analysis.
+    
+    Analyzes customer reviews to provide a "Mood Map" of the restaurant.
+    This is the "Ears" of the operation - what customers actually think.
+    
+    The endpoint returns:
+    - Average rating from all reviews (1-5 stars)
+    - Overall sentiment trend for the last N days
+    - Top 5 compliments (positive reviews and keywords)
+    - Top 5 complaints (negative reviews and keywords)
+    - AI-generated response draft for the latest negative review
+    
+    This enables the restaurant owner to:
+    1. Monitor customer satisfaction trends
+    2. Identify common issues before they escalate
+    3. Celebrate wins and replicate successful experiences
+    4. Respond thoughtfully to customer feedback
+    
+    The AI identifies:
+    - Recurring complaint patterns (e.g., "cold food" mentioned 3x)
+    - Service quality trends
+    - Food quality issues
+    - Specific action items for improvement
+    
+    Args:
+        current_user: Authenticated user (injected)
+        db: Database session (injected)
+        days: Number of days to analyze (default 30, max 365)
+        
+    Returns:
+        Comprehensive reputation dashboard with AI-powered insights
+        
+    Raises:
+        HTTPException 401: If user is not authenticated
+        HTTPException 400: If days parameter is invalid
+        HTTPException 404: If no reviews exist
+        HTTPException 500: If analysis fails
+    """
+    
+    try:
+        # Validate days parameter
+        days = min(max(days, 1), 365)  # Between 1 and 365
+        
+        # Calculate the date range
+        end_date_dt = datetime.now(timezone.utc)
+        start_date_dt = end_date_dt.replace(day=1) if days >= 30 else \
+                        datetime.now(timezone.utc) - \
+                        __import__('datetime').timedelta(days=days)
+        
+        from datetime import timedelta
+        start_date_dt = datetime.now(timezone.utc) - timedelta(days=days)
+        
+        # Query reviews for the tenant
+        stmt = select(Review).where(
+            (Review.tenant_id == current_user.tenant_id) &
+            (Review.created_at >= start_date_dt) &
+            (Review.created_at <= end_date_dt)
+        ).order_by(desc(Review.created_at))
+        
+        result = await db.execute(stmt)
+        reviews = result.scalars().all()
+        
+        if not reviews:
+            return {
+                "status": "success",
+                "tenant_id": current_user.tenant_id,
+                "message": "No reviews found for this period",
+                "metrics": {
+                    "total_reviews": 0,
+                    "average_rating": 0.0,
+                    "sentiment_trend": "No data"
+                },
+                "compliments": [],
+                "complaints": [],
+                "response_draft": None
+            }
+        
+        # Calculate metrics
+        total_reviews = len(reviews)
+        ratings_sum = sum(r.rating for r in reviews if r.rating)
+        average_rating = ratings_sum / total_reviews if total_reviews > 0 else 0
+        
+        # Separate positive and negative reviews
+        positive_reviews = [r for r in reviews if r.is_positive]
+        negative_reviews = [r for r in reviews if r.is_negative]
+        
+        # Calculate sentiment trend
+        positive_count = len(positive_reviews)
+        negative_count = len(negative_reviews)
+        
+        if positive_count > negative_count:
+            sentiment_trend = "Positive"
+            trend_strength = min(100, int((positive_count / total_reviews) * 100))
+        elif negative_count > positive_count:
+            sentiment_trend = "Negative"
+            trend_strength = min(100, int((negative_count / total_reviews) * 100))
+        else:
+            sentiment_trend = "Neutral"
+            trend_strength = 50
+        
+        # Extract top compliments (from positive reviews)
+        compliments = []
+        compliment_keywords = {}
+        
+        for review in positive_reviews[:10]:  # Top 20 positive reviews
+            if review.keywords:
+                for keyword in review.keywords.split(','):
+                    keyword = keyword.strip()
+                    compliment_keywords[keyword] = compliment_keywords.get(keyword, 0) + 1
+        
+        # Build compliments list
+        for review in positive_reviews[:5]:  # Top 5 positive reviews
+            compliments.append({
+                "customer_name": review.customer_name,
+                "rating": review.rating,
+                "comment": review.comment,
+                "keywords": review.keywords.split(',') if review.keywords else [],
+                "ai_summary": review.ai_summary or "Great feedback received",
+                "created_at": review.created_at.isoformat()
+            })
+        
+        # Extract top complaints (from negative reviews)
+        complaints = []
+        complaint_keywords = {}
+        
+        for review in negative_reviews[:10]:  # Top 10 negative reviews
+            if review.keywords:
+                for keyword in review.keywords.split(','):
+                    keyword = keyword.strip()
+                    complaint_keywords[keyword] = complaint_keywords.get(keyword, 0) + 1
+        
+        # Build complaints list
+        for review in negative_reviews[:5]:  # Top 5 negative reviews
+            complaints.append({
+                "customer_name": review.customer_name,
+                "rating": review.rating,
+                "comment": review.comment,
+                "keywords": review.keywords.split(',') if review.keywords else [],
+                "ai_summary": review.ai_summary or "Issue reported",
+                "action_item": review.action_item or "Requires investigation",
+                "created_at": review.created_at.isoformat()
+            })
+        
+        # Generate AI response draft for the latest negative review
+        response_draft = None
+        if negative_reviews:
+            latest_negative = negative_reviews[0]
+            
+            # If not already processed, process it now
+            if not latest_negative.action_item or not latest_negative.ai_summary:
+                analysis = await process_review(latest_negative.comment)
+                if analysis.get("status") == "success":
+                    # Use the AI analysis to craft a response
+                    response_draft = {
+                        "to_customer": latest_negative.customer_name,
+                        "rating": latest_negative.rating,
+                        "summary": analysis.get("ai_summary", ""),
+                        "action_item": analysis.get("action_item", ""),
+                        "response_template": f"Thank you for your feedback, {latest_negative.customer_name}. "
+                                            f"We're sorry to hear about your experience with {analysis.get('ai_summary', 'the food/service')}. "
+                                            f"We've identified this issue and will {analysis.get('action_item', 'take immediate action')}. "
+                                            f"Please visit us again soon so we can show you our improvements.",
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+            else:
+                # Use existing analysis
+                response_draft = {
+                    "to_customer": latest_negative.customer_name,
+                    "rating": latest_negative.rating,
+                    "summary": latest_negative.ai_summary or "",
+                    "action_item": latest_negative.action_item or "",
+                    "response_template": f"Thank you for your feedback, {latest_negative.customer_name}. "
+                                        f"We're sorry to hear about your experience. "
+                                        f"We've identified this issue and will take immediate action. "
+                                        f"Please visit us again soon so we can show you our improvements.",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+        
+        # Get top complaint keywords
+        top_complaint_keywords = sorted(
+            complaint_keywords.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:5]
+        
+        # Get top compliment keywords
+        top_compliment_keywords = sorted(
+            compliment_keywords.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:5]
+        
+        return {
+            "status": "success",
+            "tenant_id": current_user.tenant_id,
+            "period": {
+                "days_analyzed": days,
+                "start_date": start_date_dt.isoformat(),
+                "end_date": end_date_dt.isoformat()
+            },
+            "metrics": {
+                "total_reviews": total_reviews,
+                "processed_reviews": sum(1 for r in reviews if r.is_processed),
+                "average_rating": round(float(average_rating), 2),
+                "positive_reviews": positive_count,
+                "negative_reviews": negative_count,
+                "neutral_reviews": len([r for r in reviews if r.is_neutral]),
+                "sentiment_trend": sentiment_trend,
+                "trend_strength_percent": trend_strength
+            },
+            "recurring_complaints": [
+                {
+                    "keyword": keyword,
+                    "mentions": count,
+                    "severity": "High" if count >= 3 else "Medium" if count >= 2 else "Low"
+                }
+                for keyword, count in top_complaint_keywords
+            ],
+            "recurring_compliments": [
+                {
+                    "keyword": keyword,
+                    "mentions": count
+                }
+                for keyword, count in top_compliment_keywords
+            ],
+            "compliments": compliments,
+            "complaints": complaints,
+            "response_draft": response_draft,
+            "insights": {
+                "mood": "Happy" if sentiment_trend == "Positive" and average_rating >= 4.0 else
+                        "Concerned" if sentiment_trend == "Negative" or average_rating <= 2.0 else "Neutral",
+                "status_summary": f"Your restaurant has {total_reviews} reviews with "
+                                f"an average rating of {average_rating:.1f}/5.0. "
+                                f"Sentiment is {sentiment_trend.lower()} overall.",
+                "urgent_actions": [
+                    f"Address {negative_count} recent negative reviews" if negative_count > 0 else "Great news - no recent complaints!",
+                    f"Replicate success from {positive_count} positive reviews" if positive_count > 0 else "Focus on getting positive reviews",
+                ]
+            },
+            "message": "AI Reputation Sentinel analysis complete. Monitor sentiment trends and respond to feedback.",
+            "recommendation": "Respond to negative reviews within 24 hours. Ask for specific details to improve."
+        }
+    
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate reputation analytics: {str(e)}"
+        )
+
