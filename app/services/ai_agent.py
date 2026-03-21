@@ -1403,6 +1403,194 @@ OUTPUT FORMAT - MUST BE VALID JSON:"""
                 "Analyze if lower-traffic hours can function with fewer staff"
             ]
         }
+    
+    async def verify_impact(
+        self,
+        recommendation: Dict[str, Any],
+        before_metrics: Dict[str, Any],
+        after_metrics: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Verify the actual impact of an accepted recommendation.
+        
+        Day 14 Feature: Measures whether AI recommendations actually worked.
+        Compares metrics before and after the recommendation was implemented.
+        Uses Gemini to generate a natural language success report.
+        
+        Args:
+            recommendation: The recommendation that was accepted
+                - category: Type of recommendation (Pricing, Staffing, Waste, etc.)
+                - content: The AI's recommendation text
+                - impact_score: PredictedPredicted financial impact
+            before_metrics: Restaurant metrics at time of recommendation
+                - revenue: Period revenue
+                - profit: Period profit
+                - profit_margin: Profit margin %
+                - specific_item_sales: Sales of recommended item
+                - item_profit: Profit from that item
+            after_metrics: Restaurant metrics after implementation (typically 7-14 days later)
+                - revenue: Period revenue
+                - profit: Period profit
+                - profit_margin: Profit margin %
+                - specific_item_sales: Sales of recommended item
+                - item_profit: Profit from that item
+        
+        Returns:
+            Dictionary with impact analysis:
+            - actual_impact: Dollar amount of actual profit change
+            - impact_vs_prediction: How close actual was to predicted
+            - success_report: AI-generated narrative of the impact
+            - metrics_changed: Which metrics shifted most
+            - roi_if_continued: Projected annual ROI if trend continues
+        """
+        try:
+            # Calculate actual changes
+            revenue_change = after_metrics.get("revenue", 0) - before_metrics.get("revenue", 0)
+            profit_change = after_metrics.get("profit", 0) - before_metrics.get("profit", 0)
+            margin_change = after_metrics.get("profit_margin", 0) - before_metrics.get("profit_margin", 0)
+            item_sales_change = after_metrics.get("specific_item_sales", 0) - before_metrics.get("specific_item_sales", 0)
+            item_profit_change = after_metrics.get("item_profit", 0) - before_metrics.get("item_profit", 0)
+            
+            # Calculate accuracy of prediction
+            predicted_impact = recommendation.get("impact_score", 0)
+            actual_impact = profit_change
+            prediction_accuracy = 0
+            if predicted_impact != 0:
+                prediction_accuracy = (actual_impact / predicted_impact) * 100
+            
+            # Build the verification message for Gemini
+            verification_prompt = self._get_impact_verification_prompt(
+                recommendation,
+                before_metrics,
+                after_metrics,
+                revenue_change,
+                profit_change,
+                margin_change
+            )
+            
+            # Call Gemini to generate success report
+            response = self.model.generate_content(
+                verification_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.8,
+                    top_p=0.95,
+                    top_k=40,
+                    max_output_tokens=1024
+                )
+            )
+            
+            success_report = response.text if response else "Report generation pending."
+            
+            # Project annual ROI if trend continues
+            days_elapsed = after_metrics.get("days_elapsed", 7)
+            if days_elapsed > 0:
+                annual_projection = (profit_change / days_elapsed) * 365
+            else:
+                annual_projection = 0
+            
+            return {
+                "status": "success",
+                "recommendation_id": recommendation.get("id"),
+                "category": recommendation.get("category"),
+                "original_prediction": predicted_impact,
+                "actual_impact": actual_impact,
+                "impact_currency": "$",
+                "prediction_accuracy_percent": round(prediction_accuracy, 1),
+                "success_level": "Exceeded" if actual_impact > predicted_impact else 
+                                 "Met" if abs(actual_impact - predicted_impact) < predicted_impact * 0.2 else
+                                 "Below Target",
+                "metrics_before": before_metrics,
+                "metrics_after": after_metrics,
+                "changes": {
+                    "revenue_change": round(revenue_change, 2),
+                    "profit_change": round(profit_change, 2),
+                    "margin_change_percent": round(margin_change, 1),
+                    "item_sales_change": round(item_sales_change, 0),
+                    "item_profit_change": round(item_profit_change, 2)
+                },
+                "annual_projection": round(annual_projection, 2),
+                "success_report": success_report,
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+                "recommendation_message": f"✅ AI Suggested: {recommendation.get('content', 'Action Complete')}\n"
+                                          f"📊 Predicted Impact: ${predicted_impact:.2f}\n"
+                                          f"💰 Actual Impact: ${actual_impact:.2f}\n"
+                                          f"📈 Annual Value: ${annual_projection:.2f}\n\n"
+                                          f"{success_report}"
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to verify recommendation impact: {str(e)}",
+                "recommendation_id": recommendation.get("id")
+            }
+    
+    def _get_impact_verification_prompt(
+        self,
+        recommendation: Dict[str, Any],
+        before_metrics: Dict[str, Any],
+        after_metrics: Dict[str, Any],
+        revenue_change: float,
+        profit_change: float,
+        margin_change: float
+    ) -> str:
+        """Create a prompt for Gemini to analyze and report on recommendation impact.
+        
+        Day 14 Feature: AI writes a "Success Report" showing the impact of its advice.
+        """
+        return f"""You are a restaurant consultant AI analyzing the impact of your own recommendations.
+
+BACKGROUND:
+I gave you a recommendation: "{recommendation.get('content', 'Unknown recommendation')}"
+Category: {recommendation.get('category', 'Unknown')}
+Predicted Financial Impact: ${recommendation.get('impact_score', 0):.2f}
+
+THE OWNER FOLLOWED YOUR ADVICE FOR 7 DAYS. HERE'S WHAT HAPPENED:
+
+BEFORE (Baseline):
+- Revenue: ${before_metrics.get('revenue', 0):,.2f}
+- Profit: ${before_metrics.get('profit', 0):,.2f}
+- Profit Margin: {before_metrics.get('profit_margin', 0):.1f}%
+- Specific Item Sales: {before_metrics.get('specific_item_sales', 0):.0f} units
+- Item Profit: ${before_metrics.get('item_profit', 0):,.2f}
+
+AFTER (7 days later):
+- Revenue: ${after_metrics.get('revenue', 0):,.2f}
+- Profit: ${after_metrics.get('profit', 0):,.2f}
+- Profit Margin: {after_metrics.get('profit_margin', 0):.1f}%
+- Specific Item Sales: {after_metrics.get('specific_item_sales', 0):.0f} units
+- Item Profit: ${after_metrics.get('item_profit', 0):,.2f}
+
+ACTUAL CHANGES:
+- Revenue Change: ${revenue_change:+,.2f}
+- Profit Change: ${profit_change:+,.2f} (Your predicted: ${recommendation.get('impact_score', 0):+,.2f})
+- Margin Change: {margin_change:+.1f}%
+
+YOUR TASK:
+Write a natural, enthusiastic, and specific SUCCESS REPORT that:
+
+1. ACKNOWLEDGES THE OWNER'S ACTION: "You followed my advice to [specific action]"
+
+2. CELEBRATES THE RESULTS:
+   - Did your prediction come true?
+   - Did the owner exceed expectations?
+   - What happened better or worse than expected?
+
+3. EXPLAINS THE BUSINESS IMPACT:
+   - Why did these specific metrics change?
+   - What customer or operational behavior changed?
+   - Is this sustainable or a one-time spike?
+
+4. PROJECTS THE ANNUAL VALUE:
+   - If this continues for a full year, how much profit would it generate?
+   - Is this recommendation worth implementing long-term?
+
+5. NEXT STEPS (if profit improved by >10%):
+   - Would you recommend DOUBLING this tactic?
+   - What related improvements could build on this success?
+
+6. TONE: Be warm, genuine, and congratulatory. This is proof that AI consulting works.
+
+CONSTRAINT: Keep response to 3-4 sentences maximum. Be specific with numbers."""
 
 
 # Global instance
@@ -1460,3 +1648,17 @@ async def calculate_labor_efficiency(hourly_data: Dict[str, Any]) -> Dict[str, A
     """Convenience function to analyze labor efficiency using the global consultant."""
     consultant = get_ai_consultant()
     return await consultant.calculate_labor_efficiency(hourly_data)
+
+
+async def verify_recommendation_impact(
+    recommendation: Dict[str, Any],
+    before_metrics: Dict[str, Any],
+    after_metrics: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Convenience function to verify recommendation impact using the global consultant.
+    
+    Day 14 Feature: Measures whether AI recommendations actually worked by comparing
+    metrics before and after implementation.
+    """
+    consultant = get_ai_consultant()
+    return await consultant.verify_impact(recommendation, before_metrics, after_metrics)
