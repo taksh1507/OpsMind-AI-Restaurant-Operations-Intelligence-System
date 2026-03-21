@@ -6,6 +6,9 @@ SQLAlchemy ORM models for multi-tenant architecture:
 - user.py: User account model
 - menu.py: Category, MenuItem, Ingredient, and Recipe models
 - sales.py: Sale and SaleItem models for transaction tracking
+- review.py: Review model
+- staff.py: Staff, Shift models
+- recommendation.py: AI-generated recommendations tracking
 - schemas.py: Pydantic request/response schemas
 """
 
@@ -16,6 +19,7 @@ from .menu import Category, MenuItem, Ingredient, Recipe
 from .sales import Sale, SaleItem, PaymentMethod
 from .review import Review
 from .staff import Staff, Shift, StaffRole
+from .recommendation import Recommendation, RecommendationCategory, RecommendationStatus
 from .schemas import (
     RegisterRequest,
     LoginRequest,
@@ -42,6 +46,9 @@ __all__ = [
     "Staff",
     "Shift",
     "StaffRole",
+    "Recommendation",
+    "RecommendationCategory",
+    "RecommendationStatus",
     "RegisterRequest",
     "LoginRequest",
     "TenantSchema",
