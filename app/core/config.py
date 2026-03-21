@@ -13,9 +13,11 @@ class Settings(BaseSettings):
     """Application settings loaded from .env file and environment variables."""
     
     # Database
+    # Uses SQLite for local development/demo
+    # To use PostgreSQL, set: DATABASE_URL=postgresql+asyncpg://user:pass@host/dbname
     database_url: str = Field(
-        default="postgresql+asyncpg://opsmind:password@localhost:5432/opsmind_ai",
-        description="Async database URL for SQLAlchemy"
+        default="sqlite+aiosqlite:///./opsmind_demo.db",
+        description="Async database URL for SQLAlchemy (default: local SQLite)"
     )
     
     # JWT Configuration
