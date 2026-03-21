@@ -12,17 +12,22 @@ from decimal import Decimal
 
 from app.database import get_db
 from app.api.deps import get_current_user
-from app.models import User, Review, Shift, Staff
+from app.models import User, Review, Shift, Staff, Sale
 from app.services.analytics import (
     calculate_revenue_and_profit,
     calculate_profit_margin,
     get_top_selling_items,
     get_daily_sales_trend
 )
-from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review, calculate_labor_efficiency
+from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review, calculate_labor_efficiency, AIConsultant
 from app.services.margin_analysis import (
     get_all_menu_items_with_costs,
     get_margin_report_summary
+)
+from app.services.weather import (
+    get_current_weather,
+    correlate_weather_with_sales,
+    get_weather_context_string
 )
 from app.core.math_utils import calculate_confidence_score
 from sqlalchemy import select, func, desc, and_
@@ -1300,6 +1305,220 @@ async def get_staffing_plan(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate staffing plan: {str(e)}"
+        )
+
+
+@router.get("/daily-tip")
+async def get_daily_tip(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    city: Optional[str] = None
+):
+    """Get AI-powered daily promotion based on weather context.
+    
+    This endpoint combines real-world environmental data (weather) with
+    restaurant sales patterns to generate a specific, weather-optimized
+    promotion recommendation. It answers: "What should I push TODAY?"
+    
+    The system:
+    1. Fetches current weather for the restaurant's city
+    2. Retrieves recent sales trends (7-day window)
+    3. Correlates weather patterns with menu item demand
+    4. Uses AI to generate a targeted promotion
+    
+    Returns a "Daily Mood" analysis that tells the owner exactly which
+    menu item to promote based on TODAY'S environmental conditions.
+    
+    Example response:
+    "It's 35°C and sunny in Mumbai! Customers crave cold beverages.
+     PUSH: Iced Lattes - typically 15% higher margins on hot days.
+     Staffing tip: +20% beverage bar staff to handle rush."
+    
+    Args:
+        current_user: Authenticated user (injected)
+        db: Database session (injected)
+        city: Restaurant city for weather lookup. If not provided,
+              uses restaurant's primary location from settings.
+        
+    Returns:
+        Daily promotion tip with weather context, AI recommendation,
+        estimated impact, and operational suggestions
+        
+    Raises:
+        HTTPException 401: If user is not authenticated
+        HTTPException 400: If city is required but not provided
+        HTTPException 500: If AI analysis fails
+    """
+    
+    try:
+        # Determine city for weather lookup
+        if not city:
+            # TODO: Read from restaurant settings/profile
+            # For now, default to a sensible value or require parameter
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="city parameter is required. Usage: /analytics/daily-tip?city=Mumbai"
+            )
+        
+        # Fetch current weather
+        weather_data = await get_current_weather(city)
+        
+        if weather_data.get("status") == "fallback":
+            # API unavailable, but we still have sensible defaults
+            weather_note = f"(Using default weather data - API unavailable)"
+        else:
+            weather_note = "(Real-time weather data)"
+        
+        # Get recent sales trend (7-day window)
+        sales_trend_start = datetime.now(timezone.utc) - timedelta(days=7)
+        
+        sales_stmt = select(
+            func.date(Sale.timestamp).label('sale_date'),
+            func.sum(Sale.total_amount).label('daily_revenue'),
+            func.count(Sale.id).label('transaction_count')
+        ).where(
+            and_(
+                Sale.tenant_id == current_user.tenant_id,
+                Sale.timestamp >= sales_trend_start
+            )
+        ).group_by(
+            func.date(Sale.timestamp)
+        )
+        
+        sales_result = await db.execute(sales_stmt)
+        sales_rows = sales_result.all()
+        
+        if not sales_rows:
+            # No sales data available
+            sales_summary = {
+                "total_7day_revenue": 0,
+                "avg_daily_revenue": 0,
+                "transaction_trend": []
+            }
+            sales_note = "(No sales data available - recommendations based on weather only)"
+        else:
+            sales_values = [float(row.daily_revenue or 0) for row in sales_rows]
+            sales_summary = {
+                "total_7day_revenue": sum(sales_values),
+                "avg_daily_revenue": sum(sales_values) / len(sales_values),
+                "max_daily_revenue": max(sales_values),
+                "min_daily_revenue": min(sales_values),
+                "transaction_trend": [int(row.transaction_count or 0) for row in sales_rows],
+                "days_with_data": len(sales_rows)
+            }
+            sales_note = f"(Based on {len(sales_rows)}-day sales history)"
+        
+        # Correlate weather with sales patterns
+        weather_impact = await correlate_weather_with_sales(weather_data, sales_summary)
+        
+        # Get AI consultant recommendation
+        ai_agent = AIConsultant()
+        
+        # Prepare performance data for AI
+        performance_data = {
+            "period": "7_days",
+            "metrics": sales_summary,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Generate weather-aware strategy
+        strategy_result = await ai_agent.generate_strategy_with_weather(
+            performance_data,
+            weather_data
+        )
+        
+        # Extract key recommendation
+        promotion_item = strategy_result.get("weather_optimized_promotion", "")
+        weather_context = strategy_result.get("weather_context", "")
+        impact_percentage = weather_impact.get("expected_impact_percent", 0)
+        staffing_recommendation = strategy_result.get("staffing_adjustment", {})
+        inventory_focus = strategy_result.get("inventory_focus_items", [])
+        
+        # Format confidence score
+        confidence = min(
+            100,
+            80 + (5 if weather_data.get("status") == "success" else 0)
+            + (5 if len(sales_rows) >= 7 else 0)
+        )
+        
+        return {
+            "status": "success",
+            "tenant_id": current_user.tenant_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "weather": {
+                "city": weather_data.get("city", city),
+                "temperature": weather_data.get("temperature"),
+                "humidity": weather_data.get("humidity"),
+                "condition": weather_data.get("condition"),
+                "feels_like": weather_data.get("feels_like"),
+                "is_rainy": weather_data.get("is_rainy"),
+                "is_hot": weather_data.get("is_hot"),
+                "is_cold": weather_data.get("is_cold"),
+                "note": weather_note
+            },
+            "sales_context": {
+                **sales_summary,
+                "note": sales_note
+            },
+            "daily_mood": {
+                "primary_condition": weather_data.get("condition"),
+                "customer_mood": weather_data.get("suggestion", "Moderate customer appetite"),
+                "urgency": "High" if weather_data.get("is_rainy") or weather_data.get("is_hot") else "Normal"
+            },
+            "recommendation": {
+                "headline": f"🌡️ {weather_context}",
+                "action_item": promotion_item,
+                "expected_impact": {
+                    "impact_percentage": impact_percentage,
+                    "impact_description": f"+{impact_percentage:.1f}% expected uplift on {promotion_item}" if promotion_item else "Monitor customer behavior"
+                },
+                "confidence_score": confidence,
+                "reasoning": "Correlation between weather patterns and historical sales demand"
+            },
+            "operational_insights": {
+                "staffing": {
+                    "adjustment": staffing_recommendation.get("adjustment", ""),
+                    "reason": staffing_recommendation.get("reason", ""),
+                    "areas_to_focus": staffing_recommendation.get("focus_areas", [])
+                },
+                "inventory": {
+                    "primary_focus": inventory_focus[0] if inventory_focus else "",
+                    "items_to_stock": inventory_focus,
+                    "reason": "Weather-correlated demand surge expected"
+                },
+                "menu_optimization": {
+                    "featured_item": promotion_item,
+                    "display_suggestion": f"Feature {promotion_item} prominently on menu/signage",
+                    "bundling_idea": f"Pair {promotion_item} with complementary items for upsell"
+                }
+            },
+            "implementation": {
+                "immediate": [
+                    f"Highlight {promotion_item} in digital menu",
+                    f"Adjust {staffing_recommendation.get('focus_areas', ['front-of-house'])[0]} staffing",
+                    "Increase inventory for featured items"
+                ],
+                "ongoing": [
+                    "Track sales lift for this promotion",
+                    "Monitor customer feedback during weather change",
+                    "Log actual vs. predicted impact for model refinement"
+                ]
+            },
+            "message": f"Daily Context-Aware Promotion: In {weather_data.get('condition', 'current')} weather, promote {promotion_item} to capture {impact_percentage:.1f}% estimated uplift.",
+            "context_aware": True,
+            "data_quality": {
+                "weather_data_source": "Real-time API" if weather_data.get("status") == "success" else "Fallback defaults",
+                "sales_data_days": len(sales_rows),
+                "model_confidence": f"{confidence}%"
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate daily tip: {str(e)}"
         )
 
 
