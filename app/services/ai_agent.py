@@ -985,6 +985,218 @@ CRITICAL RULES:
             return "negative"
         else:
             return "neutral"
+    
+    async def calculate_labor_efficiency(
+        self,
+        hourly_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Analyze labor cost vs. sales volume to identify staffing inefficiencies.
+        
+        Compares hourly labor costs against hourly sales to identify:
+        1. Inefficient hours (labor > 30% of sales)
+        2. Burnout risks (high sales with low staffing)
+        3. Optimal staffing recommendations
+        
+        Args:
+            hourly_data: Dictionary with hourly breakdown:
+            {
+                "date": "YYYY-MM-DD",
+                "hours": [
+                    {
+                        "hour": 0-23,
+                        "sales_amount": float,
+                        "labor_cost": float,
+                        "staff_count": int,
+                        "average_table_occupancy": float
+                    },
+                    ...
+                ],
+                "daily_total_sales": float,
+                "daily_total_labor": float,
+                "staff_scheduled": int
+            }
+            
+        Returns:
+            Dictionary with:
+            - status: "success" or "error"
+            - efficiency_score: 0-100 (100 = optimal)
+            - efficiency_label: "Excellent", "Good", "Fair", "Poor"
+            - inefficient_hours: List of problematic hours
+            - burnout_risks: List of high-volume, low-staff hours
+            - optimization_suggestions: AI-powered recommendations
+            - recommended_actions: Specific staffing changes
+        """
+        system_prompt = self._get_labor_efficiency_prompt()
+        user_message = f"""Please analyze this hourly labor-to-sales data:
+
+{json.dumps(hourly_data, indent=2, default=str)}
+
+Identify:
+1. Hours where labor cost > 30% of sales (inefficient)
+2. Hours with high sales but low staffing (burnout risk)
+3. Overstaffed vs understaffed patterns
+4. Recommended staffing changes for next week
+
+Provide response as valid JSON."""
+        
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [system_prompt]},
+                    {"role": "user", "parts": [user_message]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.6,
+                    top_p=0.95,
+                    top_k=40,
+                    max_output_tokens=1500
+                )
+            )
+            
+            ai_response = response.text
+            analysis = self._parse_labor_efficiency_response(ai_response, hourly_data)
+            
+            return {
+                "status": "success",
+                "efficiency_analysis": analysis,
+                "reasoning": ai_response,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to analyze labor efficiency: {str(e)}",
+                "efficiency_analysis": None
+            }
+    
+    def _get_labor_efficiency_prompt(self) -> str:
+        """System prompt for labor efficiency and staffing analysis."""
+        return """You are a restaurant operations expert specializing in labor optimization and staffing.
+Your expertise includes:
+- Labor cost as percentage of sales
+- Staff productivity metrics
+- Burnout detection and prevention
+- Schedule optimization
+- Peak vs. off-peak hour management
+
+LABOR EFFICIENCY MISSION:
+Analyze the provided hourly labor and sales data to identify:
+
+1. INEFFICIENCY DETECTION:
+   - If Labor Cost > 30% of Sales in an hour, flag as "Inefficient"
+   - Example: $500 sales with $200 labor = 40% (TOO HIGH)
+   - These are hours with too many people working
+
+2. BURNOUT RISK DETECTION:
+   - If Sales are HIGH but Staff Count is LOW in an hour, flag as "Burnout Risk"
+   - Example: $2000 sales with only 2 staff members
+   - These are high-pressure hours that will exhaust your team
+
+3. STAFFING RECOMMENDATIONS:
+   - Which hours are overstaffed? (potential cost savings)
+   - Which hours are understaffed? (risk of poor service)
+   - Which staff can be moved to busier shifts?
+
+METRICS TO CALCULATE:
+- Labor cost as percentage of sales (should be 20-30%)
+- Sales per staff member (higher is better, but not if too high)
+- Overall efficiency score (0-100)
+
+OUTPUT FORMAT - MUST BE VALID JSON:"""
+    
+    def _parse_labor_efficiency_response(
+        self,
+        ai_response: str,
+        hourly_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Parse AI labor efficiency analysis response."""
+        try:
+            json_start = ai_response.find('{')
+            json_end = ai_response.rfind('}') + 1
+            
+            if json_start == -1 or json_end == 0:
+                return self._create_fallback_labor_analysis(hourly_data)
+            
+            json_str = ai_response[json_start:json_end]
+            analysis = json.loads(json_str)
+            return analysis
+        
+        except (json.JSONDecodeError, ValueError):
+            return self._create_fallback_labor_analysis(hourly_data)
+    
+    def _create_fallback_labor_analysis(
+        self,
+        hourly_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Create fallback labor efficiency analysis when AI fails."""
+        hours = hourly_data.get("hours", [])
+        
+        inefficient_hours = []
+        burnout_risks = []
+        total_efficiency = 0
+        
+        for hour_data in hours:
+            sales = float(hour_data.get("sales_amount", 0))
+            labor = float(hour_data.get("labor_cost", 0))
+            staff = int(hour_data.get("staff_count", 0))
+            
+            # Calculate labor percentage
+            if sales > 0:
+                labor_percent = (labor / sales) * 100
+                if labor_percent > 30:
+                    inefficient_hours.append({
+                        "hour": hour_data.get("hour", 0),
+                        "sales": sales,
+                        "labor": labor,
+                        "labor_percent": round(labor_percent, 1),
+                        "issue": "Overstaffed - Labor > 30% of sales"
+                    })
+            
+            # Detect burnout risk
+            if sales > 1000 and staff < 3:
+                burnout_risks.append({
+                    "hour": hour_data.get("hour", 0),
+                    "sales": sales,
+                    "staff_count": staff,
+                    "sales_per_staff": round(sales / staff, 2) if staff > 0 else sales,
+                    "issue": "High sales with low staffing - burnout risk"
+                })
+            
+            # Accumulate for efficiency score
+            if sales > 0 and labor > 0:
+                labor_percent = (labor / sales) * 100
+                # Ideal is 25%
+                if labor_percent <= 25:
+                    total_efficiency += 100
+                elif labor_percent <= 30:
+                    total_efficiency += 80
+                elif labor_percent <= 35:
+                    total_efficiency += 60
+                else:
+                    total_efficiency += 40
+        
+        avg_efficiency = int(total_efficiency / len(hours)) if hours else 50
+        
+        return {
+            "efficiency_score": avg_efficiency,
+            "efficiency_label": "Excellent" if avg_efficiency >= 80 else
+                                "Good" if avg_efficiency >= 60 else
+                                "Fair" if avg_efficiency >= 40 else "Poor",
+            "inefficient_hours": inefficient_hours,
+            "burnout_risks": burnout_risks,
+            "optimization_suggestions": [
+                f"Reduce staff by 1-2 people in {len(inefficient_hours)} overstaffed hours"
+                if inefficient_hours else "Overall staffing looks good",
+                f"Increase staff or improve service speed in {len(burnout_risks)} high-volume hours"
+                if burnout_risks else "No extreme burnout risks detected"
+            ],
+            "recommended_actions": [
+                "Review staffing for hours with labor > 30% of sales",
+                "Consider cross-training for flexibility in peak hours",
+                "Analyze if lower-traffic hours can function with fewer staff"
+            ]
+        }
 
 
 # Global instance
@@ -1027,3 +1239,9 @@ async def process_review(customer_comment: str) -> Dict[str, Any]:
     """Convenience function to analyze review sentiment using the global consultant."""
     consultant = get_ai_consultant()
     return await consultant.process_review(customer_comment)
+
+
+async def calculate_labor_efficiency(hourly_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Convenience function to analyze labor efficiency using the global consultant."""
+    consultant = get_ai_consultant()
+    return await consultant.calculate_labor_efficiency(hourly_data)
