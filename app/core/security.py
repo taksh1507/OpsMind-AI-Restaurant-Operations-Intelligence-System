@@ -13,8 +13,8 @@ from passlib.context import CryptContext
 from .config import settings
 
 
-# Password hashing context using bcrypt
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing context using argon2 (more reliable than bcrypt)
+pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:

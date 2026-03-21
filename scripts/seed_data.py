@@ -30,6 +30,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
+from passlib.context import CryptContext
 
 # Set UTF-8 encoding for console output
 if sys.platform == 'win32':
@@ -48,13 +49,14 @@ from app.models.sales import Sale, SaleItem, PaymentMethod
 from app.models.review import Review
 from app.models.staff import Staff, Shift, StaffRole
 
-# Use bcrypt directly to avoid passlib compatibility issue
-import bcrypt
+# Use passlib's argon2 context - more reliable than bcrypt
+from passlib.context import CryptContext
 
-def hash_password_simple(password: str) -> str:
-    """Simple password hashing using bcrypt directly."""
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode(), salt).decode()
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+def hash_password_proper(password: str) -> str:
+    """Hash password using argon2 (more reliable than bcrypt)."""
+    return pwd_context.hash(password)
 
 
 # Demo data templates
@@ -221,7 +223,7 @@ async def seed_database():
             user = User(
                 tenant_id=tenant.id,
                 email=DEMO_EMAIL,
-                hashed_password=hash_password_simple(DEMO_PASSWORD),
+                hashed_password=hash_password_proper(DEMO_PASSWORD),
                 is_active=True,
                 is_admin=True
             )
