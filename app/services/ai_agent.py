@@ -820,6 +820,171 @@ RESPOND WITH VALID JSON ONLY."""
             },
             "cost_strategies": []
         }
+    
+    async def process_review(self, customer_comment: str) -> Dict[str, Any]:
+        """Analyze a customer review for sentiment and actionable insights.
+        
+        Uses Gemini to perform comprehensive review analysis:
+        1. Assign sentiment score (-1.0 to 1.0)
+        2. Extract key topics/keywords
+        3. Generate actionable recommendation for manager
+        4. Create one-sentence summary
+        
+        Args:
+            customer_comment: The full text of the customer's review/feedback
+            
+        Returns:
+            Dictionary with:
+            - status: "success" or "error"
+            - sentiment_score: Float from -1.0 (very negative) to 1.0 (very positive)
+            - sentiment_label: "positive", "neutral", or "negative"
+            - keywords: List of key topics mentioned
+            - ai_summary: One-sentence executive summary
+            - action_item: Specific actionable recommendation
+            - reasoning: Full AI analysis text
+        """
+        system_prompt = self._get_sentiment_analysis_prompt()
+        user_message = f"""Please analyze this customer review:
+
+"{customer_comment}"
+
+Provide your response as valid JSON with the following structure:
+{{
+    "sentiment_score": <float from -1.0 to 1.0>,
+    "keywords": ["keyword1", "keyword2", "keyword3"],
+    "ai_summary": "One sentence summary of the review's main point",
+    "action_item": "Specific actionable recommendation for the manager"
+}}"""
+        
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [system_prompt]},
+                    {"role": "user", "parts": [user_message]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.5,
+                    top_p=0.95,
+                    top_k=40,
+                    max_output_tokens=500
+                )
+            )
+            
+            ai_response = response.text
+            analysis = self._parse_sentiment_response(ai_response)
+            
+            return {
+                "status": "success",
+                "sentiment_score": analysis.get("sentiment_score", 0.0),
+                "sentiment_label": self._get_sentiment_label(analysis.get("sentiment_score", 0.0)),
+                "keywords": analysis.get("keywords", []),
+                "ai_summary": analysis.get("ai_summary", ""),
+                "action_item": analysis.get("action_item", ""),
+                "reasoning": ai_response,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to analyze review sentiment: {str(e)}",
+                "sentiment_score": 0.0,
+                "sentiment_label": "neutral"
+            }
+    
+    def _get_sentiment_analysis_prompt(self) -> str:
+        """System prompt for comprehensive sentiment analysis of customer reviews."""
+        return """You are an expert restaurant sentiment analyst with deep expertise in:
+- Customer sentiment analysis and emotional intelligence
+- Restaurant operations and service quality issues
+- Food quality assessment and common complaints
+- Service excellence standards
+- Problem identification and resolution
+
+SENTIMENT ANALYSIS MISSION:
+Analyze the provided customer review and extract:
+
+1. SENTIMENT SCORE (-1.0 to 1.0):
+   - 1.0: Extremely positive (delighted customer)
+   - 0.5: Positive (good experience)
+   - 0.0: Neutral (balanced positive and negative)
+   - -0.5: Negative (problems experienced)
+   - -1.0: Extremely negative (very upset customer)
+
+2. KEYWORDS: Extract 3-5 key topics mentioned (e.g., "cold food", "great service", "slow service", "friendly staff")
+
+3. AI SUMMARY: Create ONE sentence that captures the essence of the feedback
+
+4. ACTION ITEM: Provide ONE specific, actionable recommendation for the restaurant manager.
+   - If positive: How to replicate this success?
+   - If negative: What specific problem to fix?
+   - Example: "Check the heating lamp in the kitchen as burgers were served cold"
+   - Example: "Server training session on upselling wine pairings"
+
+CRITICAL RULES:
+- ONLY output valid JSON, no other text
+- sentiment_score must be a number between -1.0 and 1.0
+- keywords must be a simple list of strings
+- action_item must be a single, specific, actionable sentence
+- ai_summary must be exactly one sentence
+- Never output markdown, just pure JSON"""
+    
+    def _parse_sentiment_response(self, ai_response: str) -> Dict[str, Any]:
+        """Parse the AI's JSON sentiment analysis response."""
+        try:
+            # Try to extract JSON from the response
+            json_start = ai_response.find('{')
+            json_end = ai_response.rfind('}') + 1
+            
+            if json_start == -1 or json_end == 0:
+                return self._create_fallback_sentiment(ai_response)
+            
+            json_str = ai_response[json_start:json_end]
+            analysis = json.loads(json_str)
+            
+            return analysis
+        
+        except (json.JSONDecodeError, ValueError):
+            return self._create_fallback_sentiment(ai_response)
+    
+    def _create_fallback_sentiment(self, text: str) -> Dict[str, Any]:
+        """Create fallback sentiment analysis when parsing fails."""
+        # Simple heuristic-based fallback
+        text_lower = text.lower()
+        
+        # Positive keywords
+        positive_words = ["great", "excellent", "amazing", "love", "perfect", "best", "awesome", "wonderful", "fantastic"]
+        # Negative keywords
+        negative_words = ["bad", "terrible", "awful", "hate", "worst", "poor", "disappointed", "horrible", "disgusting"]
+        
+        positive_count = sum(1 for word in positive_words if word in text_lower)
+        negative_count = sum(1 for word in negative_words if word in text_lower)
+        
+        # Calculate simple sentiment
+        if positive_count > negative_count:
+            sentiment = 0.5 + (positive_count * 0.1)
+        elif negative_count > positive_count:
+            sentiment = -0.5 - (negative_count * 0.1)
+        else:
+            sentiment = 0.0
+        
+        sentiment = max(-1.0, min(1.0, sentiment))
+        
+        return {
+            "sentiment_score": sentiment,
+            "keywords": ["review analysis pending"],
+            "ai_summary": "Review received and flagged for analysis",
+            "action_item": "Manager review required for detailed assessment"
+        }
+    
+    def _get_sentiment_label(self, score: float) -> str:
+        """Convert sentiment score to label."""
+        if score >= 0.5:
+            return "positive"
+        elif score <= -0.5:
+            return "negative"
+        else:
+            return "neutral"
 
 
 # Global instance
@@ -856,3 +1021,9 @@ async def analyze_profit_margins(
     """Convenience function to analyze profit margins using the global consultant."""
     consultant = get_ai_consultant()
     return await consultant.check_profit_margins(menu_items_with_costs)
+
+
+async def process_review(customer_comment: str) -> Dict[str, Any]:
+    """Convenience function to analyze review sentiment using the global consultant."""
+    consultant = get_ai_consultant()
+    return await consultant.process_review(customer_comment)
