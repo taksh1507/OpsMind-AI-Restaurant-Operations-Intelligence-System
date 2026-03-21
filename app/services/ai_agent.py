@@ -19,6 +19,10 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import google.generativeai as genai
 from app.core.math_utils import calculate_trend_slope, calculate_trend_metrics
+from app.services.weather import (
+    get_weather_context_string,
+    correlate_weather_with_sales
+)
 from app.core.config import settings
 
 
@@ -114,7 +118,164 @@ class AIConsultant:
                 "strategy": None
             }
     
-    def _get_default_consultant_prompt(self) -> str:
+    async def generate_strategy_with_weather(
+        self,
+        performance_data: Dict[str, Any],
+        weather_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Generate strategy aware of current environmental (weather) conditions.
+        
+        Day 13 - Environmental Awareness: Integrates weather impact on customer behavior
+        and sales patterns to make hyper-relevant recommendations.
+        
+        Args:
+            performance_data: Standard restaurant performance data
+            weather_data: Current weather from get_current_weather()
+            
+        Returns:
+            Enhanced strategy with weather-aware recommendations
+        """
+        
+        # Get weather context string for llm
+        weather_context = get_weather_context_string(weather_data)
+        
+        # Correlate weather with sales patterns
+        weather_impact = await correlate_weather_with_sales(weather_data, performance_data)
+        
+        # Create weather-enhanced system prompt
+        weather_aware_prompt = self._get_weather_aware_consultant_prompt(weather_data, weather_impact)
+        
+        # Enhance user message with weather context
+        user_message = self._build_analysis_message(performance_data)
+        enhanced_message = f"""{user_message}
+
+ENVIRONMENTAL CONTEXT (Day 13 - Weather-Aware Intelligence):
+{weather_context}
+
+WEATHER IMPACT ANALYSIS:
+- Estimated foot traffic change: {weather_impact.get('weather_impact_on_foottraffic', 0)}%
+- High demand items in this weather: {", ".join(weather_impact.get('high_demand_items', ['All items']))}
+- Low demand items in this weather: {", ".join(weather_impact.get('low_demand_items', ['None']))}
+- Recommended staffing level: {weather_impact.get('staff_recommendation', 'Normal')}
+- Inventory focus: {", ".join(weather_impact.get('inventory_recommendation', ['Standard']))}
+
+Use this weather context to inform your strategic recommendations.
+Which menu items should be PROMOTED given today's conditions?
+How should staffing be adjusted for this weather?
+What inventory should be prioritized?"""
+        
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [weather_aware_prompt]},
+                    {"role": "user", "parts": [enhanced_message]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    top_k=40,
+                    max_output_tokens=2048
+                )
+            )
+            
+            ai_response = response.text
+            strategy = self._parse_strategy_response(ai_response, performance_data)
+            
+            # Add weather context to response
+            if isinstance(strategy, dict):
+                strategy["weather_context"] = weather_context
+                strategy["weather_impact"] = weather_impact
+            
+            return {
+                "status": "success",
+                "strategy": strategy,
+                "reasoning": ai_response,
+                "weather_aware": True,
+                "timestamp": performance_data.get("period", {}).get("end_date", "")
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to generate weather-aware strategy: {str(e)}",
+                "strategy": None
+            }
+    
+    def _get_weather_aware_consultant_prompt(
+        self,
+        weather_data: Dict[str, Any],
+        weather_impact: Dict[str, Any]
+    ) -> str:
+        """System prompt for weather-aware strategic consulting.
+        
+        Day 13 Integration: AI now understands that weather affects customer behavior.
+        """
+        temperature = weather_data.get("temperature", 20)
+        condition = weather_data.get("condition", "Unknown")
+        
+        return f"""You are a world-class restaurant consultant with expertise in WEATHER-INFLUENCED CUSTOMER BEHAVIOR.
+You understand that external environmental factors significantly impact restaurant operations:
+
+TODAY'S ENVIRONMENTAL CONDITIONS:
+- Weather: {condition}
+- Temperature: {temperature}°C
+- Current weather impacts: {weather_data.get('suggestion', 'Monitor conditions')}
+
+YOUR ENVIRONMENTAL AWARENESS EXPERTISE:
+1. WEATHER-IMPACT PSYCHOLOGY: Know how weather changes customer choices
+   - Rainy weather → Customers order delivery, want comfort food, hot beverages
+   - Hot weather → Customers want cold drinks, light meals, outdoor seating
+   - Cold weather → Customers want warmth, hot drinks, comfort food
+
+2. REAL-TIME MENU PROMOTION: Based on TODAY's weather, which menu items should you push?
+   - What items will customers naturally demand in this weather?
+   - What high-margin items align with this weather?
+   - What should be your FEATURED promotion for TODAY?
+
+3. STAFFING ADAPTATION: How should you staff differently based on weather?
+   - Rainy days: More delivery staff, fewer floor staff
+   - Hot days: More beverage/Cold bar staff
+   - Cold days: Hot beverage bar preparation
+
+4. INVENTORY TIMING: What should be prioritized in purchasing?
+   - Cold weather: Stock hot beverages
+   - Hot weather: Ensure ice supply is abundant
+
+CUSTOMER BEHAVIOR INSIGHTS:
+The provided weather context suggests customer foot traffic will change. Recommendations must account for:
+- Reduced vs. increased customer volume
+- Menu item demand shifts
+- Service style changes (dine-in vs. delivery emphasis)
+
+STRATEGIC RECOMMENDATIONS MUST INCLUDE:
+1. WEATHER-SPECIFIC MENU ITEM TO PROMOTE: Which single item should you push TODAY based on weather?
+2. STAFFING WEATHER ADJUSTMENT: Specific recommendation for today's staff level
+3. INVENTORY FOCUS: What to stock/prepare more of today
+4. CUSTOMER EXPERIENCE SUGGESTION: How to adapt service style for this weather
+
+OUTPUT FORMAT - MUST BE VALID JSON:
+{{
+    "star_dish": {{...existing format...}},
+    "weather_optimized_promotion": "String - Specific menu item to promote today based on weather (e.g., 'Push iced lattes - temperature is 32°C')",
+    "daily_weather_menu_tip": "String - Actionable promotion (e.g., 'Feature iced beverages on digital menu')",
+    "weather_staffing_adjustment": "String - Staffing recommendation for this weather",
+    "weather_inventory_focus": "String - What to prioritize stocking today",
+    "underperformer": {{...existing format...}},
+    "price_recommendation": {{...existing format...}},
+    "inventory_saving": {{...existing format...}},
+    "overall_health": {{...existing format...}},
+    "top_priorities": [...],
+    "environmental_strategy": "String - How this specific weather should influence today's operations"
+}}
+
+CRITICAL RULES for Day 13:
+- Always include "weather_optimized_promotion" with a specific menu item
+- Base recommendations on PROVIDED WEATHER DATA, not generic advice
+- Make recommendations ACTIONABLE FOR TODAY
+- Connect weather to menu, staffing, and customer psychology
+- ALWAYS output valid JSON only"""
+    
+    def _build_analysis_message(self, performance_data: Dict[str, Any]) -> str:
         """Return the default system prompt for restaurant consulting.
         
         This prompt teaches the AI to find "Hidden Problems" in restaurant data
@@ -1257,11 +1418,20 @@ def get_ai_consultant() -> AIConsultant:
 
 
 async def generate_restaurant_strategy(
-    performance_data: Dict[str, Any]
+    performance_data: Dict[str, Any],
+    weather_data: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """Convenience function to generate strategy using the global consultant."""
+    """Convenience function to generate strategy using the global consultant.
+    
+    Optionally integrates weather context for weather-aware decision-making.
+    Day 13: Environmental Awareness Integration.
+    """
     consultant = get_ai_consultant()
-    return await consultant.generate_strategy(performance_data)
+    
+    if weather_data:
+        return await consultant.generate_strategy_with_weather(performance_data, weather_data)
+    else:
+        return await consultant.generate_strategy(performance_data)
 
 
 async def forecast_revenue(
