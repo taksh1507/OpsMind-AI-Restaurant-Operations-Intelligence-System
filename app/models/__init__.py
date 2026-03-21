@@ -15,6 +15,7 @@ from .user import User
 from .menu import Category, MenuItem, Ingredient, Recipe
 from .sales import Sale, SaleItem, PaymentMethod
 from .review import Review
+from .staff import Staff, Shift, StaffRole
 from .schemas import (
     RegisterRequest,
     LoginRequest,
@@ -38,6 +39,9 @@ __all__ = [
     "SaleItem",
     "PaymentMethod",
     "Review",
+    "Staff",
+    "Shift",
+    "StaffRole",
     "RegisterRequest",
     "LoginRequest",
     "TenantSchema",
