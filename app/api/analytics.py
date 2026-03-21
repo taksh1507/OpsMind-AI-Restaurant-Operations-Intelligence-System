@@ -6,25 +6,25 @@ All endpoints are scoped to the authenticated user's tenant.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from decimal import Decimal
 
 from app.database import get_db
 from app.api.deps import get_current_user
-from app.models import User, Review
+from app.models import User, Review, Shift, Staff
 from app.services.analytics import (
     calculate_revenue_and_profit,
     calculate_profit_margin,
     get_top_selling_items,
     get_daily_sales_trend
 )
-from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review
+from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review, calculate_labor_efficiency
 from app.services.margin_analysis import (
     get_all_menu_items_with_costs,
     get_margin_report_summary
 )
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, and_
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -955,4 +955,323 @@ async def get_reputation_analytics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate reputation analytics: {str(e)}"
         )
+
+
+@router.get("/staffing-plan")
+async def get_staffing_plan(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    analysis_date: Optional[str] = None,
+    forecast_days: int = 1
+):
+    """Get AI-powered staffing optimization and labor heatmap.
+    
+    Analyzes historical labor costs vs. sales volume to create a 24-hour
+    staffing efficiency heatmap. This tells the owner exactly when they
+    are overstaffed (wasting money) or understaffed (losing customers).
+    
+    The endpoint generates:
+    - 24-hour efficiency heatmap (0-100 score for each hour)
+    - Flagged inefficient hours (labor > 30% of sales)
+    - Burnout risk hours (high sales, low staff)
+    - AI-recommended schedule for next day based on revenue forecast
+    - Specific staffing changes to implement
+    
+    This solves the hardest problem in hospitality: Precision Staffing.
+    Instead of "feeling" busy, owners now know the data.
+    
+    Args:
+        current_user: Authenticated user (injected)
+        db: Database session (injected)
+        analysis_date: Date to analyze (YYYY-MM-DD format). Defaults to yesterday.
+        forecast_days: Days to forecast (default 1, max 7)
+        
+    Returns:
+        Comprehensive staffing optimization plan with heatmap
+        
+    Raises:
+        HTTPException 401: If user is not authenticated
+        HTTPException 404: If no shift/sales data exists
+        HTTPException 500: If analysis fails
+    """
+    
+    try:
+        # Validate forecast days
+        forecast_days = min(max(forecast_days, 1), 7)
+        
+        # Parse analysis date
+        if analysis_date:
+            try:
+                analysis_dt = datetime.strptime(analysis_date, "%Y-%m-%d").replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid analysis_date format. Use YYYY-MM-DD"
+                )
+        else:
+            # Default to yesterday
+            analysis_dt = (datetime.now(timezone.utc) - timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        
+        analysis_end_dt = analysis_dt.replace(hour=23, minute=59, second=59)
+        
+        # Query hourly sales data for the analysis date
+        # Group sales by hour
+        sales_query = select(
+            func.strftime('%H', func.datetime(
+                'Sales.timestamp',
+                'utc',
+                '+00:00'
+            )).label('hour'),
+            func.sum(Sale.total_amount).label('hourly_sales'),
+            func.count(Sale.id).label('transaction_count')
+        ).select_from(Sale).where(
+            and_(
+                Sale.tenant_id == current_user.tenant_id,
+                Sale.timestamp >= analysis_dt,
+                Sale.timestamp <= analysis_end_dt
+            )
+        ).group_by(
+            func.strftime('%H', Sale.timestamp)
+        )
+        
+        # Query hourly labor costs
+        # Group shifts by start hour and calculate cost
+        labor_query = select(
+            func.strftime('%H', Shift.start_time).label('hour'),
+            func.sum(func.cast(
+                func.round(
+                    func.julianday(Shift.end_time) - func.julianday(Shift.start_time),
+                    4
+                ) * 24 * func.cast(Staff.hourly_rate, Decimal),
+                Decimal
+            )).label('hourly_labor_cost'),
+            func.count(func.distinct(Shift.staff_id)).label('staff_count')
+        ).select_from(Shift).join(
+            Staff, Shift.staff_id == Staff.id
+        ).where(
+            and_(
+                Staff.tenant_id == current_user.tenant_id,
+                Shift.start_time >= analysis_dt,
+                Shift.start_time <= analysis_end_dt
+            )
+        ).group_by(
+            func.strftime('%H', Shift.start_time)
+        )
+        
+        # Execute queries
+        # NOTE: SQLite syntax - may need adjustment for other databases
+        # Using a simpler approach with Python-side calculation
+        
+        # Get all shifts for the day
+        shifts_stmt = select(Shift).join(Staff).where(
+            and_(
+                Staff.tenant_id == current_user.tenant_id,
+                Shift.start_time >= analysis_dt,
+                Shift.start_time <= analysis_end_dt
+            )
+        )
+        shifts_result = await db.execute(shifts_stmt)
+        shifts = shifts_result.scalars().all()
+        
+        # Get all sales for the day
+        sales_stmt = select(Sale).where(
+            and_(
+                Sale.tenant_id == current_user.tenant_id,
+                Sale.timestamp >= analysis_dt,
+                Sale.timestamp <= analysis_end_dt
+            )
+        )
+        sales_result = await db.execute(sales_stmt)
+        sales = sales_result.scalars().all()
+        
+        if not shifts and not sales:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No shift or sales data found for this date. Please add shifts and sales first."
+            )
+        
+        # Build hourly breakdown
+        hourly_data = []
+        total_labor = Decimal("0.00")
+        total_sales = Decimal("0.00")
+        
+        for hour in range(24):
+            # Calculate sales for this hour
+            hour_sales = sum(
+                s.total_amount for s in sales
+                if s.timestamp.hour == hour
+            )
+            total_sales += hour_sales
+            
+            # Calculate labor cost for this hour
+            hour_labor = Decimal("0.00")
+            hour_staff = set()
+            
+            for shift in shifts:
+                # Check if shift overlaps with this hour
+                shift_start_hour = shift.start_time.hour
+                shift_end_hour = shift.end_time.hour
+                
+                # Handle shifts that span multiple hours
+                if shift_start_hour <= hour < shift_end_hour or \
+                   (shift_start_hour == hour and shift.start_time.minute > 0) or \
+                   (shift_end_hour == hour and shift.end_time.minute > 0):
+                    # Calculate fractional cost for this hour
+                    hour_labor += shift.total_cost / max(shift.duration_hours, 1)
+                    hour_staff.add(shift.staff_id)
+            
+            total_labor += hour_labor
+            
+            hourly_data.append({
+                "hour": hour,
+                "sales_amount": float(hour_sales),
+                "labor_cost": float(hour_labor),
+                "staff_count": len(hour_staff),
+                "labor_percent_of_sales": (
+                    (float(hour_labor) / float(hour_sales) * 100)
+                    if hour_sales > 0 else 0
+                )
+            })
+        
+        # Use AI to analyze labor efficiency
+        analysis_payload = {
+            "date": analysis_date or analysis_dt.strftime("%Y-%m-%d"),
+            "hours": hourly_data,
+            "daily_total_sales": float(total_sales),
+            "daily_total_labor": float(total_labor),
+            "staff_scheduled": len(set(s.staff_id for s in shifts))
+        }
+        
+        ai_analysis = await calculate_labor_efficiency(analysis_payload)
+        
+        if ai_analysis.get("status") == "error":
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=ai_analysis.get("message", "Failed to analyze labor efficiency")
+            )
+        
+        # Get revenue forecast for next day to optimize schedule
+        forecast_data = {}
+        try:
+            # Get recent 14-day trend for forecasting
+            forecast_start = analysis_dt - timedelta(days=14)
+            forecast_stmt = select(
+                func.date(Sale.timestamp).label('sale_date'),
+                func.sum(Sale.total_amount).label('daily_revenue')
+            ).where(
+                and_(
+                    Sale.tenant_id == current_user.tenant_id,
+                    Sale.timestamp >= forecast_start,
+                    Sale.timestamp <= analysis_dt
+                )
+            ).group_by(
+                func.date(Sale.timestamp)
+            )
+            
+            forecast_result = await db.execute(forecast_stmt)
+            forecast_rows = forecast_result.all()
+            
+            if forecast_rows:
+                trend_data = {
+                    f"day_{i}": float(row.daily_revenue or 0)
+                    for i, row in enumerate(forecast_rows[-7:])  # Last 7 days
+                }
+                forecast_result = await forecast_revenue(trend_data)
+                if forecast_result.get("status") == "success":
+                    forecast_data = forecast_result.get("forecast", {})
+        except:
+            # Forecast is optional, don't fail if it errors
+            pass
+        
+        # Generate recommended schedule
+        efficiency_analysis = ai_analysis.get("efficiency_analysis", {})
+        inefficient_hours = efficiency_analysis.get("inefficient_hours", [])
+        burnout_risks = efficiency_analysis.get("burnout_risks", [])
+        
+        recommended_adjustments = []
+        for hour_data in hourly_data:
+            hour = hour_data["hour"]
+            
+            # Check if this hour was flagged as inefficient
+            if any(ih.get("hour") == hour for ih in inefficient_hours):
+                recommended_adjustments.append({
+                    "hour": hour,
+                    "action": "REDUCE STAFF",
+                    "reason": "Labor cost exceeds optimal threshold (>30% of sales)",
+                    "suggested_reduction": 1,
+                    "estimated_savings": "$15-30/hour"
+                })
+            
+            # Check if this hour has burnout risk
+            elif any(br.get("hour") == hour for br in burnout_risks):
+                recommended_adjustments.append({
+                    "hour": hour,
+                    "action": "ADD STAFF",
+                    "reason": "High sales with low staffing creates burnout risk",
+                    "suggested_addition": 1,
+                    "estimated_revenue_protection": "$50-100/hour"
+                })
+        
+        return {
+            "status": "success",
+            "tenant_id": current_user.tenant_id,
+            "analysis_period": {
+                "date": analysis_dt.strftime("%Y-%m-%d"),
+                "day_of_week": analysis_dt.strftime("%A"),
+                "generated_at": datetime.now(timezone.utc).isoformat()
+            },
+            "metrics": {
+                "total_daily_sales": float(total_sales),
+                "total_daily_labor": float(total_labor),
+                "labor_as_percent_of_sales": (
+                    (float(total_labor) / float(total_sales) * 100)
+                    if total_sales > 0 else 0
+                ),
+                "staff_scheduled": len(set(s.staff_id for s in shifts)),
+                "shifts_total": len(shifts),
+                "transactions": len(sales)
+            },
+            "hourly_heatmap": hourly_data,
+            "efficiency": {
+                "score": efficiency_analysis.get("efficiency_score", 50),
+                "label": efficiency_analysis.get("efficiency_label", "Fair"),
+                "inefficient_hours": inefficient_hours,
+                "burnout_risk_hours": burnout_risks
+            },
+            "recommendations": {
+                "immediate_actions": efficiency_analysis.get("optimization_suggestions", []),
+                "scheduled_adjustments": recommended_adjustments,
+                "weekly_adjustments": efficiency_analysis.get("recommended_actions", [])
+            },
+            "forecast_insights": {
+                "next_day_forecast": forecast_data,
+                "recommendation": f"Adjust staffing based on forecasted {forecast_data.get('next_day_1_revenue', 'N/A')} revenue for tomorrow"
+                if forecast_data else "Enable revenue forecasting for schedule optimization"
+            },
+            "message": "AI Staffing Sentinel analysis complete. Review recommendations to optimize labor costs.",
+            "action_items": [
+                f"Reduce staff in {len(inefficient_hours)} overstaffed hours",
+                f"Increase staff in {len(burnout_risks)} high-demand hours",
+                "Implement recommended schedule changes",
+                "Monitor actual vs. forecasted labor efficiency"
+            ]
+        }
+    
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate staffing plan: {str(e)}"
+        )
+
 
