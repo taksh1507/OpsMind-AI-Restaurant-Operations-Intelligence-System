@@ -53,6 +53,16 @@ class Settings(BaseSettings):
         description="Google Gemini API key for AI consulting features"
     )
     
+    # Weather API Configuration (Day 13 - Environmental Awareness)
+    openweather_api_key: Optional[str] = Field(
+        default=None,
+        description="OpenWeatherMap API key for weather-aware intelligence"
+    )
+    weather_enabled: bool = Field(
+        default=True,
+        description="Enable weather-aware reasoning in AI agent"
+    )
+    
     class Config:
         """Pydantic config."""
         env_file = ".env"
