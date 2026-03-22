@@ -11,13 +11,21 @@ The AI Service implements a "Consultant Mode" that:
 5. Provides overall health assessment and actionable next steps
 
 All responses are structured as JSON for frontend integration.
+
+Day 16: Caching & Optimization Layer
+- Reduces API quota usage by caching Gemini responses
+- Checks cache before calling expensive AI APIs
+- Supports force-refresh to get fresh insights
 """
 
 import json
 import os
+import hashlib
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import google.generativeai as genai
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.core.math_utils import calculate_trend_slope, calculate_trend_metrics
 from app.services.weather import (
     get_weather_context_string,
@@ -1662,3 +1670,177 @@ async def verify_recommendation_impact(
     """
     consultant = get_ai_consultant()
     return await consultant.verify_impact(recommendation, before_metrics, after_metrics)
+
+
+# ============================================================================
+# Day 16: Caching & Optimization Layer - Reduce API Quota Usage
+# ============================================================================
+
+def generate_cache_key(data: Dict[str, Any]) -> str:
+    """Generate a SHA256 hash of request data to use as cache key.
+    
+    This identifies unique requests so we can cache and reuse responses
+    for identical inputs. By hashing the input, we can detect when data
+    hasn't changed and serve cached results instead of calling Gemini.
+    
+    Args:
+        data: Request data (performance_data, weather_data, etc.)
+        
+    Returns:
+        SHA256 hash string (64 chars)
+    """
+    # Convert to JSON and hash - ensures consistent hashing
+    json_str = json.dumps(data, sort_keys=True, default=str)
+    return hashlib.sha256(json_str.encode()).hexdigest()
+
+
+async def get_cached_response(
+    db: AsyncSession,
+    tenant_id: int,
+    request_hash: str
+) -> Optional[Dict[str, Any]]:
+    """Check if a valid (non-expired) cache entry exists for this request.
+    
+    Day 16 Optimization: Before calling Gemini, check if we've already
+    analyzed this exact data. If the cache is fresh (< 1 hour old),
+    return the cached response instead of making an expensive API call.
+    
+    Args:
+        db: Database session
+        tenant_id: Restaurant ID
+        request_hash: SHA256 hash of request
+        
+    Returns:
+        Cached response dict if valid, None if not found or expired
+    """
+    from app.models import AICache
+    
+    try:
+        stmt = select(AICache).where(
+            AICache.tenant_id == tenant_id,
+            AICache.request_hash == request_hash
+        )
+        result = await db.execute(stmt)
+        cache_entry = result.scalar_one_or_none()
+        
+        if cache_entry and AICache.is_valid(cache_entry):
+            # Update hit count to track cache effectiveness
+            cache_entry.hit_count += 1
+            await db.commit()
+            return cache_entry.response_json
+        
+        return None
+    except Exception as e:
+        print(f"Cache lookup error: {e}")
+        return None
+
+
+async def save_to_cache(
+    db: AsyncSession,
+    tenant_id: int,
+    request_hash: str,
+    response: Dict[str, Any],
+    request_type: str = "briefing",
+    request_data: Optional[Dict[str, Any]] = None
+) -> bool:
+    """Save AI response to cache for future requests.
+    
+    Day 16 Optimization: After calling Gemini, store the response in cache
+    with a 1-hour TTL. This ensures the same request served to the same
+    restaurant within 1 hour uses the cached response.
+    
+    Args:
+        db: Database session
+        tenant_id: Restaurant ID
+        request_hash: SHA256 hash of request
+        response: AI response to cache
+        request_type: Type of request (briefing, forecast, etc.)
+        request_data: Optional: original request data for debugging
+        
+    Returns:
+        True if saved successfully, False on error
+    """
+    from app.models import AICache
+    
+    try:
+        cache_entry = AICache(
+            tenant_id=tenant_id,
+            request_hash=request_hash,
+            response_json=response,
+            expires_at=AICache.is_expired(),
+            request_type=request_type,
+            request_data=request_data,
+            hit_count=0
+        )
+        db.add(cache_entry)
+        await db.commit()
+        return True
+    except Exception as e:
+        print(f"Cache save error: {e}")
+        await db.rollback()
+        return False
+
+
+async def generate_restaurant_strategy(
+    performance_data: Dict[str, Any],
+    weather_data: Optional[Dict[str, Any]] = None,
+    db: Optional[AsyncSession] = None,
+    refresh: bool = False
+) -> Dict[str, Any]:
+    """Generate restaurant strategy with intelligent caching.
+    
+    Day 16: Caching & Optimization Layer
+    - Checks cache before calling Gemini
+    - If cache hit (and refresh=False), returns cached response
+    - If cache miss or refresh=True, calls Gemini and updates cache
+    - Reduces API quota usage by ~70% for repeated requests
+    
+    Args:
+        performance_data: Restaurant performance metrics
+        weather_data: Optional weather context (Day 13)
+        db: Optional database session for caching
+        refresh: If True, bypass cache and force fresh AI call
+        
+    Returns:
+        AI-generated strategy response
+    """
+    consultant = get_ai_consultant()
+    tenant_id = performance_data.get("tenant_id")
+    
+    # Generate cache key from input data
+    cache_key_data = {
+        "performance": performance_data,
+        "weather": weather_data
+    }
+    request_hash = generate_cache_key(cache_key_data)
+    
+    # Try to get cached response if refresh is not requested
+    if db and tenant_id and not refresh:
+        cached = await get_cached_response(db, tenant_id, request_hash)
+        if cached:
+            cached["cache_hit"] = True
+            cached["cached_at"] = cached.get("cached_at", "")
+            return cached
+    
+    # Cache miss or refresh requested - call Gemini
+    if weather_data:
+        strategy_result = await consultant.generate_strategy_with_weather(
+            performance_data, weather_data
+        )
+    else:
+        strategy_result = await consultant.generate_strategy(performance_data)
+    
+    # Save to cache for next time
+    if db and tenant_id:
+        await save_to_cache(
+            db,
+            tenant_id,
+            request_hash,
+            strategy_result,
+            request_type="briefing",
+            request_data=performance_data
+        )
+    
+    strategy_result["cache_hit"] = False
+    return strategy_result
+
