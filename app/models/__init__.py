@@ -9,6 +9,7 @@ SQLAlchemy ORM models for multi-tenant architecture:
 - review.py: Review model
 - staff.py: Staff, Shift models
 - recommendation.py: AI-generated recommendations tracking
+- aicache.py: AI response caching to reduce API quota usage (Day 16)
 - schemas.py: Pydantic request/response schemas
 """
 
@@ -20,6 +21,7 @@ from .sales import Sale, SaleItem, PaymentMethod
 from .review import Review
 from .staff import Staff, Shift, StaffRole
 from .recommendation import Recommendation, RecommendationCategory, RecommendationStatus
+from .aicache import AICache
 from .schemas import (
     RegisterRequest,
     LoginRequest,
@@ -49,6 +51,7 @@ __all__ = [
     "Recommendation",
     "RecommendationCategory",
     "RecommendationStatus",
+    "AICache",
     "RegisterRequest",
     "LoginRequest",
     "TenantSchema",
