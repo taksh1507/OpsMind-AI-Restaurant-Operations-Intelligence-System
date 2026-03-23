@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* Deep Slate & Electric Blue Dark Mode Theme */
+:root {
+  --background: #030712;
+  --foreground: #f0f9ff;
+  --slate-900: #111827;
+  --slate-800: #1f2937;
+  --slate-700: #374151;
+  --electric-500: #0ea5e9;
+  --electric-600: #0284c7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-slate: var(--slate-900);
+  --color-electric: var(--electric-500);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: linear-gradient(135deg, #030712 0%, #0c1825 100%);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  transition: background-color 0.3s ease;
+}
