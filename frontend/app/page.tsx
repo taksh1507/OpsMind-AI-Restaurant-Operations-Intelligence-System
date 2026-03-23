@@ -2,9 +2,10 @@
 
 import { StatCard, DashboardSkeleton } from '@/components/ui'
 import { useDashboardStats } from '@/hooks/useDashboardStats'
+import { formatRupee, formatPercentage } from '@/lib/format-utils'
 import {
   TrendingUp,
-  DollarSign,
+  IndianRupee,
   Zap,
   Target,
   Users,
@@ -67,21 +68,21 @@ export default function Home() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Today's Revenue"
-          value={`$${stats.total_revenue.toLocaleString()}`}
+          value={formatRupee(stats.total_revenue_inr)}
           change={stats.revenue_change}
           description="vs last week"
-          icon={<DollarSign size={24} />}
+          icon={<IndianRupee size={24} />}
         />
         <StatCard
           title="Profit Margin"
-          value={`${stats.profit_margin.toFixed(1)}%`}
+          value={formatPercentage(stats.profit_margin)}
           change={stats.profit_change}
           description="vs average"
           icon={<TrendingUp size={24} />}
         />
         <StatCard
           title="AI Confidence"
-          value={`${Math.round(stats.ai_confidence_score)}%`}
+          value={formatPercentage(stats.ai_confidence_score)}
           change={stats.confidence_change}
           description="insight accuracy"
           icon={<Zap size={24} />}
