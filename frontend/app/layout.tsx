@@ -1,11 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Layout } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "OpsMind AI - Restaurant Operations Intelligence",
   description: "AI-powered restaurant operations platform with real-time analytics and autonomous recommendations",
-  viewport: "width=device-width, initial-scale=1",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

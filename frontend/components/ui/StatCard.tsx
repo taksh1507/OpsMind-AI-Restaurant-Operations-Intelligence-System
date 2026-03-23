@@ -106,10 +106,7 @@ export function StatCard({
       </div>
 
       {/* Top border accent glow */}
-      <div
-        className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-electric-500/50 to-transparent opacity-0
-        group-hover:opacity-100 transition-opacity duration-300"
-      />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-electric-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
     </div>
   )
 }
