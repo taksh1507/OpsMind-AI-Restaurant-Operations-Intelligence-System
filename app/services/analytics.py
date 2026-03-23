@@ -12,6 +12,10 @@ from sqlalchemy import select, func, and_, desc
 
 from app.models import Sale, SaleItem, MenuItem
 
+# Exchange rate: USD to INR (Current rate as of 2026)
+# Note: In production, this would be fetched from a Financial API
+USD_TO_INR = 94.03
+
 
 async def calculate_revenue_and_profit(
     session: AsyncSession,

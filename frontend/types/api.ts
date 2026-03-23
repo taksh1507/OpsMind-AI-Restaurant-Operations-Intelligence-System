@@ -1,11 +1,14 @@
 // Analytics Types
 export interface DashboardStats {
-  total_revenue: number
+  total_revenue_usd: number
+  total_revenue_inr: number
   profit_margin: number
   ai_confidence_score: number
   active_orders: number
   staff_efficiency: number
   system_alerts: number
+  total_profit_usd: number
+  total_profit_inr: number
   revenue_change: number
   profit_change: number
   confidence_change: number

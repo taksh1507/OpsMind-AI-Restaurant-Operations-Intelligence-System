@@ -17,7 +17,8 @@ from app.services.analytics import (
     calculate_revenue_and_profit,
     calculate_profit_margin,
     get_top_selling_items,
-    get_daily_sales_trend
+    get_daily_sales_trend,
+    USD_TO_INR
 )
 from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review, calculate_labor_efficiency, AIConsultant
 from app.services.margin_analysis import (
@@ -132,10 +133,13 @@ async def get_restaurant_summary(
                 "end_date": metrics["end_date"].isoformat()
             },
             "metrics": {
-                "total_revenue": float(metrics["revenue"]),
-                "total_profit": float(metrics["profit"]),
+                "total_revenue_usd": float(metrics["revenue"]),
+                "total_revenue_inr": float(metrics["revenue"]) * USD_TO_INR,
+                "total_profit_usd": float(metrics["profit"]),
+                "total_profit_inr": float(metrics["profit"]) * USD_TO_INR,
                 "profit_margin_percent": float(margin),
-                "cost_of_goods_sold": float(metrics["cost_of_goods"]),
+                "cost_of_goods_sold_usd": float(metrics["cost_of_goods"]),
+                "cost_of_goods_sold_inr": float(metrics["cost_of_goods"]) * USD_TO_INR,
                 "transaction_count": metrics["transaction_count"],
                 "total_items_sold": metrics["item_count"]
             },
@@ -144,7 +148,8 @@ async def get_restaurant_summary(
                     "menu_item_id": item["menu_item_id"],
                     "name": item["name"],
                     "quantity_sold": item["quantity_sold"],
-                    "revenue_generated": float(item["revenue"])
+                    "revenue_generated_usd": float(item["revenue"]),
+                    "revenue_generated_inr": float(item["revenue"]) * USD_TO_INR
                 }
                 for item in top_items
             ],
