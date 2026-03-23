@@ -5,7 +5,7 @@ Manages SQLAlchemy async engine and session creation.
 
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, StaticPool
 
 # Database URL will be configured via environment variables
 # Example: postgresql+asyncpg://user:password@localhost/opsmind_ai
@@ -22,12 +22,16 @@ async def init_db(database_url: str) -> None:
     """
     global engine, AsyncSessionLocal
     
+    # Use StaticPool for SQLite (better for async), NullPool for PostgreSQL
+    pool_class = StaticPool if "sqlite" in database_url else NullPool
+    
     engine = create_async_engine(
         database_url,
         echo=False,  # Set to True for SQL debugging
         future=True,
         pool_pre_ping=True,
-        poolclass=NullPool,  # Good for serverless/lightweight setups
+        poolclass=pool_class,
+        connect_args={"timeout": 30} if "sqlite" in database_url else {},
     )
     
     AsyncSessionLocal = async_sessionmaker(
