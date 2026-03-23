@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -11,7 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
-  X
+  X,
+  LogOut
 } from 'lucide-react'
 
 interface NavItem {
@@ -31,6 +33,7 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const router = useRouter()
 
   const toggleSidebar = () => {
     setIsExpanded(!isExpanded)
@@ -38,6 +41,14 @@ export function Sidebar() {
 
   const toggleMobile = () => {
     setIsMobileOpen(!isMobileOpen)
+  }
+
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('token_type')
+      router.push('/login')
+    }
   }
 
   return (
@@ -107,7 +118,7 @@ export function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-electric-glow/30">
+        <div className="p-4 border-t border-electric-glow/30 space-y-2">
           <div
             className={`
               flex items-center gap-3 px-3 py-2 rounded-lg
@@ -121,6 +132,25 @@ export function Sidebar() {
               </div>
             )}
           </div>
+
+          {/* Logout Button */}
+          <button
+            onClick={handleLogout}
+            className={`
+              w-full flex items-center gap-3 px-4 py-3 rounded-lg
+              border border-transparent transition-all duration-200
+              hover:border-red-500/30 hover:bg-red-900/20 hover:text-red-300
+              text-slate-300
+              group
+              ${!isExpanded && 'justify-center px-0'}
+            `}
+            title={!isExpanded ? 'Logout' : undefined}
+          >
+            <span className="flex-shrink-0 text-slate-400 group-hover:text-red-300">
+              <LogOut size={20} />
+            </span>
+            {isExpanded && <span className="text-sm font-medium">Logout</span>}
+          </button>
         </div>
       </aside>
 

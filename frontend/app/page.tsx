@@ -2,6 +2,7 @@
 
 import { StatCard, DashboardSkeleton } from '@/components/ui'
 import { useDashboardStats } from '@/hooks/useDashboardStats'
+import { useAuth } from '@/hooks/useAuth'
 import { formatRupee, formatPercentage } from '@/lib/format-utils'
 import {
   TrendingUp,
@@ -13,7 +14,13 @@ import {
 } from 'lucide-react'
 
 export default function Home() {
+  const { isAuthenticated } = useAuth()
   const { stats, isLoading, isError, error } = useDashboardStats()
+
+  // Show nothing while checking authentication
+  if (isAuthenticated === null) {
+    return <DashboardSkeleton />
+  }
 
   // Show skeleton while loading
   if (isLoading) {
