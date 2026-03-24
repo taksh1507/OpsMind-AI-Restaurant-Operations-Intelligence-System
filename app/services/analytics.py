@@ -381,3 +381,78 @@ async def get_daily_sales_trend(
     
     except Exception as e:
         raise ValueError(f"Failed to get daily sales trend: {str(e)}")
+
+
+async def get_daily_revenue_and_cost(
+    session: AsyncSession,
+    tenant_id: int,
+    days: int = 14
+) -> List[Dict[str, Any]]:
+    """Get daily revenue and cost trends for area chart visualization.
+    
+    Returns revenue and cost of goods sold broken down by day for the last N days.
+    This data is perfect for Recharts area chart showing profit trends.
+    
+    Args:
+        session: AsyncSession for database operations
+        tenant_id: The restaurant's tenant ID
+        days: Number of historical days to retrieve (default 14)
+        
+    Returns:
+        List of dictionaries with daily revenue and cost:
+        [
+            {"date": "2026-03-18", "revenue": 450.0, "cost": 180.0},
+            {"date": "2026-03-19", "revenue": 510.0, "cost": 204.0},
+            ...
+        ]
+        Ordered chronologically from earliest to latest date.
+    """
+    
+    # Calculate date range: last N days up to today
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days)
+    
+    # Ensure timezone-aware
+    if start_date.tzinfo is None:
+        start_date = start_date.replace(tzinfo=timezone.utc)
+    if end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+    
+    try:
+        result = await session.execute(
+            select(
+                func.date(Sale.timestamp).label("sale_date"),
+                func.sum(
+                    SaleItem.quantity * SaleItem.unit_price_at_sale
+                ).label("daily_revenue"),
+                func.sum(
+                    SaleItem.quantity * MenuItem.cost_price
+                ).label("daily_cost")
+            ).select_from(SaleItem).join(
+                Sale, SaleItem.sale_id == Sale.id
+            ).join(
+                MenuItem, SaleItem.menu_item_id == MenuItem.id
+            ).where(
+                and_(
+                    SaleItem.tenant_id == tenant_id,
+                    Sale.timestamp >= start_date,
+                    Sale.timestamp <= end_date
+                )
+            ).group_by(func.date(Sale.timestamp)).order_by(
+                func.date(Sale.timestamp).asc()
+            )
+        )
+        
+        # Build list with revenue and cost for each day
+        daily_data = []
+        for row in result:
+            daily_data.append({
+                "date": str(row.sale_date),
+                "revenue": float(row.daily_revenue or Decimal("0.00")),
+                "cost": float(row.daily_cost or Decimal("0.00"))
+            })
+        
+        return daily_data
+    
+    except Exception as e:
+        raise ValueError(f"Failed to get daily revenue and cost: {str(e)}")

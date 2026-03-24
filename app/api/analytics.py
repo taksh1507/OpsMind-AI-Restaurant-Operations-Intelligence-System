@@ -18,6 +18,7 @@ from app.services.analytics import (
     calculate_profit_margin,
     get_top_selling_items,
     get_daily_sales_trend,
+    get_daily_revenue_and_cost,
     USD_TO_INR
 )
 from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review, calculate_labor_efficiency, AIConsultant
@@ -252,6 +253,60 @@ async def get_revenue_metrics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve revenue metrics"
+        )
+
+
+@router.get("/daily-trends")
+async def get_daily_trends(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    days: int = 14
+):
+    """Get daily revenue and cost trends for the last N days.
+    
+    Returns revenue and cost of goods sold broken down by day.
+    Perfect for area charts showing profit trends over time.
+    
+    Args:
+        current_user: Authenticated user (injected)
+        db: Database session (injected)
+        days: Number of historical days to retrieve (default 14, max 90)
+        
+    Returns:
+        List of daily revenue and cost data
+    """
+    
+    try:
+        # Validate days parameter
+        days = min(max(days, 1), 90)  # Between 1 and 90
+        
+        # Get daily trends
+        trends = await get_daily_revenue_and_cost(
+            db,
+            current_user.tenant_id,
+            days=days
+        )
+        
+        return {
+            "status": "success",
+            "days_requested": days,
+            "data_points": len(trends),
+            "daily_trends": trends,
+            "period": {
+                "end_date": datetime.now(timezone.utc).date().isoformat(),
+                "start_date": (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+            }
+        }
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve daily trends"
         )
 
 

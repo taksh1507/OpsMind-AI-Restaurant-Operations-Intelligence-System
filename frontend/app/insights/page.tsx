@@ -1,6 +1,6 @@
 'use client'
 
-import { StatCard } from '@/components/ui'
+import { StatCard, RevenueChart, TopItemsChart, AISummaryBanner } from '@/components/ui'
 import { Sparkles, Brain, TrendingUp, AlertTriangle } from 'lucide-react'
 
 export default function InsightsPage() {
@@ -13,30 +13,51 @@ export default function InsightsPage() {
           AI Insights
         </h1>
         <p className="text-slate-400">
-          AI-powered recommendations powered by Gemini 1.5 Flash
+          Visual Intelligence Layer • Real-time analytics powered by Gemini 1.5 Flash
         </p>
       </div>
 
+      {/* AI Strategic Insight Banner */}
+      <div>
+        <AISummaryBanner />
+      </div>
+
+      {/* Visual Charts Section */}
+      <div className="space-y-6">
+        <h2 className="text-2xl font-semibold text-slate-50 flex items-center gap-2">
+          📊 Visual Intelligence Layer
+        </h2>
+
+        {/* Revenue vs Cost Area Chart */}
+        <RevenueChart />
+
+        {/* Top Selling Items Bar Chart */}
+        <TopItemsChart />
+      </div>
+
       {/* AI Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <StatCard
-          title="Confidence Score"
-          value="87%"
-          description="insight accuracy"
-          icon={<Brain size={24} />}
-        />
-        <StatCard
-          title="Active Recommendations"
-          value="12"
-          description="pending implementation"
-          icon={<Sparkles size={24} />}
-        />
-        <StatCard
-          title="ROI Projected"
-          value="$4,850"
-          description="from implemented suggestions"
-          icon={<TrendingUp size={24} />}
-        />
+      <div>
+        <h2 className="text-xl font-semibold text-slate-50 mb-4">Performance Metrics</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <StatCard
+            title="Confidence Score"
+            value="87%"
+            description="insight accuracy"
+            icon={<Brain size={24} />}
+          />
+          <StatCard
+            title="Active Recommendations"
+            value="12"
+            description="pending implementation"
+            icon={<Sparkles size={24} />}
+          />
+          <StatCard
+            title="ROI Projected"
+            value="$4,850"
+            description="from implemented suggestions"
+            icon={<TrendingUp size={24} />}
+          />
+        </div>
       </div>
 
       {/* Recommendations */}

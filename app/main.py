@@ -102,29 +102,35 @@ def create_app() -> FastAPI:
         allow_headers=["*"]
     )
     
-    # Include routers with tags for Swagger organization
+    # Include routers with /api/v1 prefix and tags for Swagger organization
     app.include_router(
         auth.router,
+        prefix="/api/v1",
         tags=["🔐 Authentication & Authorization"]
     )
     app.include_router(
         categories.router,
+        prefix="/api/v1",
         tags=["🏷️ Menu Management"]
     )
     app.include_router(
         menu_items.router,
+        prefix="/api/v1",
         tags=["🍽️ Menu Items & Recipes"]
     )
     app.include_router(
         sales.router,
+        prefix="/api/v1",
         tags=["💳 Sales & Transactions"]
     )
     app.include_router(
         analytics.router,
+        prefix="/api/v1",
         tags=["📊 Analytics & AI Insights"]
     )
     app.include_router(
         recommendations.router,
+        prefix="/api/v1",
         tags=["✅ Recommendation Tracking"]
     )
     
