@@ -115,6 +115,27 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 - [x] Live dashboard connected to backend analytics
 - [x] Real-time revenue, profit, and AI confidence scores
 
+### **Day 20 — The Visual Intelligence Layer** ✅
+- [x] Recharts library integration for advanced data visualization
+- [x] **RevenueChart**: Dual-series AreaChart (Revenue vs Cost trends)
+  - 14-day historical data with Electric Blue & Deep Coral colors
+  - Y-axis formatted with `formatRupee()` utility for Indian Rupee
+  - Custom tooltips with detailed breakdown
+  - Summary stats: Avg Daily Revenue, Cost, Profit
+- [x] **TopItemsChart**: Horizontal BarChart for top-selling items
+  - Items ranked by quantity sold (top 8)
+  - Color intensity indicates performance (80%+ = Bright Electric Blue)
+  - Revenue generated per item visualization
+  - Performance legend for easy interpretation
+- [x] **AISummaryBanner**: Natural language AI insights component
+  - Gemini 1.5 Flash powered strategic summary
+  - Pulse animation showing "AI is thinking"
+  - Cache hit indicator for API optimization
+  - Gradient design with decorative accents
+- [x] `/analytics/daily-trends` endpoint + `get_daily_revenue_and_cost()` backend function
+- [x] Conversational Analytics: Charts tell the story, not just data tables
+- [x] Placement-ready: Dense visualizations for recruiter impact
+
 ### **Upcoming — Full-Stack Refinement & Deployment**
 - [ ] Login/Authentication pages
 - [ ] Real-Time Sales Monitoring with charts
@@ -125,7 +146,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 
 ---
 
-## 🏗️ Core Features (18 Systems)
+## 🏗️ Core Features (21 Systems)
 
 | System | Status | Description |
 |--------|--------|-------------|
@@ -147,6 +168,9 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Dashboard UI (Day 17)** | ✅ | Enterprise-grade Next.js dashboard with glassmorphism |
 | **API Client (Day 18)** | ✅ | Authenticated Axios + JWT interceptor |
 | **Data Integration (Day 18)** | ✅ | SWR hooks for real-time backend data fetching |
+| **Revenue vs Cost AreaChart (Day 20)** | ✅ | 14-day dual-series visualization with Recharts |
+| **Top Items BarChart (Day 20)** | ✅ | Performance visualization with color intensity margins |
+| **AI Summary Banner (Day 20)** | ✅ | Natural language insights with Gemini 1.5 Flash |
 | **REST API** | ✅ | 40+ endpoints across all systems |
 
 ---
@@ -166,6 +190,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Frontend Styling** | Tailwind CSS 4 | Utility-first CSS with custom theme |
 | **Client-Side API** | Axios + SWR | Authenticated HTTP client + intelligent caching |
 | **Frontend Icons** | Lucide React | Modern, customizable icon library |
+| **Data Visualization** | Recharts | Composable React components for charts (AreaChart, BarChart) |
 | **State Management** | SWR (Vercel) | Client-side data fetching with automatic caching |
 | **Type Safety** | TypeScript | Full-stack type safety (backend + frontend) |
 | **Package Manager** | npm | Node.js dependency management |
@@ -607,5 +632,4 @@ MIT License — See [LICENSE](LICENSE) file
 ---
 
 **Last Updated:** March 21, 2026  
-**Status:** ✅ **COMPLETE & TESTED** — All 11 days implemented (Days 2-3: Foundation, Day 7: Strategy, Day 8: Revenue, Day 9: Costs, Day 10: Sentiment, Day 11: Labor)  
-**System Validation:** 100% passing test suite (37 commits, 30+ endpoints, 6 AI functions, 11 database tables)
+
