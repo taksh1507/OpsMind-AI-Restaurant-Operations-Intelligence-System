@@ -1035,6 +1035,216 @@ RESPOND WITH VALID JSON ONLY."""
             "cost_strategies": []
         }
     
+    async def check_margin_health(
+        self,
+        imported_items: list[Dict[str, Any]],
+        exchange_rate: float = 94.05
+    ) -> Dict[str, Any]:
+        """Check margin health for imported menu items with currency conversion.
+        
+        Day 22 Feature: Analyzes imported items and detects margin erosion caused by
+        exchange rate fluctuations. Uses Gemini to generate "Urgent Margin Alerts"
+        for items where profit margins have fallen below 20% due to currency shifts.
+        
+        Args:
+            imported_items: List of imported menu items with:
+                {
+                    "id": int,
+                    "name": str,
+                    "current_price_inr": float,
+                    "import_cost_usd": float,
+                    "is_imported": bool
+                }
+            exchange_rate: Current USD to INR rate (default: 94.05 as of March 25, 2026)
+            
+        Returns:
+            Dictionary with:
+            - status: "success" or "error"
+            - danger_items: Items below 20% margin threshold
+            - alert_summary: AI-generated margin alert
+            - recommendations: Price adjustment suggestions
+            - total_impact: Financial impact of currency shift
+        """
+        from app.core.finance import (
+            CurrencyManager,
+            MarginAnalyzer,
+            get_margin_alert_message
+        )
+        
+        if not imported_items:
+            return {
+                "status": "error",
+                "message": "No imported items provided for margin analysis"
+            }
+        
+        # Analyze each item
+        danger_items = []
+        total_revenue_at_risk = 0.0
+        total_adjustment_needed = 0.0
+        
+        for item in imported_items:
+            if not item.get("is_imported", False):
+                continue
+            
+            item_id = item.get("id")
+            item_name = item.get("name", "Unknown Item")
+            current_price = float(item.get("current_price_inr", 0))
+            import_cost_usd = float(item.get("import_cost_usd", 0))
+            
+            # Calculate landed cost
+            landed_cost_inr = float(
+                CurrencyManager.calculate_landed_cost_inr(
+                    Decimal(str(import_cost_usd)),
+                    rate=Decimal(str(exchange_rate))
+                )
+            )
+            
+            # Calculate current margin
+            margin_percentage = float(
+                MarginAnalyzer.calculate_margin_percentage(
+                    Decimal(str(current_price)),
+                    Decimal(str(landed_cost_inr))
+                )
+            )
+            
+            # Check if below danger threshold (20%)
+            if margin_percentage < 20:
+                # Calculate required price to restore 30% margin
+                required_price = float(
+                    MarginAnalyzer.calculate_required_price(
+                        Decimal(str(landed_cost_inr)),
+                        Decimal("30")  # Target 30% margin
+                    )
+                )
+                
+                price_adjustment = required_price - current_price
+                adjustment_percentage = (price_adjustment / current_price * 100) if current_price > 0 else 0
+                
+                danger_items.append({
+                    "id": item_id,
+                    "name": item_name,
+                    "current_price": current_price,
+                    "import_cost_usd": import_cost_usd,
+                    "landed_cost_inr": landed_cost_inr,
+                    "current_margin_percentage": round(margin_percentage, 1),
+                    "margin_status": MarginAnalyzer.get_margin_status(Decimal(str(margin_percentage))),
+                    "required_price": required_price,
+                    "price_adjustment_inr": round(price_adjustment, 2),
+                    "price_adjustment_percentage": round(adjustment_percentage, 1),
+                    "exchange_rate": exchange_rate
+                })
+                
+                total_revenue_at_risk += current_price
+                total_adjustment_needed += price_adjustment
+        
+        # Generate AI-powered margin alert using Gemini
+        system_prompt = self._get_margin_alert_consultant_prompt(exchange_rate)
+        user_message = self._build_margin_alert_message(danger_items, exchange_rate)
+        
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [system_prompt]},
+                    {"role": "user", "parts": [user_message]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    max_output_tokens=1500
+                )
+            )
+            
+            ai_alert = response.text
+            
+            return {
+                "status": "success",
+                "danger_items": danger_items,
+                "items_at_risk_count": len(danger_items),
+                "alert_summary": ai_alert,
+                "total_revenue_at_risk": round(total_revenue_at_risk, 2),
+                "total_price_adjustment_needed": round(total_adjustment_needed, 2),
+                "exchange_rate": exchange_rate,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to analyze margin health: {str(e)}",
+                "danger_items": danger_items  # Still return data even if AI fails
+            }
+    
+    def _get_margin_alert_consultant_prompt(self, exchange_rate: float) -> str:
+        """System prompt for margin alert generation based on currency fluctuations."""
+        return f"""You are a restaurant financial consultant with expertise in currency-linked pricing and margin protection.
+
+TODAY'S ECONOMIC CONTEXT:
+- USD to INR Exchange Rate: ₹{exchange_rate:.2f} per dollar
+- This represents a critical shift in import costs for restaurants sourcing international ingredients
+
+YOUR EXPERTISE:
+1. CURRENCY IMPACT ANALYSIS: Understand how exchange rates affect imported item costs
+2. MARGIN EROSION DETECTION: Identify which dishes become unprofitable
+3. URGENT PRICING STRATEGY: Generate "Profit Shield" recommendations
+
+MARGIN DANGER ZONES:
+- HEALTHY MARGIN: 30%+ profit
+- WARNING: 20-30% profit (needs monitoring)
+- DANGER: 10-20% profit (price increase needed)
+- CRITICAL: <10% profit (immediate action required)
+
+YOUR TASK:
+Analyze the list of imported menu items where profit margins have fallen below 20%.
+Generate an URGENT MARGIN ALERT message that:
+
+1. QUANTIFIES THE PROBLEM: "The USD/INR rate of ₹{exchange_rate:.2f} has increased your [item] cost by X%"
+2. IDENTIFIES FINANCIAL RISK: "Without price adjustment, you will lose ₹Y per plate"
+3. RECOMMENDS IMMEDIATE ACTION: "Increase price by ₹Z to restore profitability"
+4. PROJECTS ANNUAL IMPACT: "Over 12 months, this change protects ₹A in profit"
+
+TONE: Be urgent but professional. This is a financial crisis that needs immediate action.
+
+OUTPUT FORMAT - MUST BE VALID JSON:
+{{
+    "margin_alert_title": "URGENT: Margin Erosion Alert - [Number] Items at Risk",
+    "executive_summary": "One paragraph explaining the currency impact and financial risk",
+    "individual_alerts": [
+        {{
+            "item_name": "String",
+            "risk_message": "The USD/INR hit ₹{exchange_rate:.2f}. Your [item] cost increased by X%. Suggest ₹Y price increase.",
+            "financial_impact": "Without price adjustment, you lose ₹Z per plate × daily sales = ₹annual_loss per year",
+            "recommended_action": "Increase price from ₹A to ₹B tomorrow"
+        }}
+    ],
+    "implementation_plan": "Step-by-step how to update menu prices today",
+    "protection_strategy": "How this price adjustment protects future margins from currency fluctuations"
+}}
+
+CRITICAL: Always output valid JSON only."""
+    
+    def _build_margin_alert_message(self, danger_items: list[Dict[str, Any]], exchange_rate: float) -> str:
+        """Build user message for margin alert analysis."""
+        total_items = len(danger_items)
+        
+        return f"""ANALYZE THIS CURRENCY-DRIVEN MARGIN CRISIS:
+
+Exchange Rate: ₹{exchange_rate:.2f} per USD
+Number of Imported Items at Risk: {total_items}
+
+ITEMS BELOW 20% PROFIT MARGIN:
+{json.dumps(danger_items, indent=2, default=str)}
+
+For each item:
+1. Explain why the margin fell (currency impact)
+2. Quantify the daily/weekly/annual profit loss
+3. Recommend exact price increase needed
+4. Provide implementation steps
+
+Generate a margin alert that creates urgency while being professionally accurate.
+The owner needs to act TODAY to protect profitability.
+
+RESPOND WITH VALID JSON ONLY."""
+    
     async def process_review(self, customer_comment: str) -> Dict[str, Any]:
         """Analyze a customer review for sentiment and actionable insights.
         
@@ -1644,6 +1854,26 @@ async def analyze_profit_margins(
     """Convenience function to analyze profit margins using the global consultant."""
     consultant = get_ai_consultant()
     return await consultant.check_profit_margins(menu_items_with_costs)
+
+
+async def check_margin_health(
+    imported_items: list[Dict[str, Any]],
+    exchange_rate: float = 94.05
+) -> Dict[str, Any]:
+    """Convenience function to check margin health for imported items.
+    
+    Day 22 Feature: Analyzes imported menu items for margin erosion due to
+    currency fluctuations and generates AI-powered margin alerts.
+    
+    Args:
+        imported_items: List of imported menu items with pricing and import costs
+        exchange_rate: Current USD to INR exchange rate
+        
+    Returns:
+        Dictionary with margin analysis and AI-generated alerts
+    """
+    consultant = get_ai_consultant()
+    return await consultant.check_margin_health(imported_items, exchange_rate)
 
 
 async def process_review(customer_comment: str) -> Dict[str, Any]:
