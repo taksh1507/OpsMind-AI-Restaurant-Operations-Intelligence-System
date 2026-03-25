@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import settings
 from app.database import init_db, close_db
-from app.api import auth, categories, menu_items, sales, analytics, recommendations
+from app.api import auth, categories, menu_items, sales, analytics, recommendations, search
 
 
 @asynccontextmanager
@@ -132,6 +132,11 @@ def create_app() -> FastAPI:
         recommendations.router,
         prefix="/api/v1",
         tags=["✅ Recommendation Tracking"]
+    )
+    app.include_router(
+        search.router,
+        prefix="/api/v1",
+        tags=["🔍 Global Search"]
     )
     
     # Health check endpoint
