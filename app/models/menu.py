@@ -105,6 +105,15 @@ class MenuItem(BaseModel):
         nullable=False
     )
     
+    # Import tracking for currency-linked pricing
+    is_imported: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    
+    # Cost in USD for imported items (used to calculate INR cost with live rates)
+    import_cost_usd: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=10, scale=2),
+        nullable=True
+    )
+    
     is_available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
     # Relationships
