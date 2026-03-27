@@ -35,6 +35,66 @@ from app.core.config import settings
 
 
 class AIConsultant:
+
+        async def generate_prep_list(
+            self,
+            sales_data: list,
+            waste_data: list,
+            weather_context: str,
+            day_of_week: str = None
+        ) -> dict:
+            """
+            Generate a predictive prep list to minimize food waste.
+            Uses Gemini to analyze last 7 days of sales, last 7 days of waste, and today's weather.
+            Args:
+                sales_data: List of dicts with sales info for last 7 days
+                waste_data: List of dicts with waste info for last 7 days
+                weather_context: String describing today's weather
+                day_of_week: Optional, e.g. 'Friday'
+            Returns:
+                Dict with recommended prep quantities and AI reasoning
+            """
+            prompt = f"""
+    You are an expert restaurant operations AI. Your job is to help the chef minimize food waste by predicting how much to prep today.
+
+    Today is {day_of_week or 'UNKNOWN'}. Here is the weather context: {weather_context}
+
+    Last 7 days sales data:
+    {json.dumps(sales_data, indent=2)}
+
+    Last 7 days waste data:
+    {json.dumps(waste_data, indent=2)}
+
+    Instructions:
+    - Identify patterns (e.g., if it rained last Friday and 5kg of Dough was wasted, and today is Friday and it's raining, suggest prepping less).
+    - Recommend prep quantities for each key ingredient or menu item.
+    - For each recommendation, include a short impact statement (e.g., 'Suggest prepping only 10kg instead of 15kg to save ₹1,200').
+    - Output as JSON: {"prep_list": [{"item": ..., "recommended_qty": ..., "impact_statement": ...}], "ai_reasoning": ...}
+    """
+
+            try:
+                response = self.model.generate_content(
+                    [
+                        {"role": "user", "parts": [prompt]}
+                    ],
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.6,
+                        top_p=0.95,
+                        max_output_tokens=1200
+                    )
+                )
+                ai_response = response.text
+                # Try to parse JSON from AI response
+                import re
+                import json as _json
+                match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+                if match:
+                    parsed = _json.loads(match.group(0))
+                else:
+                    parsed = {"prep_list": [], "ai_reasoning": ai_response}
+                return {"status": "success", **parsed, "raw_response": ai_response}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
     """Agentic AI that analyzes restaurant data and provides strategic advice."""
     
     def __init__(self):
