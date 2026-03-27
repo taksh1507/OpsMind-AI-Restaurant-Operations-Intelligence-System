@@ -1,3 +1,83 @@
+from app.models.menu import WasteLog
+# Sustainability Score Endpoint
+@router.get("/sustainability")
+async def get_sustainability_metrics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    month: Optional[int] = None,
+    year: Optional[int] = None
+):
+    """
+    Returns sustainability metrics for the dashboard:
+    - Total money saved this month by reducing waste
+    - Percentage reduction in waste (vs previous month)
+    - Eco-Badge status (Bronze, Silver, Gold)
+    - CO2 Impact estimate based on food saved
+    """
+    from sqlalchemy import extract
+    import math
+    now = datetime.now(timezone.utc)
+    month = month or now.month
+    year = year or now.year
+
+    # Get all waste logs for this tenant for the current and previous month
+    waste_stmt = select(WasteLog).where(
+        WasteLog.ingredient.has(tenant_id=current_user.tenant_id),
+        extract('month', WasteLog.timestamp) == month,
+        extract('year', WasteLog.timestamp) == year
+    )
+    waste_result = await db.execute(waste_stmt)
+    waste_logs = waste_result.scalars().all()
+
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    prev_waste_stmt = select(WasteLog).where(
+        WasteLog.ingredient.has(tenant_id=current_user.tenant_id),
+        extract('month', WasteLog.timestamp) == prev_month,
+        extract('year', WasteLog.timestamp) == prev_year
+    )
+    prev_waste_result = await db.execute(prev_waste_stmt)
+    prev_waste_logs = prev_waste_result.scalars().all()
+
+    # Calculate totals
+    total_cost_lost = sum(float(w.cost_lost_inr) for w in waste_logs)
+    total_qty_wasted = sum(float(w.quantity_wasted) for w in waste_logs)
+    prev_total_cost_lost = sum(float(w.cost_lost_inr) for w in prev_waste_logs)
+    prev_total_qty_wasted = sum(float(w.quantity_wasted) for w in prev_waste_logs)
+
+    # Money saved = reduction in waste cost
+    money_saved = max(0, prev_total_cost_lost - total_cost_lost)
+    waste_reduction_pct = (
+        ((prev_total_qty_wasted - total_qty_wasted) / prev_total_qty_wasted) * 100
+        if prev_total_qty_wasted > 0 else 0
+    )
+
+    # Eco-Badge logic
+    if waste_reduction_pct >= 30:
+        eco_badge = "Gold"
+    elif waste_reduction_pct >= 15:
+        eco_badge = "Silver"
+    elif waste_reduction_pct > 0:
+        eco_badge = "Bronze"
+    else:
+        eco_badge = "None"
+
+    # CO2 Impact estimate: Assume 1kg food waste = 2.5kg CO2 eq (FAO estimate)
+    co2_impact_kg = round((prev_total_qty_wasted - total_qty_wasted) * 2.5, 2) if prev_total_qty_wasted > 0 else 0
+
+    return {
+        "status": "success",
+        "month": month,
+        "year": year,
+        "money_saved_inr": round(money_saved, 2),
+        "waste_reduction_pct": round(waste_reduction_pct, 2),
+        "eco_badge": eco_badge,
+        "co2_impact_kg": co2_impact_kg,
+        "details": {
+            "current_month_waste_logs": len(waste_logs),
+            "previous_month_waste_logs": len(prev_waste_logs)
+        }
+    }
 """Analytics API Router
 
 Exposes restaurant performance insights via secure endpoints.
