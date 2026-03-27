@@ -6,6 +6,39 @@ Recipes define the ingredients and quantities needed for each dish.
 """
 
 from typing import Optional
+from datetime import datetime
+from sqlalchemy import Enum, DateTime
+import enum
+class WasteReason(enum.Enum):
+    EXPIRED = "Expired"
+    OVERCOOKED = "Overcooked"
+    SPOILED = "Spoiled"
+
+
+class WasteLog(BaseModel):
+    """
+    Tracks food waste events for sustainability analytics.
+    Fields:
+        id: Unique identifier
+        ingredient_id: Foreign key to wasted ingredient
+        quantity_wasted: Amount wasted (float, in ingredient units)
+        reason: Why it was wasted (Expired, Overcooked, Spoiled)
+        cost_lost_inr: INR value lost due to waste
+        timestamp: When the waste occurred
+    """
+    __tablename__ = "waste_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False, index=True)
+    quantity_wasted: Mapped[float] = mapped_column(nullable=False)
+    reason: Mapped[WasteReason] = mapped_column(Enum(WasteReason), nullable=False)
+    cost_lost_inr: Mapped[Decimal] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    ingredient = relationship("Ingredient")
+
+    def __repr__(self) -> str:
+        return f"<WasteLog(id={self.id}, ingredient_id={self.ingredient_id}, qty={self.quantity_wasted}, reason={self.reason}, cost={self.cost_lost_inr})>"
 from decimal import Decimal
 from sqlalchemy import String, ForeignKey, Boolean, Numeric, Text, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
