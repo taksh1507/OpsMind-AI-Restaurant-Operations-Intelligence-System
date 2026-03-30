@@ -138,6 +138,12 @@ def create_app() -> FastAPI:
         prefix="/api/v1",
         tags=["🔍 Global Search"]
     )
+    from app.api import customers_router
+    app.include_router(
+        customers_router,
+        prefix="/api/v1",
+        tags=["👤 Customer Intelligence"]
+    )
     
     # Health check endpoint
     @app.get(

@@ -1,3 +1,54 @@
+    async def get_customer_persona(self, customer: dict, order_history: list) -> dict:
+        """
+        Analyze a customer's order history and preferences to generate a persona and upsell suggestion.
+        Uses Gemini to reason about customer behavior and suggest a 'Surprise & Delight' action.
+        Args:
+            customer: Dict with customer fields (id, name, preferences, visit_count, total_spent_inr, etc)
+            order_history: List of dicts with past orders (item, count, date, etc)
+        Returns:
+            Dict with persona, reasoning, and suggested action for the server.
+        """
+        prompt = f"""
+You are a world-class restaurant customer intelligence AI. Your job is to help the staff deliver hyper-personalized service.
+
+CUSTOMER PROFILE:
+Name: {customer.get('name')}
+Email: {customer.get('email')}
+Total Spent (₹): {customer.get('total_spent_inr')}
+Visit Count: {customer.get('visit_count')}
+Preferences: {customer.get('preferences')}
+
+ORDER HISTORY:
+{json.dumps(order_history, indent=2)}
+
+Instructions:
+- Analyze the customer's visit frequency, favorite items, and preferences.
+- Assign a "Persona" (e.g., 'High-Value Regular', 'Adventurous Newcomer', 'Health-Conscious Loyalist').
+- Suggest a specific 'Surprise & Delight' action for the server (e.g., offer a sample, ask about a favorite, recommend a new dish).
+- Output as JSON: {"persona": ..., "reasoning": ..., "suggested_action": ...}
+"""
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [prompt]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    max_output_tokens=600
+                )
+            )
+            ai_response = response.text
+            import re
+            import json as _json
+            match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+            if match:
+                parsed = _json.loads(match.group(0))
+            else:
+                parsed = {"persona": None, "reasoning": ai_response, "suggested_action": None}
+            return {"status": "success", **parsed, "raw_response": ai_response}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 """AI Agent Service - Autonomous Restaurant Consultant
 
 Uses Google Gemini 1.5 Flash to analyze restaurant performance data
