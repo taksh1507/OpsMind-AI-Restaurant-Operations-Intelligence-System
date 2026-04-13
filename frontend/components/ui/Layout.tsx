@@ -3,12 +3,29 @@
 import React from 'react'
 import { Sidebar } from './Sidebar'
 import { CommandMenu } from './CommandMenu'
+import { ToastContainer } from './ToastContainer'
+import { useWebSocket } from '@/hooks/useWebSocket'
 
 interface LayoutProps {
   children: React.ReactNode
 }
 
 export function Layout({ children }: LayoutProps) {
+  // Initialize WebSocket connection for real-time events
+  useWebSocket({
+    onNewSale: (data) => {
+      console.log('New sale received:', data);
+      // Sales data is already handled in hook with toast/sound
+    },
+    onNewOrder: (data) => {
+      console.log('New order received:', data);
+    },
+    onTableReady: (data) => {
+      console.log('Table ready:', data);
+    },
+    autoReconnect: true,
+    reconnectDelay: 3000,
+  });
   return (
     <div className="flex h-screen bg-slate-950 dark">
       {/* Command Menu Overlay */}
@@ -16,6 +33,9 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Sidebar */}
       <Sidebar />
+
+      {/* Real-time Toast Notifications */}
+      <ToastContainer />
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
