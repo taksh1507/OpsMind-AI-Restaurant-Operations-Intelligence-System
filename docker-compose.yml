@@ -17,6 +17,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-restaurant_ops_2026}
       # PostgreSQL configuration for performance
       POSTGRES_INITDB_ARGS: "-c max_connections=100 -c shared_buffers=256MB"
+      # Data directory for persistence
+      PGDATA: /var/lib/postgresql/data/pgdata
     
     ports:
       # Expose PostgreSQL port for development/debugging
@@ -41,10 +43,6 @@ services:
       start_period: 10s
     
     restart: unless-stopped
-    
-    environment:
-      # Expose database for API service
-      PGDATA: /var/lib/postgresql/data/pgdata
 
 
   # FastAPI Backend Service
