@@ -16,6 +16,27 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 
 ---
 
+## 📖 Documentation
+
+**Complete project documentation is available in the `/docs` folder:**
+
+| Document | Purpose | Key Content |
+|----------|---------|------------|
+| [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) | System Design | System diagram, database schema, multi-tenant isolation, API structure, security architecture, performance |
+| [**SETUP.md**](docs/SETUP.md) | Deployment Guide | Local development setup, database configuration, environment variables, production deployment, troubleshooting |
+| [**API_REFERENCE.md**](docs/API_REFERENCE.md) | API Documentation | Complete endpoint reference, request/response examples, error handling, authentication flow, RBAC |
+| [**SECURITY.md**](docs/SECURITY.md) | Security Policy | JWT implementation, RBAC (Day 25), data protection, multi-tenant isolation, threat model, compliance (GDPR/DPDP) |
+| [**DAY24_CUSTOMER_INTELLIGENCE.md**](docs/DAY24_CUSTOMER_INTELLIGENCE.md) | Day 24 Feature | Customer persona engine, AI briefing endpoint, JSONB preferences, testing & compliance |
+
+### Quick Links
+- 🚀 **Getting Started**: [SETUP.md → Local Development Setup](docs/SETUP.md#local-development-setup)
+- 🔐 **Security & RBAC**: [SECURITY.md → Role-Based Access Control](docs/SECURITY.md#authorization--rbac)
+- 📡 **API Endpoints**: [API_REFERENCE.md → Endpoints](docs/API_REFERENCE.md#endpoints)
+- 🏗️ **System Design**: [ARCHITECTURE.md → System Architecture](docs/ARCHITECTURE.md)
+- 🤖 **Customer Intelligence**: [DAY24_CUSTOMER_INTELLIGENCE.md](docs/DAY24_CUSTOMER_INTELLIGENCE.md)
+
+---
+
 ## 🗺️ Completed Implementation (2026)
 
 ### **Day 2-3 — Foundation & Multi-Tenancy** ✅
@@ -136,6 +157,30 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 - [x] Conversational Analytics: Charts tell the story, not just data tables
 - [x] Placement-ready: Dense visualizations for recruiter impact
 
+### **Day 24 — Hyper-Personalized Customer Intelligence** ✅
+- [x] Customer persona engine (`get_customer_persona()` method in AIConsultant)
+- [x] JSONB preferences storage (favorite items, spice level, allergies, dietary restrictions)
+- [x] Order history analysis and pattern recognition
+- [x] Table-side briefing endpoint: `GET /customers/{id}/briefing`
+- [x] 3-bullet cheat sheet for waiters (LTV, favorite item, AI action)
+- [x] LTV (Lifetime Value) calculation per customer
+- [x] AI-powered persona classification (High-Value Regular, Occasional Visitor, etc.)
+- [x] Suggested action for personalized service
+- [x] Comprehensive testing (test_day24_customer_intelligence.py)
+- [x] GDPR/DPDP compliance verification
+
+### **Day 25 — Role-Based Access Control (RBAC)** ✅
+- [x] User model extended with `role` field (UserRole enum)
+- [x] Three-tier role hierarchy: OWNER, MANAGER, STAFF
+- [x] Role-based helper methods: `has_role()`, `is_owner()`, `is_manager()`, `can_view_financials()`
+- [x] Permission guard: `role_required()` factory dependency in deps.py
+- [x] Convenience dependencies: `get_current_owner()`, `get_current_manager()`
+- [x] Frontend JWT role extraction on component mount
+- [x] Role-based navigation filtering in Sidebar (conditional rendering)
+- [x] Role badge display for user awareness
+- [x] 403 Forbidden error responses with clear permission messages
+- [x] Principle of Least Privilege (PoLP) implementation across frontend & backend
+
 ### **Upcoming — Full-Stack Refinement & Deployment**
 - [ ] Login/Authentication pages
 - [ ] Real-Time Sales Monitoring with charts
@@ -144,9 +189,10 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 - [ ] Docker containerization
 - [ ] Cloud deployment (Vercel + Railway)
 
+
 ---
 
-## 🏗️ Core Features (21 Systems)
+## 🏗️ Core Features (25 Systems)
 
 | System | Status | Description |
 |--------|--------|-------------|
@@ -171,6 +217,10 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Revenue vs Cost AreaChart (Day 20)** | ✅ | 14-day dual-series visualization with Recharts |
 | **Top Items BarChart (Day 20)** | ✅ | Performance visualization with color intensity margins |
 | **AI Summary Banner (Day 20)** | ✅ | Natural language insights with Gemini 1.5 Flash |
+| **Customer Persona Engine (Day 24)** | ✅ | Hyper-personalized customer profiling with JSONB preferences |
+| **Table-Side Briefing (Day 24)** | ✅ | 3-bullet AI cheat sheet for waiters (LTV + suggested action) |
+| **RBAC (Day 25)** | ✅ | Three-tier role hierarchy (OWNER, MANAGER, STAFF) with permission guards |
+| **Role-Based UI (Day 25)** | ✅ | JWT-driven conditional rendering for security clearance |
 | **REST API** | ✅ | 40+ endpoints across all systems |
 
 ---
