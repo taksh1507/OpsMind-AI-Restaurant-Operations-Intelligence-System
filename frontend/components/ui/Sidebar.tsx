@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -13,27 +13,82 @@ import {
   ChevronRight,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Lock
 } from 'lucide-react'
+
+// Day 25: Role-Based Access Control
+enum UserRole {
+  OWNER = 'owner',
+  MANAGER = 'manager',
+  STAFF = 'staff'
+}
 
 interface NavItem {
   label: string
   href: string
   icon: React.ReactNode
+  requiredRoles?: UserRole[]  // If not specified, visible to all
 }
 
+// Navigation items with role requirements
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: <LayoutDashboard size={20} /> },
   { label: 'Menu', href: '/menu', icon: <UtensilsCrossed size={20} /> },
-  { label: 'Sales', href: '/sales', icon: <TrendingUp size={20} /> },
-  { label: 'AI Insights', href: '/insights', icon: <Sparkles size={20} /> },
-  { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
+  { label: 'Sales', href: '/sales', icon: <TrendingUp size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },
+  { label: 'AI Insights', href: '/insights', icon: <Sparkles size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },  // Financial data - hide from STAFF
+  { label: 'Settings', href: '/settings', icon: <Settings size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },  // Admin functions
 ]
 
 export function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [userRole, setUserRole] = useState<UserRole | null>(null)
+  const [loading, setLoading] = useState(true)
   const router = useRouter()
+
+  // Day 25: Extract user role from JWT token on mount
+  useEffect(() => {
+    const extractUserRole = () => {
+      try {
+        const token = localStorage.getItem('access_token')
+        if (!token) {
+          setUserRole(UserRole.STAFF)  // Default to STAFF if no token
+          setLoading(false)
+          return
+        }
+
+        // Decode JWT (format: header.payload.signature)
+        const parts = token.split('.')
+        if (parts.length !== 3) {
+          setUserRole(UserRole.STAFF)
+          setLoading(false)
+          return
+        }
+
+        // Decode the payload (middle part)
+        const payload = JSON.parse(atob(parts[1]))
+        const role = payload.role as UserRole || UserRole.STAFF
+
+        setUserRole(role)
+      } catch (error) {
+        console.error('Error extracting user role:', error)
+        setUserRole(UserRole.STAFF)  // Safe default
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    extractUserRole()
+  }, [])
+
+  // Day 25: Filter nav items based on user role
+  const visibleNavItems = navItems.filter((item) => {
+    // If no role requirement, show to everyone
+    if (!item.requiredRoles) return true
+    // Show if user has one of the required roles
+    return userRole && item.requiredRoles.includes(userRole)
+  })
 
   const toggleSidebar = () => {
     setIsExpanded(!isExpanded)
@@ -49,6 +104,15 @@ export function Sidebar() {
       localStorage.removeItem('token_type')
       router.push('/login')
     }
+  }
+
+  if (loading) {
+    // Show loading state while role is being loaded
+    return (
+      <aside className="fixed left-0 top-0 h-screen w-20 md:w-64 bg-slate-900/80 backdrop-blur-md border-r border-electric-glow hidden md:flex md:flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-electric-400"></div>
+      </aside>
+    )
   }
 
   return (
@@ -93,9 +157,19 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Navigation */}
+        {/* Day 25: Role Badge */}
+        {isExpanded && userRole && (
+          <div className="px-4 py-2 mx-2 rounded-lg bg-slate-800/50 border border-electric-glow/30">
+            <div className="flex items-center gap-2">
+              <Lock size={14} className="text-electric-400" />
+              <span className="text-xs font-semibold text-electric-300 capitalize">{userRole}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation - Day 25: Only show items user has role for */}
         <nav className="flex-1 p-4 space-y-2">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -115,6 +189,13 @@ export function Sidebar() {
               {isExpanded && <span className="text-sm font-medium">{item.label}</span>}
             </Link>
           ))}
+
+          {/* Day 25: Show message if user has no visible items (shouldn't happen, but good UX) */}
+          {visibleNavItems.length === 0 && (
+            <div className="px-4 py-3 text-xs text-slate-500 text-center">
+              No accessible items
+            </div>
+          )}
         </nav>
 
         {/* Footer */}
