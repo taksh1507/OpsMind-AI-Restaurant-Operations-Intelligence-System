@@ -1,18 +1,23 @@
 """FastAPI Dependencies for Authentication and Authorization
 
 Provides reusable dependency functions for protecting routes and extracting
-user/tenant context from JWT tokens.
+user/tenant context from JWT tokens, plus role-based access control.
+
+Day 25: Role-Based Access Control (RBAC)
+- get_current_user: Basic authentication
+- role_required: Fine-grained access control based on user role
 """
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from starlette.requests import Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from sqlalchemy import select
+from typing import Optional, Callable
 
 from app.core.security import decode_access_token
 from app.database import get_db
-from app.models import User
+from app.models import User, UserRole
 
 
 # HTTP Bearer security scheme for extracting Authorization header
@@ -98,4 +103,57 @@ async def get_current_user(
     
     # Return user with tenant_id for endpoint use
     # This ensures all operations are scoped to the user's tenant
+    return user
+
+
+def role_required(*allowed_roles: UserRole) -> Callable:
+    """
+    FastAPI dependency to enforce role-based access control (RBAC).
+    
+    This is a factory that returns a dependency function, enabling clean,
+    reusable role checking on protected endpoints.
+    
+    Usage:
+        @router.get("/analytics/profit", dependencies=[Depends(role_required(UserRole.OWNER, UserRole.MANAGER))])
+        async def get_profit(user: User = Depends(get_current_user)):
+            ...
+    
+    Args:
+        *allowed_roles: Variable number of allowed UserRole enums
+        
+    Returns:
+        Dependency function that validates user role
+        
+    Raises:
+        HTTPException 403: If user's role is not in allowed_roles
+        
+    Security Pattern: Implements Principle of Least Privilege (PoLP)
+    - OWNER: Full access to all data
+    - MANAGER: Access to operational analytics and staff/inventory
+    - STAFF: Access only to order taking and table management
+    """
+    
+    async def check_role(user: User = Depends(get_current_user)) -> User:
+        """Check if user has one of the required roles."""
+        if user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Insufficient permissions. Required role(s): {', '.join([r.value for r in allowed_roles])}. User role: {user.role.value}"
+            )
+        return user
+    
+    return check_role
+
+
+async def get_current_owner(
+    user: User = Depends(role_required(UserRole.OWNER))
+) -> User:
+    """Dependency for endpoints restricted to OWNER role only."""
+    return user
+
+
+async def get_current_manager(
+    user: User = Depends(role_required(UserRole.OWNER, UserRole.MANAGER))
+) -> User:
+    """Dependency for endpoints requiring OWNER or MANAGER role."""
     return user
