@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import settings
 from app.database import init_db, close_db
-from app.api import auth, categories, menu_items, sales, analytics, recommendations, search
+from app.api import auth, categories, menu_items, sales, analytics, recommendations, search, customers_router
 
 
 @asynccontextmanager
@@ -138,7 +138,6 @@ def create_app() -> FastAPI:
         prefix="/api/v1",
         tags=["🔍 Global Search"]
     )
-    from app.api import customers_router
     app.include_router(
         customers_router,
         prefix="/api/v1",
