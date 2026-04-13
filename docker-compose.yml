@@ -11,12 +11,10 @@ services:
     image: postgres:15-alpine
     container_name: opsmind-db
     environment:
-      # Database credentials (change in production!)
-      POSTGRES_DB: ${DB_NAME:-opsmind_ai}
-      POSTGRES_USER: ${DB_USER:-admin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-restaurant_ops_2026}
-      # PostgreSQL configuration for performance
-      POSTGRES_INITDB_ARGS: "-c max_connections=100 -c shared_buffers=256MB"
+      # Database credentials from .env file (REQUIRED)
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       # Data directory for persistence
       PGDATA: /var/lib/postgresql/data/pgdata
     
@@ -53,21 +51,21 @@ services:
     container_name: opsmind-api
     
     environment:
-      # Database Configuration
-      DATABASE_URL: postgresql+asyncpg://${DB_USER:-admin}:${DB_PASSWORD:-restaurant_ops_2026}@db:5432/${DB_NAME:-opsmind_ai}
+      # Database Configuration (from .env)
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       
       # Application Configuration
       APP_NAME: "OpsMind AI"
       APP_VERSION: "1.0.0"
       DEBUG: "false"
       
-      # Security
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      # Security (from .env - REQUIRED)
+      SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: "HS256"
-      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000", "http://localhost:3001"]}
+      CORS_ORIGINS: ${CORS_ORIGINS}
       
-      # AI Configuration (Google Gemini)
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      # AI Configuration (from .env - REQUIRED)
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       
       # Server Configuration
       HOST: "0.0.0.0"
@@ -76,11 +74,6 @@ services:
     ports:
       # Expose API port for external access
       - "${API_PORT:-8000}:8000"
-    
-    volumes:
-      # Mount source code for hot-reload during development (optional)
-      # - .:/app
-      # Note: Remove this in production for security
     
     networks:
       - opsmind-network
