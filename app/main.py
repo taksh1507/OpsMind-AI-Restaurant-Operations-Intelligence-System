@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core import settings
 from app.database import init_db, close_db
 from app.api import auth, categories, menu_items, sales, analytics, recommendations, search, customers_router
+from app.api import ws
 
 
 @asynccontextmanager
@@ -142,6 +143,10 @@ def create_app() -> FastAPI:
         customers_router,
         prefix="/api/v1",
         tags=["👤 Customer Intelligence"]
+    )
+    app.include_router(
+        ws.router,
+        tags=["🔌 WebSocket Real-Time"]
     )
     
     # Health check endpoint
