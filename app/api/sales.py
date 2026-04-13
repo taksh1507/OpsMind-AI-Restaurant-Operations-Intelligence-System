@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from app.database import get_db
 from app.api.deps import get_current_user
+from app.api.ws_manager import connection_manager
 from app.models import User, Sale, SaleItem, MenuItem, PaymentMethod
 from app.models.schemas import SaleCreateRequest, SaleResponse
 
@@ -132,6 +133,20 @@ async def create_sale(
         
         # Refresh sale_items relationship
         await db.refresh(new_sale, ["sale_items"])
+        
+        # Broadcast real-time WebSocket event to all connected clients for this tenant
+        await connection_manager.broadcast_named_event(
+            tenant_id=current_user.tenant_id,
+            event_type="NEW_SALE",
+            data={
+                "sale_id": new_sale.id,
+                "amount": float(new_sale.total_amount),
+                "tax_amount": float(new_sale.tax_amount),
+                "payment_method": payment_method.value,
+                "item_count": len(sale_items_data),
+                "timestamp": new_sale.timestamp.isoformat()
+            }
+        )
         
         return new_sale
     
