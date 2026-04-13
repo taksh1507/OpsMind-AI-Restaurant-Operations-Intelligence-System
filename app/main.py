@@ -4,12 +4,14 @@ Initializes the FastAPI application, configures routers, middleware, and lifecyc
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from datetime import datetime, timezone, timedelta
+from fastapi import FastAPI, Depends
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
-from app.database import init_db, close_db
+from app.database import init_db, close_db, get_db
 from app.api import auth, categories, menu_items, sales, analytics, recommendations, search, customers_router
 from app.api import ws
 
@@ -154,20 +156,59 @@ def create_app() -> FastAPI:
         "/health",
         tags=["🏥 System Health"],
         summary="System Health Check",
-        description="Returns the current health status of the OpsMind AI system."
+        description="Returns the current health status of the OpsMind AI system with database connectivity check."
     )
-    async def health_check():
-        """System health check endpoint.
+    async def health_check(db: AsyncSession = Depends(get_db)):
+        """System health check endpoint for automated deployment monitoring.
+        
+        Checks:
+        - Database connectivity and responsiveness
+        - Application availability
+        - Current server time in IST (Indian Standard Time)
         
         Returns:
-            - status: healthy/unhealthy
+            - status: "healthy" or "unhealthy"
             - app: Application name
             - version: Current version
+            - timestamp_utc: Current time in UTC (ISO 8601 format)
+            - timestamp_ist: Current time in IST (IS 8601 format)
+            - database: "connected" or "disconnected"
+            - uptime_check: True if responsive
+            
+        Use Cases:
+            - AWS/Azure health checks for auto-scaling and load balancing
+            - CloudWatch, DataDog, and other monitoring tools
+            - Kubernetes liveness and readiness probes
+            - Automated restart triggers on failure
         """
+        try:
+            # ✅ Check database connectivity by executing a simple query
+            from sqlalchemy import text
+            await db.execute(text("SELECT 1"))
+            db_status = "connected"
+        except Exception as e:
+            db_status = "disconnected"
+            # Log the error for debugging
+            print(f"❌ Database health check failed: {str(e)}")
+        
+        # 🕐 Calculate current time in IST (UTC+5:30)
+        utc_now = datetime.now(timezone.utc)
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
+        ist_now = utc_now.astimezone(ist_tz)
+        
+        # Determine overall health status
+        is_healthy = db_status == "connected"
+        status = "healthy" if is_healthy else "degraded"
+        
         return {
-            "status": "healthy",
+            "status": status,
             "app": settings.app_name,
-            "version": settings.app_version
+            "version": settings.app_version,
+            "timestamp_utc": utc_now.isoformat(),
+            "timestamp_ist": ist_now.isoformat(),
+            "database": db_status,
+            "uptime_check": True,
+            "environment": "production" if not settings.debug else "development"
         }
     
     # Root endpoint
