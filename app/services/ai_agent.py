@@ -1,54 +1,3 @@
-    async def get_customer_persona(self, customer: dict, order_history: list) -> dict:
-        """
-        Analyze a customer's order history and preferences to generate a persona and upsell suggestion.
-        Uses Gemini to reason about customer behavior and suggest a 'Surprise & Delight' action.
-        Args:
-            customer: Dict with customer fields (id, name, preferences, visit_count, total_spent_inr, etc)
-            order_history: List of dicts with past orders (item, count, date, etc)
-        Returns:
-            Dict with persona, reasoning, and suggested action for the server.
-        """
-        prompt = f"""
-You are a world-class restaurant customer intelligence AI. Your job is to help the staff deliver hyper-personalized service.
-
-CUSTOMER PROFILE:
-Name: {customer.get('name')}
-Email: {customer.get('email')}
-Total Spent (₹): {customer.get('total_spent_inr')}
-Visit Count: {customer.get('visit_count')}
-Preferences: {customer.get('preferences')}
-
-ORDER HISTORY:
-{json.dumps(order_history, indent=2)}
-
-Instructions:
-- Analyze the customer's visit frequency, favorite items, and preferences.
-- Assign a "Persona" (e.g., 'High-Value Regular', 'Adventurous Newcomer', 'Health-Conscious Loyalist').
-- Suggest a specific 'Surprise & Delight' action for the server (e.g., offer a sample, ask about a favorite, recommend a new dish).
-- Output as JSON: {"persona": ..., "reasoning": ..., "suggested_action": ...}
-"""
-        try:
-            response = self.model.generate_content(
-                [
-                    {"role": "user", "parts": [prompt]}
-                ],
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.7,
-                    top_p=0.95,
-                    max_output_tokens=600
-                )
-            )
-            ai_response = response.text
-            import re
-            import json as _json
-            match = re.search(r'\{.*\}', ai_response, re.DOTALL)
-            if match:
-                parsed = _json.loads(match.group(0))
-            else:
-                parsed = {"persona": None, "reasoning": ai_response, "suggested_action": None}
-            return {"status": "success", **parsed, "raw_response": ai_response}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
 """AI Agent Service - Autonomous Restaurant Consultant
 
 Uses Google Gemini 1.5 Flash to analyze restaurant performance data
@@ -67,12 +16,19 @@ Day 16: Caching & Optimization Layer
 - Reduces API quota usage by caching Gemini responses
 - Checks cache before calling expensive AI APIs
 - Supports force-refresh to get fresh insights
+
+Day 24: VIP Insight Agent
+- Analyzes customer preferences and order history
+- Generates personalized customer personas
+- Provides "Surprise & Delight" recommendations for servers
 """
 
 import json
 import os
 import hashlib
+import re
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Dict, Any, Optional
 import google.generativeai as genai
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,66 +42,6 @@ from app.core.config import settings
 
 
 class AIConsultant:
-
-        async def generate_prep_list(
-            self,
-            sales_data: list,
-            waste_data: list,
-            weather_context: str,
-            day_of_week: str = None
-        ) -> dict:
-            """
-            Generate a predictive prep list to minimize food waste.
-            Uses Gemini to analyze last 7 days of sales, last 7 days of waste, and today's weather.
-            Args:
-                sales_data: List of dicts with sales info for last 7 days
-                waste_data: List of dicts with waste info for last 7 days
-                weather_context: String describing today's weather
-                day_of_week: Optional, e.g. 'Friday'
-            Returns:
-                Dict with recommended prep quantities and AI reasoning
-            """
-            prompt = f"""
-    You are an expert restaurant operations AI. Your job is to help the chef minimize food waste by predicting how much to prep today.
-
-    Today is {day_of_week or 'UNKNOWN'}. Here is the weather context: {weather_context}
-
-    Last 7 days sales data:
-    {json.dumps(sales_data, indent=2)}
-
-    Last 7 days waste data:
-    {json.dumps(waste_data, indent=2)}
-
-    Instructions:
-    - Identify patterns (e.g., if it rained last Friday and 5kg of Dough was wasted, and today is Friday and it's raining, suggest prepping less).
-    - Recommend prep quantities for each key ingredient or menu item.
-    - For each recommendation, include a short impact statement (e.g., 'Suggest prepping only 10kg instead of 15kg to save ₹1,200').
-    - Output as JSON: {"prep_list": [{"item": ..., "recommended_qty": ..., "impact_statement": ...}], "ai_reasoning": ...}
-    """
-
-            try:
-                response = self.model.generate_content(
-                    [
-                        {"role": "user", "parts": [prompt]}
-                    ],
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=0.6,
-                        top_p=0.95,
-                        max_output_tokens=1200
-                    )
-                )
-                ai_response = response.text
-                # Try to parse JSON from AI response
-                import re
-                import json as _json
-                match = re.search(r'\{.*\}', ai_response, re.DOTALL)
-                if match:
-                    parsed = _json.loads(match.group(0))
-                else:
-                    parsed = {"prep_list": [], "ai_reasoning": ai_response}
-                return {"status": "success", **parsed, "raw_response": ai_response}
-            except Exception as e:
-                return {"status": "error", "message": str(e)}
     """Agentic AI that analyzes restaurant data and provides strategic advice."""
     
     def __init__(self):
@@ -164,6 +60,179 @@ class AIConsultant:
         except:
             # Fallback to gemini-pro if latest version not available
             self.model = genai.GenerativeModel("gemini-pro")
+    
+    async def get_customer_persona(self, customer: dict, order_history: list) -> dict:
+        """
+        Analyze a customer's order history and preferences to generate a persona and upsell suggestion.
+        
+        Day 24: VIP Insight Agent - Categorizes customers and suggests personalized service actions.
+        
+        Uses Gemini to reason about customer behavior and suggest a 'Surprise & Delight' action.
+        
+        Args:
+            customer: Dict with customer fields (id, name, preferences, visit_count, total_spent_inr, etc)
+            order_history: List of dicts with past orders (item, count, date, etc)
+        
+        Returns:
+            Dict with:
+            - status: "success" or "error"
+            - persona: Customer categorization (e.g., "High-Value Regular")
+            - reasoning: AI's analysis of customer behavior
+            - suggested_action: Specific personalized recommendation for server
+            - raw_response: Full AI response for debugging
+        """
+        if not order_history:
+            # Fallback if no order history
+            default_persona = {
+                "status": "success",
+                "persona": "New Customer" if customer.get('visit_count', 0) <= 1 else "Regular Customer",
+                "reasoning": "Insufficient order history for detailed analysis",
+                "suggested_action": "Welcome them warmly and ask about their preferences",
+                "raw_response": "Generated default persona"
+            }
+            return default_persona
+        
+        prompt = f"""You are a world-class restaurant customer intelligence AI. Your job is to help the staff deliver hyper-personalized service.
+
+CUSTOMER PROFILE:
+Name: {customer.get('name')}
+Email: {customer.get('email')}
+Total Spent (₹): {customer.get('total_spent_inr')}
+Visit Count: {customer.get('visit_count')}
+Preferences: {customer.get('preferences')}
+
+ORDER HISTORY (Last {len(order_history)} orders):
+{json.dumps(order_history, indent=2, default=str)}
+
+ANALYSIS TASK:
+1. Analyze the customer's visit frequency, favorite items, and preferences.
+2. Assign a "Persona" (examples: 'High-Value Regular', 'Adventurous Newcomer', 'Health-Conscious Loyalist', 'Occasional Visitor', 'VIP Power User')
+3. Suggest ONE specific 'Surprise & Delight' action for the server (e.g., 'offer a sample of our new Paneer Chilly', 'ask about their favorite drink', 'recommend our new Malai Kofta')
+
+OUTPUT FORMAT - MUST BE VALID JSON:
+{
+    "persona": "String - the customer's persona category",
+    "reasoning": "String - brief explanation of why you assigned this persona",
+    "suggested_action": "String - specific action for the server to take (be actionable and specific)",
+    "ltv_assessment": "String - brief assessment of customer lifetime value"
+}
+
+CRITICAL RULES:
+- ALWAYS output valid JSON only
+- Be specific and actionable in suggested_action
+- Base persona on actual order patterns and preferences
+- Make suggestions that increase AOV (Average Order Value) or strengthen loyalty"""
+        
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [prompt]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    max_output_tokens=600
+                )
+            )
+            ai_response = response.text
+            
+            # Parse JSON from response
+            match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                    return {
+                        "status": "success",
+                        "persona": parsed.get("persona", "Regular Customer"),
+                        "reasoning": parsed.get("reasoning", ""),
+                        "suggested_action": parsed.get("suggested_action", "Welcome back!"),
+                        "ltv_assessment": parsed.get("ltv_assessment", ""),
+                        "raw_response": ai_response
+                    }
+                except json.JSONDecodeError:
+                    # If JSON parsing fails, return fallback with raw response
+                    return {
+                        "status": "success",
+                        "persona": "Regular Customer",
+                        "reasoning": "AI analysis generated but could not be fully parsed",
+                        "suggested_action": ai_response[:200],  # First 200 chars as suggestion
+                        "raw_response": ai_response
+                    }
+            else:
+                # No JSON found in response
+                return {
+                    "status": "success",
+                    "persona": "Regular Customer",
+                    "reasoning": "Generated from order patterns",
+                    "suggested_action": ai_response[:200] if ai_response else "Welcome back!",
+                    "raw_response": ai_response
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": str(e),
+                "persona": "Regular Customer",
+                "suggested_action": "Welcome back!",
+                "reasoning": "Error in AI analysis - using default"
+            }
+    
+    async def generate_prep_list(
+        self,
+        sales_data: list,
+        waste_data: list,
+        weather_context: str,
+        day_of_week: str = None
+    ) -> dict:
+        """
+        Generate a predictive prep list to minimize food waste.
+        Uses Gemini to analyze last 7 days of sales, last 7 days of waste, and today's weather.
+        Args:
+            sales_data: List of dicts with sales info for last 7 days
+            waste_data: List of dicts with waste info for last 7 days
+            weather_context: String describing today's weather
+            day_of_week: Optional, e.g. 'Friday'
+        Returns:
+            Dict with recommended prep quantities and AI reasoning
+        """
+        prompt = f"""You are an expert restaurant operations AI. Your job is to help the chef minimize food waste by predicting how much to prep today.
+
+Today is {day_of_week or 'UNKNOWN'}. Here is the weather context: {weather_context}
+
+Last 7 days sales data:
+{json.dumps(sales_data, indent=2)}
+
+Last 7 days waste data:
+{json.dumps(waste_data, indent=2)}
+
+Instructions:
+- Identify patterns (e.g., if it rained last Friday and 5kg of Dough was wasted, and today is Friday and it's raining, suggest prepping less).
+- Recommend prep quantities for each key ingredient or menu item.
+- For each recommendation, include a short impact statement (e.g., 'Suggest prepping only 10kg instead of 15kg to save ₹1,200').
+- Output as JSON: {"prep_list": [{"item": ..., "recommended_qty": ..., "impact_statement": ...}], "ai_reasoning": ...}
+"""
+
+        try:
+            response = self.model.generate_content(
+                [
+                    {"role": "user", "parts": [prompt]}
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.6,
+                    top_p=0.95,
+                    max_output_tokens=1200
+                )
+            )
+            ai_response = response.text
+            # Try to parse JSON from AI response
+            match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+            if match:
+                parsed = json.loads(match.group(0))
+            else:
+                parsed = {"prep_list": [], "ai_reasoning": ai_response}
+            return {"status": "success", **parsed, "raw_response": ai_response}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
     
     async def generate_strategy(
         self,
