@@ -12,7 +12,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { getActiveToasts, onToastChange, type } from '@/hooks/useWebSocket';
+import { getActiveToasts, onToastChange } from '@/hooks/useWebSocket';
 import { X } from 'lucide-react';
 
 interface Toast {
