@@ -10,6 +10,7 @@ httpx==0.25.2  # HTTP client for async requests (weather API, etc.)
 # Database
 sqlalchemy==2.0.23
 asyncpg==0.29.0  # PostgreSQL async driver
+aiosqlite==0.19.0  # SQLite async driver (for local dev & testing)
 alembic==1.12.1  # Database migrations
 
 # Authentication & Security
