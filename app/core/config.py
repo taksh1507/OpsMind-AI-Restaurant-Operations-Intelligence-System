@@ -6,7 +6,7 @@ Use a .env file for local development.
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, ConfigDict
 from typing import Optional
 import os
 
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # ===== AI/LLM CONFIGURATION (REQUIRED FOR AI FEATURES) =====
     gemini_api_key: Optional[str] = Field(
         default=None,
-        description="Google Gemini API key - Required for AI agent features (set via SECRET_GEMINI_API_KEY env var)"
+        description="Google Gemini API key - Required for AI agent features (set via GEMINI_API_KEY env var)"
     )
     
     # ===== WEATHER API CONFIGURATION (OPTIONAL) =====
@@ -97,11 +97,12 @@ class Settings(BaseSettings):
                     f"Production environment requires these secrets to be set: {', '.join(missing_secrets)}"
                 )
     
-    class Config:
-        """Pydantic config."""
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore"  # Allow extra env vars without validation error
+    )
 
 
 # Global settings instance
