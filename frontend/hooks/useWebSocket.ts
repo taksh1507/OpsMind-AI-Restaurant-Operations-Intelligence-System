@@ -70,7 +70,9 @@ export function showToast(message: string, type: 'success' | 'info' | 'error' = 
  */
 export function onToastChange(callback: () => void) {
   toastCallbacks.add(callback);
-  return () => toastCallbacks.delete(callback);
+  return () => {
+    toastCallbacks.delete(callback);
+  };
 }
 
 /**
