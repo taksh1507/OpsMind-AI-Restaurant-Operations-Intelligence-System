@@ -16,7 +16,7 @@ alembic==1.12.1  # Database migrations
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-argon2-cffi==23.2.0  # Argon2 password hashing backend for passlib
+argon2-cffi==25.1.0  # Argon2 password hashing backend for passlib
 python-multipart==0.0.6
 email-validator==2.1.0
 
