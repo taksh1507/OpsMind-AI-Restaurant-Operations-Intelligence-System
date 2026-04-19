@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from sqlalchemy.orm import joinedload
 from app.models import Customer
-from app.api.deps import get_async_db
+from app.database import get_db
 from app.services.ai_agent import AIConsultant
 from typing import Optional, Dict, Any, List
 
@@ -89,7 +89,7 @@ async def get_customer_order_history(
 @router.get("/{id}/briefing", response_model=dict, summary="Get Customer Table-Side Briefing")
 async def get_customer_briefing(
     id: int,
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_db)
 ) -> dict:
     """
     Get a 3-bullet "cheat sheet" for staff when a VIP customer checks in.

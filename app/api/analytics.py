@@ -1,4 +1,27 @@
+"""Analytics API Router - Sustainability, Profitability, and KPI Metrics
+
+Provides deep operational insights for restaurant owners:
+- Sustainability score and eco-badge status
+- Profitability by menu item and category
+- Real-time KPI dashboards
+- Actionable recommendations for cost reduction
+"""
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, extract
+from datetime import datetime, timezone
+from typing import Optional
+from decimal import Decimal
+
+from app.database import get_db
+from app.api.deps import get_current_user
+from app.models import User
 from app.models.menu import WasteLog
+
+router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
 # Sustainability Score Endpoint
 @router.get("/sustainability")
 async def get_sustainability_metrics(

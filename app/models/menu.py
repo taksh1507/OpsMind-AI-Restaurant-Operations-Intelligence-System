@@ -5,17 +5,23 @@ Each category and menu item belongs to exactly one tenant (restaurant).
 Recipes define the ingredients and quantities needed for each dish.
 """
 
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
-from sqlalchemy import Enum, DateTime
+from decimal import Decimal
+from sqlalchemy import Enum, DateTime, String, Integer, Float, Boolean, ForeignKey, Table, Column, Text, Numeric, JSON
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .base import BaseModel as ORMBaseModel
 import enum
+
+
 class WasteReason(enum.Enum):
     EXPIRED = "Expired"
     OVERCOOKED = "Overcooked"
     SPOILED = "Spoiled"
 
 
-class WasteLog(BaseModel):
+class WasteLog(ORMBaseModel):
     """
     Tracks food waste events for sustainability analytics.
     Fields:
@@ -35,18 +41,13 @@ class WasteLog(BaseModel):
     cost_lost_inr: Mapped[Decimal] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
-    ingredient = relationship("Ingredient")
+    ingredient: Mapped["Ingredient"] = relationship("Ingredient")
 
     def __repr__(self) -> str:
         return f"<WasteLog(id={self.id}, ingredient_id={self.ingredient_id}, qty={self.quantity_wasted}, reason={self.reason}, cost={self.cost_lost_inr})>"
-from decimal import Decimal
-from sqlalchemy import String, ForeignKey, Boolean, Numeric, Text, Float
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from .base import BaseModel
 
 
-class Category(BaseModel):
+class Category(ORMBaseModel):
     """
     Menu category (e.g., "Starters", "Main Course", "Desserts").
     
@@ -87,7 +88,7 @@ class Category(BaseModel):
         return f"<Category(id={self.id}, name={self.name}, tenant_id={self.tenant_id})>"
 
 
-class MenuItem(BaseModel):
+class MenuItem(ORMBaseModel):
     """
     Menu item (dish) within a category.
     
@@ -165,7 +166,7 @@ class MenuItem(BaseModel):
         return ((self.price - self.cost_price) / self.price) * 100
 
 
-class Ingredient(BaseModel):
+class Ingredient(ORMBaseModel):
     """
     Individual ingredient (raw material) used in recipes.
     
@@ -214,7 +215,7 @@ class Ingredient(BaseModel):
         return f"<Ingredient(id={self.id}, name={self.name}, unit={self.unit}, unit_cost={self.unit_cost}, tenant_id={self.tenant_id})>"
 
 
-class Recipe(BaseModel):
+class Recipe(ORMBaseModel):
     """
     Recipe association table linking MenuItem to Ingredients.
     

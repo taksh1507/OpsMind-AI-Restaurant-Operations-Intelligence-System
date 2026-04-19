@@ -5,6 +5,7 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 gunicorn==21.2.0
+httpx==0.25.2  # HTTP client for async requests (weather API, etc.)
 
 # Database
 sqlalchemy==2.0.23

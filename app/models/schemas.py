@@ -160,13 +160,11 @@ class MenuItemCreate(BaseModel):
     price: Decimal = Field(
         ...,
         gt=0,
-        decimal_places=2,
         description="Selling price (must be > 0)"
     )
     cost_price: Decimal = Field(
         ...,
         ge=0,
-        decimal_places=2,
         description="Cost of preparation (must be >= 0)"
     )
     is_available: bool = Field(
@@ -220,13 +218,11 @@ class MenuItemUpdate(BaseModel):
     )
     price: Optional[Decimal] = Field(
         None,
-        gt=0,
-        decimal_places=2
+        gt=0
     )
     cost_price: Optional[Decimal] = Field(
         None,
-        ge=0,
-        decimal_places=2
+        ge=0
     )
     is_available: Optional[bool] = None
 
@@ -267,7 +263,6 @@ class SaleCreateRequest(BaseModel):
     tax_rate: Optional[Decimal] = Field(
         None,
         ge=0,
-        decimal_places=2,
         description="Optional tax rate as percentage (e.g., 0.05 for 5%)"
     )
 
