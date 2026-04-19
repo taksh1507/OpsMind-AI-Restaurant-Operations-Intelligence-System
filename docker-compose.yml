@@ -65,7 +65,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       
       # AI Configuration (from .env - REQUIRED)
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       
       # Server Configuration
       HOST: "0.0.0.0"

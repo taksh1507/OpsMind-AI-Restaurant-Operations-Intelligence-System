@@ -46,11 +46,11 @@ class AIConsultant:
     
     def __init__(self):
         """Initialize Gemini API with the configured API key."""
-        api_key = os.getenv("GOOGLE_API_KEY", settings.google_api_key)
+        api_key = os.getenv("GEMINI_API_KEY", settings.gemini_api_key)
         if not api_key:
             raise ValueError(
-                "GOOGLE_API_KEY environment variable not set. "
-                "Please configure your Google Gemini API key."
+                "GEMINI_API_KEY environment variable not set. "
+                "Please configure your Google Gemini API key in GitHub Secrets or .env file."
             )
         
         genai.configure(api_key=api_key)

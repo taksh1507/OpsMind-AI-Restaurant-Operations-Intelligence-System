@@ -27,6 +27,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | [**API_REFERENCE.md**](docs/API_REFERENCE.md) | API Documentation | Complete endpoint reference, request/response examples, error handling, authentication flow, RBAC |
 | [**SECURITY.md**](docs/SECURITY.md) | Security Policy | JWT implementation, RBAC (Day 25), data protection, multi-tenant isolation, threat model, compliance (GDPR/DPDP) |
 | [**DAY24_CUSTOMER_INTELLIGENCE.md**](docs/DAY24_CUSTOMER_INTELLIGENCE.md) | Day 24 Feature | Customer persona engine, AI briefing endpoint, JSONB preferences, testing & compliance |
+| [**DAY28_CICD_PIPELINE.md**](docs/DAY28_CICD_PIPELINE.md) | CI/CD & DevOps | GitHub Actions workflow, security scanning with Trivy, GitHub Secrets management, best practices |
 
 ### Quick Links
 - 🚀 **Getting Started**: [SETUP.md → Local Development Setup](docs/SETUP.md#local-development-setup)
@@ -649,11 +650,224 @@ Visit: `http://localhost:8000/docs` for API documentation
 
 ---
 
+## 🚀 CI/CD Pipeline (Day 28: Production-Ready DevOps)
+
+OpsMind AI implements **professional DevOps practices** with automated testing, security scanning, and deployment readiness. Every code push triggers our CI/CD pipeline to ensure quality and security.
+
+### 📋 Pipeline Overview
+
+```
+Code Push → GitHub Actions
+    ├─ 🧪 Backend Tests (pytest + PostgreSQL)
+    │   └─ Linting (flake8) + Code Format Check (black)
+    ├─ 🎨 Frontend Validation (ESLint + Next.js Build)
+    │   └─ Type checking (TypeScript)
+    ├─ 🐳 Docker Build
+    │   └─ 🔐 Trivy Security Scan (vulnerability detection)
+    └─ ✅ Status Check
+        └─ Deploy only if all checks pass
+```
+
+### 🔐 GitHub Secrets Setup (REQUIRED FOR CI/CD)
+
+These secrets must be added to your GitHub repository for the pipeline to work:
+
+**Go to:** `GitHub Repository → Settings → Secrets and variables → Actions → New repository secret`
+
+#### **Required Secrets:**
+
+| Secret Name | Value | Description |
+|------------|-------|-------------|
+| `DATABASE_URL` | `postgresql+asyncpg://user:password@host:5432/dbname` | Production database connection |
+| `SECRET_KEY` | Generate with: `openssl rand -hex 32` | JWT signing key (DO NOT use default) |
+| `GEMINI_API_KEY` | Your Google Gemini API key | Required for AI agent features |
+| `OPENWEATHER_API_KEY` | Your OpenWeatherMap API key | Optional but recommended |
+
+#### **How to Generate Secrets Securely:**
+
+```bash
+# Generate strong JWT secret
+openssl rand -hex 32
+# Output: a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6...
+
+# Store this value in GitHub Secrets as SECRET_KEY
+```
+
+#### **Optional Secrets:**
+
+| Secret Name | Value | Description |
+|------------|-------|-------------|
+| `DOCKER_REGISTRY_USERNAME` | Your Docker Hub username | For pushing images to registry |
+| `DOCKER_REGISTRY_PASSWORD` | Your Docker Hub token | For pushing images to registry |
+
+### 🔧 Environment Variables Reference
+
+**For Local Development (.env file):**
+```env
+# Database
+DATABASE_URL=sqlite+aiosqlite:///./opsmind_demo.db
+# Or for PostgreSQL:
+# DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/opsmind
+
+# JWT Security
+SECRET_KEY=dev-only-generate-strong-key-for-production
+DEBUG=True
+ENVIRONMENT=development
+
+# AI/ML APIs
+GEMINI_API_KEY=your-gemini-api-key-here
+OPENWEATHER_API_KEY=your-openweather-api-key-here
+
+# Application
+APP_NAME=OpsMind AI
+APP_VERSION=1.0.0
+CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
+```
+
+**For Production (via GitHub Secrets/Environment):**
+```env
+DATABASE_URL=postgresql+asyncpg://prod_user:prod_pass@prod_host:5432/opsmind_prod
+SECRET_KEY=<generated-strong-secret>
+GEMINI_API_KEY=<your-gemini-key>
+DEBUG=False
+ENVIRONMENT=production
+```
+
+### 🧪 Pipeline Jobs Explained
+
+#### **1️⃣ Backend Tests Job**
+```yaml
+- Runs Python 3.11
+- Spins up PostgreSQL 15 test database
+- Runs pytest with database fixtures
+- Code quality checks (flake8, black)
+- Fails pipeline if tests don't pass
+```
+
+**Run locally:**
+```bash
+pytest -v --tb=short
+```
+
+#### **2️⃣ Frontend Tests Job**
+```yaml
+- Sets up Node.js 18
+- Installs dependencies (npm ci)
+- Runs ESLint type checking
+- Builds Next.js project
+- Ensures no TypeScript errors
+```
+
+**Run locally:**
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+#### **3️⃣ Docker Build & Security Scan Job**
+```yaml
+- Depends on: Backend ✓ AND Frontend ✓
+- Builds Dockerfile
+- Scans image with Trivy for vulnerabilities
+- Uploads SARIF report to GitHub Security tab
+- Stops deployment if CRITICAL/HIGH vulnerabilities found
+```
+
+**Run locally:**
+```bash
+docker build -t opsmind-ai:latest .
+trivy image opsmind-ai:latest
+```
+
+### 📊 Viewing Pipeline Results
+
+1. **Go to:** GitHub Repository → Actions tab
+2. **Select:** Latest workflow run
+3. **View:**
+   - ✅ Passed jobs (green)
+   - ❌ Failed jobs (red) — Click to see error details
+   - 🔐 Security scan results
+
+### 🛡️ Security Best Practices
+
+#### ❌ **What NOT to do:**
+```python
+# ❌ NEVER commit secrets in code
+SECRET_KEY = "super-secret-key"
+GEMINI_API_KEY = "abc123xyz"
+```
+
+#### ✅ **What TO do:**
+```python
+# ✅ Load from environment only
+from app.core.config import settings
+api_key = settings.gemini_api_key  # Pulled from env var or .env
+```
+
+#### 🔐 **Protection Checklist:**
+- [ ] All secrets in GitHub Secrets (never in git)
+- [ ] `.env` file in `.gitignore` (not committed)
+- [ ] Production DATABASE_URL uses strong passwords
+- [ ] SECRET_KEY regenerated for each environment
+- [ ] API keys rotated quarterly
+- [ ] Trivy scan runs on every build
+
+### 🚨 Troubleshooting Pipeline Failures
+
+| Error | Solution |
+|-------|----------|
+| `Database connection refused` | Check `DATABASE_URL` secret is set correctly |
+| `GEMINI_API_KEY not found` | Add secret to GitHub → Settings → Secrets |
+| `pytest: command not found` | Dependencies not installed, check `requirements.txt` |
+| `Trivy found CRITICAL vulnerability` | Review security scan in Actions tab → Security tab, patch dependencies |
+| `Docker build failed` | Check `docker build -t test .` locally first |
+| `Next.js build failed` | Check `cd frontend && npm run build` locally first |
+
+### 📈 What's Checked (Quality Gate)
+
+✅ **Code Quality:**
+- Python syntax (flake8)
+- Code formatting (black)
+- TypeScript types
+
+✅ **Functionality:**
+- All pytest tests pass
+- Frontend builds successfully
+
+✅ **Security:**
+- Trivy vulnerability scan (0 CRITICAL/HIGH)
+- No secrets in git history
+- Environment-based config only
+
+✅ **Performance:**
+- Docker image builds in <5 minutes
+- Tests complete in <2 minutes
+
+### 🌟 Why This Matters (Placement Interview Gold)
+
+This CI/CD setup demonstrates:
+1. **DevOps Maturity** — Automated deployments like Google/Zomato
+2. **Security-First Mindset** — Shift-left security scanning
+3. **Professional Practices** — Never deploy broken code
+4. **Scalability** — Ready for cloud deployment (Kubernetes, Lambda)
+5. **Compliance** — Audit trail of all deployments
+
+---
+
 ## 🧪 Testing
 
 ```bash
+# Backend tests
 pytest tests/ -v
 pytest tests/ --cov=app
+
+# Frontend type checking
+cd frontend && npm run lint
+
+# Local Docker build
+docker build -t opsmind-ai:latest .
+docker run -p 8000:8000 opsmind-ai:latest
 ```
 
 ---
