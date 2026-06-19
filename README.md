@@ -664,6 +664,28 @@ This CI/CD setup demonstrates:
 
 ---
 
+## 🧠 Machine Learning & Sentiment Bootstrapping
+
+To replace external API calls (e.g., Gemini LLM calls) with a local classifier for reputation and sentiment analysis, we have implemented a self-contained training data preparation pipeline.
+
+### Sentiment Data Pipeline (`sentiment_data.py`)
+This script prepares a weak-labeled and balanced training dataset of customer feedback comments.
+
+- **Data Sources**:
+  1. **Database reviews**: Pulls real comments from the `reviews` table (`opsmind_demo.db`). If empty, seeds the pipeline with diverse synthetic cases.
+  2. **External reviews**: Merges with a public dataset (fetched from a raw GitHub TSV) and caches the download to `data/external_reviews.csv` to avoid redundant network hits.
+- **Weak-Labeling**: Annotates reviews using Gemini's prior output (`process_review` AI agent service). If the `GEMINI_API_KEY` is not present, it gracefully falls back to a deterministic keyword-matching heuristic labeler.
+- **Upsampling & Balance**: Enforces a minimum size of 300 rows and a class balance where no single class (positive, negative, neutral) exceeds 60% of the dataset by upsampling minority classes (duplicating/rephrasing minority rows).
+- **Cold-Start Architecture**: This allows the model to be bootstrapped on synthetic and weak-labeled data until a larger pool of real customer feedback reviews accumulates.
+
+To run the pipeline standalone:
+```bash
+python app/ml/sentiment_data.py
+```
+This generates the final balanced training set at `data/sentiment_train.csv`.
+
+---
+
 ## 💻 Local Quality Checks
 
 ```bash
