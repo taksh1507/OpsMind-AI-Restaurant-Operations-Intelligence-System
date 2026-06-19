@@ -16,28 +16,6 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 
 ---
 
-## 📖 Documentation
-
-**Complete project documentation is available in the `/docs` folder:**
-
-| Document | Purpose | Key Content |
-|----------|---------|------------|
-| [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) | System Design | System diagram, database schema, multi-tenant isolation, API structure, security architecture, performance |
-| [**SETUP.md**](docs/SETUP.md) | Deployment Guide | Local development setup, database configuration, environment variables, production deployment, troubleshooting |
-| [**API_REFERENCE.md**](docs/API_REFERENCE.md) | API Documentation | Complete endpoint reference, request/response examples, error handling, authentication flow, RBAC |
-| [**SECURITY.md**](docs/SECURITY.md) | Security Policy | JWT implementation, RBAC (Day 25), data protection, multi-tenant isolation, threat model, compliance (GDPR/DPDP) |
-| [**DAY24_CUSTOMER_INTELLIGENCE.md**](docs/DAY24_CUSTOMER_INTELLIGENCE.md) | Day 24 Feature | Customer persona engine, AI briefing endpoint, JSONB preferences, testing & compliance |
-| [**DAY28_CICD_PIPELINE.md**](docs/DAY28_CICD_PIPELINE.md) | CI/CD & DevOps | GitHub Actions workflow, security scanning with Trivy, GitHub Secrets management, best practices |
-
-### Quick Links
-- 🚀 **Getting Started**: [SETUP.md → Local Development Setup](docs/SETUP.md#local-development-setup)
-- 🔐 **Security & RBAC**: [SECURITY.md → Role-Based Access Control](docs/SECURITY.md#authorization--rbac)
-- 📡 **API Endpoints**: [API_REFERENCE.md → Endpoints](docs/API_REFERENCE.md#endpoints)
-- 🏗️ **System Design**: [ARCHITECTURE.md → System Architecture](docs/ARCHITECTURE.md)
-- 🤖 **Customer Intelligence**: [DAY24_CUSTOMER_INTELLIGENCE.md](docs/DAY24_CUSTOMER_INTELLIGENCE.md)
-
----
-
 ## 🗺️ Completed Implementation (2026)
 
 ### **Day 2-3 — Foundation & Multi-Tenancy** ✅
