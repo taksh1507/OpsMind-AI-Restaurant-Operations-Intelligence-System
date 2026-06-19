@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from sqlalchemy.orm import joinedload
-from app.models import Customer
+from app.models import Customer, Sale
 from app.database import get_db
 from app.services.ai_agent import AIConsultant
 from typing import Optional, Dict, Any, List
@@ -142,18 +142,17 @@ async def get_customer_briefing(
             if item_counts:
                 most_ordered_item = max(item_counts, key=item_counts.get)
 
-        # Generate AI persona and conversation starter
-        ai = AIConsultant()
-        persona_result = await ai.get_customer_persona(
-            customer={
-                "id": customer.id,
-                "name": customer.name,
-                "email": customer.email,
-                "total_spent_inr": ltv,
-                "visit_count": customer.visit_count,
-                "preferences": customer.preferences or {},
-            },
-            order_history=order_history
+        # Look up customer's tenant_id from their sales, defaulting to 1
+        tenant_id = await db.scalar(select(Sale.tenant_id).where(Sale.customer_id == id).limit(1))
+        if not tenant_id:
+            tenant_id = 1
+
+        # Generate K-Means or rule-based persona
+        from app.services.persona_engine import get_customer_persona as get_segmented_persona
+        persona_result = await get_segmented_persona(
+            customer_id=id,
+            session=db,
+            tenant_id=tenant_id
         )
 
         # Build conversation starter
