@@ -68,7 +68,8 @@ async def get_customer_persona(
     avg_spend = total_spent / visit_count if visit_count > 0 else 0.0
 
     # 2. Check for trained K-Means model
-    model_path = os.path.join("models", str(tenant_id), "segments_v1.pkl")
+    from app.ml.manifest_helper import get_latest_model_path
+    model_path = get_latest_model_path(tenant_id, "segmentation", "segments_v1.pkl")
     model_data = None
     if os.path.exists(model_path):
         try:

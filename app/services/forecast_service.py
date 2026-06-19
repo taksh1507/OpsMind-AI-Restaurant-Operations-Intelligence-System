@@ -18,10 +18,18 @@ from app.services.weather import get_current_weather
 from app.services.analytics import get_daily_sales_trend
 from app.core.math_utils import forecast_next_values, calculate_confidence_score
 
+from app.ml.manifest_helper import get_latest_model_path
+
 # In-memory model cache to prevent repeated disk reads
 # Key: tenant_id (int), Value: (predict_fn, loaded_at datetime)
 _model_cache = {}
 _cache_ttl = timedelta(hours=1)
+
+
+def clear_forecast_model_cache(tenant_id: int):
+    """Clear the cached forecast model for the given tenant."""
+    if tenant_id in _model_cache:
+        del _model_cache[tenant_id]
 
 
 def load_forecast_model(tenant_id: int):
@@ -33,7 +41,7 @@ def load_forecast_model(tenant_id: int):
     Returns:
         Callable predict function, or None if model doesn't exist
     """
-    model_path = os.path.join("models", str(tenant_id), "forecast_v1.pkl")
+    model_path = get_latest_model_path(tenant_id, "forecast", "forecast_v1.pkl")
     if os.path.exists(model_path):
         try:
             model = joblib.load(model_path)

@@ -269,5 +269,6 @@ async def upload_sales(
         "status": "success",
         "rows_inserted": sales_inserted,
         "items_matched": items_inserted,
-        "validation_errors": validation_errors
+        "validation_errors": validation_errors,
+        "message": f"{sales_inserted} sales imported. Retrain your forecast model at POST /ml/retrain to incorporate new data."
     }

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
 from app.database import init_db, close_db, get_db
-from app.api import auth, categories, menu_items, sales, analytics, recommendations, search, customers_router, data_import
+from app.api import auth, categories, menu_items, sales, analytics, recommendations, search, customers_router, data_import, training
 from app.api import ws
 
 
@@ -150,6 +150,11 @@ def create_app() -> FastAPI:
         data_import.router,
         prefix="/api/v1",
         tags=["📂 Data Import"]
+    )
+    app.include_router(
+        training.router,
+        prefix="/api/v1",
+        tags=["🏋️ Model Training"]
     )
     app.include_router(
         ws.router,

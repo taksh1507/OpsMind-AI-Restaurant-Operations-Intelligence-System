@@ -42,79 +42,90 @@ def encode_weather(df: pd.DataFrame) -> pd.DataFrame:
     return df_copy
 
 
-async def train_model(csv_path: str, tenant_id: int):
-    """Seed DB, build training frame, train XGBoost model, evaluate, and save.
+async def train_model(
+    csv_path: str = "tests/data/kaggle_restaurant_sales.csv",
+    tenant_id: int = 1,
+    session: AsyncSession = None,
+    version: int = None
+) -> dict:
+    """Seed DB (if session not provided), build training frame, train XGBoost model, evaluate, and save.
     
     Args:
-        csv_path: Path to the sales CSV dataset
+        csv_path: Path to the sales CSV dataset (only used if session is None)
         tenant_id: Restaurant tenant ID
+        session: Active database session (if None, an in-memory SQLite is used and seeded)
+        version: Version number to save the model under (auto-calculated if None)
     """
-    if not os.path.exists(csv_path):
-        print(f"Error: CSV file not found at: {csv_path}")
-        return
-
-    print("Initializing in-memory database...")
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        poolclass=StaticPool,
-        future=True,
-    )
-    
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
-    async_session = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-    
-    async with async_session() as session:
-        print("Seeding database with restaurant sales history...")
-        tenant = Tenant(
-            id=tenant_id,
-            tenant_id=f"restaurant-{tenant_id}",
-            name=f"Restaurant {tenant_id}",
-            subscription_status=SubscriptionStatus.ACTIVE
-        )
-        session.add(tenant)
-        await session.commit()
-        
-        csv_df = pd.read_csv(csv_path)
-        grouped_sales = csv_df.groupby("date")
-        
-        for date_str, group in grouped_sales:
-            dt = datetime.strptime(date_str, "%Y-%m-%d")
-            total_amount = sum(row["quantity"] * row["unit_price"] for _, row in group.iterrows())
-            
-            sale = Sale(
-                tenant_id=tenant_id,
-                total_amount=Decimal(str(round(total_amount, 2))),
-                tax_amount=Decimal("0.00"),
-                payment_method=PaymentMethod.CASH,
-                timestamp=dt
-            )
-            session.add(sale)
-            await session.flush()
-            
-            for _, row in group.iterrows():
-                sale_item = SaleItem(
-                    tenant_id=tenant_id,
-                    sale_id=sale.id,
-                    menu_item_id=int(row["item_id"]),
-                    quantity=int(row["quantity"]),
-                    unit_price_at_sale=Decimal(str(row["unit_price"]))
-                )
-                session.add(sale_item)
-                
-        await session.commit()
-        
-        print("Running feature engineering pipeline...")
+    if session is not None:
+        print("Running feature engineering pipeline on active DB session...")
         df = await build_training_frame(tenant_id=tenant_id, session=session)
+    else:
+        if not os.path.exists(csv_path):
+            print(f"Error: CSV file not found at: {csv_path}")
+            return {}
+
+        print("Initializing in-memory database...")
+        engine = create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            poolclass=StaticPool,
+            future=True,
+        )
         
-    await engine.dispose()
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            
+        async_session = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+        
+        async with async_session() as temp_session:
+            print("Seeding database with restaurant sales history...")
+            tenant = Tenant(
+                id=tenant_id,
+                tenant_id=f"restaurant-{tenant_id}",
+                name=f"Restaurant {tenant_id}",
+                subscription_status=SubscriptionStatus.ACTIVE
+            )
+            temp_session.add(tenant)
+            await temp_session.commit()
+            
+            csv_df = pd.read_csv(csv_path)
+            grouped_sales = csv_df.groupby("date")
+            
+            for date_str, group in grouped_sales:
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+                total_amount = sum(row["quantity"] * row["unit_price"] for _, row in group.iterrows())
+                
+                sale = Sale(
+                    tenant_id=tenant_id,
+                    total_amount=Decimal(str(round(total_amount, 2))),
+                    tax_amount=Decimal("0.00"),
+                    payment_method=PaymentMethod.CASH,
+                    timestamp=dt
+                )
+                temp_session.add(sale)
+                await temp_session.flush()
+                
+                for _, row in group.iterrows():
+                    sale_item = SaleItem(
+                        tenant_id=tenant_id,
+                        sale_id=sale.id,
+                        menu_item_id=int(row["item_id"]),
+                        quantity=int(row["quantity"]),
+                        unit_price_at_sale=Decimal(str(row["unit_price"]))
+                    )
+                    temp_session.add(sale_item)
+                    
+            await temp_session.commit()
+            
+            print("Running feature engineering pipeline...")
+            df = await build_training_frame(tenant_id=tenant_id, session=temp_session)
+            
+        await engine.dispose()
     
     if df.empty:
         print("Error: Feature engineering pipeline returned no data.")
-        return
+        return {}
 
     # Apply encoding
     df = encode_weather(df)
@@ -173,16 +184,34 @@ async def train_model(csv_path: str, tenant_id: int):
     for col, imp in sorted(zip(feature_cols, importances), key=lambda x: x[1], reverse=True):
         print(f"  {col:<28}: {imp:.4f}")
         
-    # Serialize model
+    # Serialize model using manifest_helper
+    from app.ml.manifest_helper import get_next_version, update_manifest
+
+    if version is None:
+        version = get_next_version(tenant_id, "forecast")
+        
     model_dir = os.path.join("models", str(tenant_id))
     os.makedirs(model_dir, exist_ok=True)
-    model_path = os.path.join(model_dir, "forecast_v1.pkl")
+    filename = f"forecast_v{version}.pkl"
+    model_path = os.path.join(model_dir, filename)
     
     # Save the model
     joblib.dump(model, model_path)
+    
+    # Update manifest
+    update_manifest(tenant_id, "forecast", filename)
+    
     print("-" * 55)
     print(f"Successfully saved trained model to: {model_path}")
     print("=" * 55 + "\n")
+    
+    return {
+        "status": "success",
+        "version": version,
+        "mae": float(mae),
+        "rmse": float(rmse),
+        "model_path": model_path
+    }
 
 
 if __name__ == "__main__":

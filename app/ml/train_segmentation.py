@@ -23,7 +23,8 @@ from app.ml.segmentation_features import build_segmentation_features
 def train_customer_segmentation(
     df_features: pd.DataFrame,
     tenant_id: int,
-    model_dir: str = "models"
+    model_dir: str = "models",
+    version: int = None
 ) -> Dict[str, Any]:
     """Train customer segmentation model using K-Means and save it.
     
@@ -135,8 +136,14 @@ def train_customer_segmentation(
     for c_id in occasional_clusters:
         cluster_to_persona[c_id] = "Occasional Visitor"
 
-    # Save model data
-    model_path = os.path.join(model_dir, str(tenant_id), "segments_v1.pkl")
+    # Save model data using manifest_helper
+    from app.ml.manifest_helper import get_next_version, update_manifest
+
+    if version is None:
+        version = get_next_version(tenant_id, "segmentation")
+
+    filename = f"segments_v{version}.pkl"
+    model_path = os.path.join(model_dir, str(tenant_id), filename)
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
     
     model_data = {
@@ -148,10 +155,14 @@ def train_customer_segmentation(
     
     joblib.dump(model_data, model_path)
     
+    # Update manifest
+    update_manifest(tenant_id, "segmentation", filename)
+    
     return {
         "status": "success",
         "best_k": best_k,
         "silhouette_score": best_score,
         "cluster_to_persona": cluster_to_persona,
-        "model_path": model_path
+        "model_path": model_path,
+        "version": version
     }
