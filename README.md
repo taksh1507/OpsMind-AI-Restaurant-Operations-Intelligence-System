@@ -9,165 +9,10 @@
 OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and operators to harness data-driven intelligence for real-time operational optimization. Using multi-tenant architecture, advanced analytics, and autonomous AI agents, we empower restaurants to:
 
 - 📊 **Track Operations in Real-Time** — Monitor sales, inventory, and staffing
-- 🤖 **Deploy Autonomous Agents** — LangGraph-powered AI that makes decisions autonomously
+- 🤖 **Deploy Autonomous Agents** — Gemini-powered AI that makes decisions autonomously
 - 💡 **Generate AI Insights** — Intelligent recommendations powered by LLM chains
 - 📈 **Forecast Revenue** — Predictive analytics for better planning
 - 💰 **Optimize Pricing** — Simulate price changes and analyze impact
-
----
-
-## 🗺️ Completed Implementation (2026)
-
-### **Day 2-3 — Foundation & Multi-Tenancy** ✅
-- [x] Core FastAPI Backend Setup
-- [x] Multi-Tenant Architecture (isolated data per restaurant)
-- [x] JWT-based Authentication & Authorization
-- [x] Database Schema (12 tables: Tenants, Users, Categories, MenuItems, Ingredients, Recipes, Sales, SaleItems, Reviews, Staff, Shifts, Recommendations)
-- [x] API Route Structure
-
-### **Day 7 — AI Strategy (Brain) Agent** ✅
-- [x] Gemini 1.5 Flash AI Integration
-- [x] Autonomous restaurant strategy analysis
-- [x] Star dish detection and underperformer identification
-- [x] Price optimization recommendations
-- [x] AI briefing endpoint for owners
-
-### **Day 8 — Revenue Forecasting (Heart)** ✅
-- [x] Daily sales trend aggregation & time-series analysis
-- [x] Predictive revenue forecasting (next 3 days with confidence scores)
-- [x] Top-selling items ranking
-- [x] Revenue vs. profit analysis
-- [x] AI-powered revenue forecast endpoint
-
-### **Day 9 — Waste & Cost Intelligence (Stomach)** ✅
-- [x] Cost of Goods Sold (COGS) calculation per menu item
-- [x] Profit margin analysis and health reporting
-- [x] Low-margin item identification
-- [x] Waste ingredient intelligence
-- [x] Cost reduction recommendations
-
-### **Day 10 — Customer Sentiment (Ears)** ✅
-- [x] Customer review model with AI sentiment analysis
-- [x] Sentiment scoring (-1.0 to 1.0 range)
-- [x] Keyword extraction from customer feedback
-- [x] Action item generation for managers
-- [x] Reputation dashboard and sentiment trends
-- [x] AI-generated response drafts for negative reviews
-
-### **Day 11 — Labor Intelligence (Nervous System)** ✅
-- [x] Staff and Shift models for labor cost tracking
-- [x] Hourly labor cost calculations
-- [x] Labor-to-sales efficiency analysis
-- [x] Burnout risk detection (high sales + low staffing)
-- [x] 24-hour staffing heatmap
-- [x] AI-powered staffing optimization recommendations
-
-### **Day 12 — Mathematical Forecasting (Predictive Intelligence)** ✅
-- [x] Linear regression in `app/core/math_utils.py`
-- [x] Confidence scoring for predictions
-- [x] Multi-period forecasting (1-7 days ahead)
-- [x] Collection of confidence levels (High/Medium/Low)
-- [x] Enhanced AI-powered forecast endpoints with mathematical backing
-
-### **Day 13 — Environmental Awareness (Context-Aware Intelligence)** ✅
-- [x] OpenWeatherMap API integration in `app/services/weather.py`
-- [x] Weather-to-sales correlation analysis
-- [x] Weather-aware AI strategy generation
-- [x] Weather-informed system prompts for Gemini
-- [x] `GET /analytics/daily-tip` endpoint (weather-optimized promotions)
-- [x] 30-minute weather context caching with fallback support
-
-### **Day 14 — Agentic Feedback & Learning Loop (Accountability AI)** ✅
-- [x] Recommendation model to track AI suggestions
-- [x] `POST /recommendations`, `GET /recommendations`, `PATCH /recommendations/{id}` endpoints
-- [x] Accept/Reject recommendation status tracking
-- [x] `verify_impact()` method to measure recommendation effectiveness
-- [x] Gemini-powered success reports showing actual ROI
-- [x] Annual ROI projection for implemented recommendations
-
-### **Day 16 — Caching & Optimization Layer (API Quota Efficiency)** ✅
-- [x] AICache model with SHA256 request hashing
-- [x] Intelligent response caching (< 1 hour old)
-- [x] Automatic cache refresh on owner request
-- [x] 70% Gemini API quota savings
-- [x] Cache effectiveness tracking
-- [x] Production-grade optimization pattern
-
-### **Day 17 — The Futuristic Dashboard Foundation** ✅
-- [x] Next.js 14 project with TypeScript
-- [x] Tailwind CSS with Deep Slate & Electric Blue theme
-- [x] Professional folder structure (/components, /hooks, /services, /types)
-- [x] Sidebar with glassmorphism effect (collapsible, responsive)
-- [x] Responsive Layout wrapper with header bar
-- [x] StatCard components with glowing border effects
-- [x] Navigation pages (Dashboard, Menu, Sales, Insights, Settings)
-- [x] GradientBadge, ChartCard, ProgressBar UI utilities
-- [x] Component gallery & showcase page
-
-### **Day 18 — The Data Bridge (API Integration)** ✅
-- [x] Authenticated Axios client (`lib/api-client.ts`)
-- [x] JWT Bearer token interceptor (auto-attach to requests)
-- [x] Custom `useDashboardStats` hook with SWR
-- [x] SWR caching (1-minute revalidation)
-- [x] Skeleton loaders for data fetching states
-- [x] Error boundaries with helpful messages
-- [x] TypeScript types for API responses
-- [x] Live dashboard connected to backend analytics
-- [x] Real-time revenue, profit, and AI confidence scores
-
-### **Day 20 — The Visual Intelligence Layer** ✅
-- [x] Recharts library integration for advanced data visualization
-- [x] **RevenueChart**: Dual-series AreaChart (Revenue vs Cost trends)
-  - 14-day historical data with Electric Blue & Deep Coral colors
-  - Y-axis formatted with `formatRupee()` utility for Indian Rupee
-  - Custom tooltips with detailed breakdown
-  - Summary stats: Avg Daily Revenue, Cost, Profit
-- [x] **TopItemsChart**: Horizontal BarChart for top-selling items
-  - Items ranked by quantity sold (top 8)
-  - Color intensity indicates performance (80%+ = Bright Electric Blue)
-  - Revenue generated per item visualization
-  - Performance legend for easy interpretation
-- [x] **AISummaryBanner**: Natural language AI insights component
-  - Gemini 1.5 Flash powered strategic summary
-  - Pulse animation showing "AI is thinking"
-  - Cache hit indicator for API optimization
-  - Gradient design with decorative accents
-- [x] `/analytics/daily-trends` endpoint + `get_daily_revenue_and_cost()` backend function
-- [x] Conversational Analytics: Charts tell the story, not just data tables
-- [x] Placement-ready: Dense visualizations for recruiter impact
-
-### **Day 24 — Hyper-Personalized Customer Intelligence** ✅
-- [x] Customer persona engine (`get_customer_persona()` method in AIConsultant)
-- [x] JSONB preferences storage (favorite items, spice level, allergies, dietary restrictions)
-- [x] Order history analysis and pattern recognition
-- [x] Table-side briefing endpoint: `GET /customers/{id}/briefing`
-- [x] 3-bullet cheat sheet for waiters (LTV, favorite item, AI action)
-- [x] LTV (Lifetime Value) calculation per customer
-- [x] AI-powered persona classification (High-Value Regular, Occasional Visitor, etc.)
-- [x] Suggested action for personalized service
-- [x] Comprehensive testing (test_day24_customer_intelligence.py)
-- [x] GDPR/DPDP compliance verification
-
-### **Day 25 — Role-Based Access Control (RBAC)** ✅
-- [x] User model extended with `role` field (UserRole enum)
-- [x] Three-tier role hierarchy: OWNER, MANAGER, STAFF
-- [x] Role-based helper methods: `has_role()`, `is_owner()`, `is_manager()`, `can_view_financials()`
-- [x] Permission guard: `role_required()` factory dependency in deps.py
-- [x] Convenience dependencies: `get_current_owner()`, `get_current_manager()`
-- [x] Frontend JWT role extraction on component mount
-- [x] Role-based navigation filtering in Sidebar (conditional rendering)
-- [x] Role badge display for user awareness
-- [x] 403 Forbidden error responses with clear permission messages
-- [x] Principle of Least Privilege (PoLP) implementation across frontend & backend
-
-### **Upcoming — Full-Stack Refinement & Deployment**
-- [ ] Login/Authentication pages
-- [ ] Real-Time Sales Monitoring with charts
-- [ ] Agent Control Panel
-- [ ] Insights & Recommendations Feed
-- [ ] Docker containerization
-- [ ] Cloud deployment (Vercel + Railway)
-
 
 ---
 
@@ -180,26 +25,26 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Sales Tracking** | ✅ | Transaction logging & line items |
 | **Revenue Analytics** | ✅ | Per-dish, hourly, daily analysis |
 | **Profit Calculation** | ✅ | COGS → margin analysis per item |
-| **AI Strategy (Day 7)** | ✅ | Autonomous business recommendations via Gemini |
-| **Revenue Forecasting (Day 8)** | ✅ | 3-day predictive forecasts with confidence |
-| **Cost Intelligence (Day 9)** | ✅ | Waste detection & cost optimization |
-| **Customer Sentiment (Day 10)** | ✅ | AI analysis of reviews & reputation tracking |
-| **Labor Optimization (Day 11)** | ✅ | Staffing heatmap & efficiency analysis |
-| **Mathematical Forecasting (Day 12)** | ✅ | Linear regression & confidence scoring |
-| **Environmental Awareness (Day 13)** | ✅ | Weather-aware recommendations & context |
-| **Recommendation Tracking (Day 14)** | ✅ | Save, accept/reject, and verify AI suggestions |
-| **Impact Verification (Day 14)** | ✅ | Measure ROI of implemented recommendations |
-| **API Caching (Day 16)** | ✅ | Intelligent request caching with 70% quota savings |
-| **Dashboard UI (Day 17)** | ✅ | Enterprise-grade Next.js dashboard with glassmorphism |
-| **API Client (Day 18)** | ✅ | Authenticated Axios + JWT interceptor |
-| **Data Integration (Day 18)** | ✅ | SWR hooks for real-time backend data fetching |
-| **Revenue vs Cost AreaChart (Day 20)** | ✅ | 14-day dual-series visualization with Recharts |
-| **Top Items BarChart (Day 20)** | ✅ | Performance visualization with color intensity margins |
-| **AI Summary Banner (Day 20)** | ✅ | Natural language insights with Gemini 1.5 Flash |
-| **Customer Persona Engine (Day 24)** | ✅ | Hyper-personalized customer profiling with JSONB preferences |
-| **Table-Side Briefing (Day 24)** | ✅ | 3-bullet AI cheat sheet for waiters (LTV + suggested action) |
-| **RBAC (Day 25)** | ✅ | Three-tier role hierarchy (OWNER, MANAGER, STAFF) with permission guards |
-| **Role-Based UI (Day 25)** | ✅ | JWT-driven conditional rendering for security clearance |
+| **AI Strategy** | ✅ | Autonomous business recommendations via Gemini |
+| **Revenue Forecasting** | ✅ | 3-day predictive forecasts with confidence |
+| **Cost Intelligence** | ✅ | Waste detection & cost optimization |
+| **Customer Sentiment** | ✅ | AI analysis of reviews & reputation tracking |
+| **Labor Optimization** | ✅ | Staffing heatmap & efficiency analysis |
+| **Mathematical Forecasting** | ✅ | Linear regression & confidence scoring |
+| **Environmental Awareness** | ✅ | Weather-aware recommendations & context |
+| **Recommendation Tracking** | ✅ | Save, accept/reject, and verify AI suggestions |
+| **Impact Verification** | ✅ | Measure ROI of implemented recommendations |
+| **API Caching** | ✅ | Intelligent request caching with 70% quota savings |
+| **Dashboard UI** | ✅ | Enterprise-grade Next.js dashboard with glassmorphism |
+| **API Client** | ✅ | Authenticated Axios + JWT interceptor |
+| **Data Integration** | ✅ | SWR hooks for real-time backend data fetching |
+| **Revenue vs Cost AreaChart** | ✅ | 14-day dual-series visualization with Recharts |
+| **Top Items BarChart** | ✅ | Performance visualization with color intensity margins |
+| **AI Summary Banner** | ✅ | Natural language insights with Gemini 1.5 Flash |
+| **Customer Persona Engine** | ✅ | Hyper-personalized customer profiling with JSONB preferences |
+| **Table-Side Briefing** | ✅ | 3-bullet AI cheat sheet for waiters (LTV + suggested action) |
+| **RBAC** | ✅ | Three-tier role hierarchy (OWNER, MANAGER, STAFF) with permission guards |
+| **Role-Based UI** | ✅ | JWT-driven conditional rendering for security clearance |
 | **REST API** | ✅ | 40+ endpoints across all systems |
 
 ---
@@ -226,7 +71,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 
 ---
 
-## 🔗 Full-Stack Data Integration (Day 18)
+## 🔗 Full-Stack Data Integration
 
 ### Request Flow: Dashboard → Backend Analytics
 
@@ -281,7 +126,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 │   └── api-client.ts      # Authenticated Axios instance
 ├── types/
 │   └── api.ts             # TypeScript interfaces for API
-├── services/              # (Future) API service methods
+├── services/              # API service methods
 ├── public/                # Static assets
 ├── package.json           # Dependencies (Next.js, Axios, SWR, etc.)
 ├── tailwind.config.ts     # Deep Slate + Electric Blue theme
@@ -451,21 +296,17 @@ graph TB
 ```
 /OpsMind-AI
 ├── app/
-│   ├── api/               # Route handlers (routes.py splits here)
-│   ├── core/              # Config, security, constants
-│   ├── models/            # SQLAlchemy ORM models
-│   ├── services/          # Business logic (analytics, auth)
-│   ├── agents/            # LangGraph agent nodes & chains
-│   ├── static/            # Frontend assets (TBD: React build)
-│   └── main.py            # FastAPI app initialization
-├── tests/                 # Pytest suite
-├── docs/                  # Deployment, architecture docs
+│   ├── api/               # Route handlers (FastAPI endpoints)
+│   ├── core/              # Config, security, database sessions
+│   ├── models/            # SQLAlchemy database models
+│   ├── services/          # Business logic (Gemini AI, weather, margin details)
+│   └── main.py            # FastAPI application entry point
+├── frontend/              # Next.js 14 Dashboard Web App
 ├── .github/workflows/     # CI/CD (GitHub Actions)
-├── poetry.lock / requirements.txt
-├── README.md              # This file
-├── LICENSE                # MIT
-└── .gitignore
-
+├── requirements.txt       # Python dependencies
+├── README.md              # Project documentation
+├── LICENSE                # MIT license
+└── .gitignore             # Git ignored files
 ```
 
 ---
@@ -484,7 +325,7 @@ graph TB
 9. reviews          → Customer feedback & AI sentiment
 10. staff           → Employee records & hourly rates
 11. shifts          → Work shifts & cost calculations
-12. recommendations → AI suggestions with impact tracking (Day 14)
+12. recommendations → AI suggestions with impact tracking
 ```
 
 **Multi-Tenant Architecture:** All 12 tables scoped by `tenant_id` for complete data isolation.
@@ -493,31 +334,31 @@ graph TB
 
 ## 🤖 AI Systems (5 Autonomous Agents)
 
-### **1. Brain — Strategy Agent (Day 7)**
+### **1. Brain — Strategy Agent**
 - Analyzes overall restaurant performance
 - Identifies star dishes and money-losers
 - Recommends pricing & menu optimization
 - **Endpoint:** `GET /analytics/ai-briefing`
 
-### **2. Heart — Revenue Forecaster (Day 8)**
+### **2. Heart — Revenue Forecaster**
 - Predicts next 3 days of sales with confidence scores
 - Analyzes daily sales trends
 - Ranks top-performing menu items
 - **Endpoint:** `GET /analytics/forecast`
 
-### **3. Stomach — Cost Analyst (Day 9)**
+### **3. Stomach — Cost Analyst**
 - Calculates Cost of Goods Sold per dish
 - Identifies low-margin products
 - Detects waste patterns in ingredients
 - **Endpoint:** `GET /analytics/margin-report`
 
-### **4. Ears — Sentiment Analyzer (Day 10)**
+### **4. Ears — Sentiment Analyzer**
 - Analyzes customer reviews & sentiment (-1.0 to 1.0)
 - Extracts keywords from feedback
 - Generates response drafts for negative reviews
 - **Endpoint:** `GET /analytics/reputation`
 
-### **5. Nervous System — Labor Optimizer (Day 11)**
+### **5. Nervous System — Labor Optimizer**
 - Creates 24-hour staffing heatmap
 - Calculates labor-to-sales efficiency
 - Detects burnout risks & overstaffing
@@ -526,46 +367,16 @@ graph TB
 
 ---
 
-## 🧪 System Testing & Validation
-
-All components have been **comprehensively tested** and are **100% operational**:
-
-```
-✅ TEST 1: 11 Database Models - PASSED
-✅ TEST 2: 6 AI Agent Services - PASSED
-✅ TEST 3: 4 Analytics Services - PASSED
-✅ TEST 4: 2 Margin Analysis Functions - PASSED
-✅ TEST 5: 30+ API Endpoints - PASSED
-✅ TEST 6: Request/Response Schemas - PASSED
-✅ TEST 7: Integration Points (Days 2-11) - PASSED
-
-Database: 11 tables with proper relationships ✅
-AI Functions: All 6 specialized agents operational ✅
-API Routes: 30+ endpoints across all systems ✅
-Multi-Tenancy: Complete data isolation verified ✅
-```
-
-**Run system tests:**
-```bash
-python SYSTEM_TEST_ASCII.py
-```
-
----
-
 ## 📝 Getting Started
 
-### Prerequisites
+### Backend Setup
+
+#### Prerequisites
 - Python 3.10+
 - PostgreSQL 14+ (or SQLite3)
-- Poetry or pip
 
-### Installation
-
+#### Installation
 ```bash
-# Clone repo
-git clone https://github.com/taksh1507/-OpsMind-AI-Restaurant-Operations-Intelligence-System.git
-cd OpsMind-AI
-
 # Create virtual environment
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -573,14 +384,34 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Setup database
+# Setup database (Alembic migrations)
 python -m alembic upgrade head
 
 # Run server
 uvicorn app.main:app --reload
 ```
+Visit: `http://localhost:8000/docs` for API Swagger documentation.
 
-Visit: `http://localhost:8000/docs` for API documentation
+---
+
+### Frontend Setup
+
+#### Prerequisites
+- Node.js 18+
+- npm
+
+#### Installation
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Run Next.js local dev server
+npm run dev
+```
+Visit: `http://localhost:3000` to access the Dashboard UI.
 
 ---
 
@@ -618,17 +449,17 @@ Visit: `http://localhost:8000/docs` for API documentation
 | `GET` | `/analytics/summary` | Revenue dashboard |
 | `GET` | `/analytics/metrics/revenue` | Revenue breakdown |
 | `GET` | `/analytics/top-items` | Best-selling items |
-| `GET` | `/analytics/ai-briefing` | AI strategy recommendations (Day 7) |
-| `GET` | `/analytics/forecast` | Revenue forecast (Day 8) |
-| `GET` | `/analytics/margin-report` | Profit margin analysis (Day 9) |
-| `GET` | `/analytics/reputation` | Customer sentiment dashboard (Day 10) |
-| `GET` | `/analytics/staffing-plan` | Labor optimization & heatmap (Day 11) |
+| `GET` | `/analytics/ai-briefing` | AI strategy recommendations |
+| `GET` | `/analytics/forecast` | Revenue forecast |
+| `GET` | `/analytics/margin-report` | Profit margin analysis |
+| `GET` | `/analytics/reputation` | Customer sentiment dashboard |
+| `GET` | `/analytics/staffing-plan` | Labor optimization & heatmap |
 
 **Total:** 30+ endpoints across all systems
 
 ---
 
-## 🚀 CI/CD Pipeline (Day 28: Production-Ready DevOps)
+## 🚀 CI/CD Pipeline (Production-Ready DevOps)
 
 OpsMind AI implements **professional DevOps practices** with automated testing, security scanning, and deployment readiness. Every code push triggers our CI/CD pipeline to ensure quality and security.
 
@@ -636,7 +467,7 @@ OpsMind AI implements **professional DevOps practices** with automated testing, 
 
 ```
 Code Push → GitHub Actions
-    ├─ 🧪 Backend Tests (pytest + PostgreSQL)
+    ├─ 🧪 Backend Checks
     │   └─ Linting (flake8) + Code Format Check (black)
     ├─ 🎨 Frontend Validation (ESLint + Next.js Build)
     │   └─ Type checking (TypeScript)
@@ -713,18 +544,20 @@ ENVIRONMENT=production
 
 ### 🧪 Pipeline Jobs Explained
 
-#### **1️⃣ Backend Tests Job**
+#### **1️⃣ Backend Checks Job**
 ```yaml
 - Runs Python 3.11
-- Spins up PostgreSQL 15 test database
-- Runs pytest with database fixtures
-- Code quality checks (flake8, black)
-- Fails pipeline if tests don't pass
+- Code quality checks (flake8)
+- Code format checks (black)
+- Fails pipeline if checks fail
 ```
 
 **Run locally:**
 ```bash
-pytest -v --tb=short
+# Code quality checks
+flake8 app
+# Code format checks
+black app --check
 ```
 
 #### **2️⃣ Frontend Tests Job**
@@ -795,9 +628,7 @@ api_key = settings.gemini_api_key  # Pulled from env var or .env
 
 | Error | Solution |
 |-------|----------|
-| `Database connection refused` | Check `DATABASE_URL` secret is set correctly |
 | `GEMINI_API_KEY not found` | Add secret to GitHub → Settings → Secrets |
-| `pytest: command not found` | Dependencies not installed, check `requirements.txt` |
 | `Trivy found CRITICAL vulnerability` | Review security scan in Actions tab → Security tab, patch dependencies |
 | `Docker build failed` | Check `docker build -t test .` locally first |
 | `Next.js build failed` | Check `cd frontend && npm run build` locally first |
@@ -810,7 +641,6 @@ api_key = settings.gemini_api_key  # Pulled from env var or .env
 - TypeScript types
 
 ✅ **Functionality:**
-- All pytest tests pass
 - Frontend builds successfully
 
 ✅ **Security:**
@@ -820,7 +650,6 @@ api_key = settings.gemini_api_key  # Pulled from env var or .env
 
 ✅ **Performance:**
 - Docker image builds in <5 minutes
-- Tests complete in <2 minutes
 
 ### 🌟 Why This Matters (Placement Interview Gold)
 
@@ -833,14 +662,14 @@ This CI/CD setup demonstrates:
 
 ---
 
-## 🧪 Testing
+## 💻 Local Quality Checks
 
 ```bash
-# Backend tests
-pytest tests/ -v
-pytest tests/ --cov=app
+# Backend linting & formatting checks
+flake8 app
+black app --check
 
-# Frontend type checking
+# Frontend linting
 cd frontend && npm run lint
 
 # Local Docker build
@@ -873,5 +702,4 @@ MIT License — See [LICENSE](LICENSE) file
 
 ---
 
-**Last Updated:** March 21, 2026  
-
+**Last Updated:** March 21, 2026
