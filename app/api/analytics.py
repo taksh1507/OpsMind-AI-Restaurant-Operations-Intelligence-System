@@ -988,82 +988,103 @@ async def get_reputation_analytics(
                 "response_draft": None
             }
         
-        # Calculate metrics
-        total_reviews = len(reviews)
-        ratings_sum = sum(r.rating for r in reviews if r.rating)
+        # Calculate metrics using dynamic local sentiment model predictions
+        from app.services.sentiment_service import predict_sentiment
+        
+        scored_reviews = []
+        for r in reviews:
+            pred = await predict_sentiment(r.comment)
+            scored_reviews.append((r, pred))
+            
+        total_reviews = len(scored_reviews)
+        ratings_sum = sum(r.rating for r, _ in scored_reviews if r.rating)
         average_rating = ratings_sum / total_reviews if total_reviews > 0 else 0
         
-        # Separate positive and negative reviews
-        positive_reviews = [r for r in reviews if r.is_positive]
-        negative_reviews = [r for r in reviews if r.is_negative]
+        # Separate positive, negative, and neutral reviews based on prediction labels
+        positive_reviews = [(r, p) for r, p in scored_reviews if p["label"] == "positive"]
+        negative_reviews = [(r, p) for r, p in scored_reviews if p["label"] == "negative"]
+        neutral_reviews = [(r, p) for r, p in scored_reviews if p["label"] == "neutral"]
         
-        # Calculate sentiment trend
         positive_count = len(positive_reviews)
         negative_count = len(negative_reviews)
+        neutral_count = len(neutral_reviews)
         
+        # Calculate sentiment trend
         if positive_count > negative_count:
             sentiment_trend = "Positive"
-            trend_strength = min(100, int((positive_count / total_reviews) * 100))
+            trend_strength = min(100, int((positive_count / total_reviews) * 100)) if total_reviews > 0 else 0
         elif negative_count > positive_count:
             sentiment_trend = "Negative"
-            trend_strength = min(100, int((negative_count / total_reviews) * 100))
+            trend_strength = min(100, int((negative_count / total_reviews) * 100)) if total_reviews > 0 else 0
         else:
             sentiment_trend = "Neutral"
             trend_strength = 50
-        
+            
         # Extract top compliments (from positive reviews)
         compliments = []
         compliment_keywords = {}
         
-        for review in positive_reviews[:10]:  # Top 20 positive reviews
-            if review.keywords:
-                for keyword in review.keywords.split(','):
+        for r, p in positive_reviews[:10]:
+            if r.keywords:
+                for keyword in r.keywords.split(','):
                     keyword = keyword.strip()
-                    compliment_keywords[keyword] = compliment_keywords.get(keyword, 0) + 1
-        
-        # Build compliments list
-        for review in positive_reviews[:5]:  # Top 5 positive reviews
+                    if keyword:
+                        compliment_keywords[keyword] = compliment_keywords.get(keyword, 0) + 1
+                        
+        for r, p in positive_reviews[:5]:
             compliments.append({
-                "customer_name": review.customer_name,
-                "rating": review.rating,
-                "comment": review.comment,
-                "keywords": review.keywords.split(',') if review.keywords else [],
-                "ai_summary": review.ai_summary or "Great feedback received",
-                "created_at": review.created_at.isoformat()
+                "customer_name": r.customer_name,
+                "rating": r.rating,
+                "comment": r.comment,
+                "keywords": r.keywords.split(',') if r.keywords else [],
+                "ai_summary": r.ai_summary or "Great feedback received",
+                "created_at": r.created_at.isoformat(),
+                "sentiment_label": p["label"],
+                "sentiment_score": p["score"],
+                "sentiment_confidence": p["confidence"],
+                "label": p["label"],
+                "score": p["score"],
+                "confidence": p["confidence"]
             })
-        
+            
         # Extract top complaints (from negative reviews)
         complaints = []
         complaint_keywords = {}
         
-        for review in negative_reviews[:10]:  # Top 10 negative reviews
-            if review.keywords:
-                for keyword in review.keywords.split(','):
+        for r, p in negative_reviews[:10]:
+            if r.keywords:
+                for keyword in r.keywords.split(','):
                     keyword = keyword.strip()
-                    complaint_keywords[keyword] = complaint_keywords.get(keyword, 0) + 1
-        
-        # Build complaints list
-        for review in negative_reviews[:5]:  # Top 5 negative reviews
+                    if keyword:
+                        complaint_keywords[keyword] = complaint_keywords.get(keyword, 0) + 1
+                        
+        for r, p in negative_reviews[:5]:
             complaints.append({
-                "customer_name": review.customer_name,
-                "rating": review.rating,
-                "comment": review.comment,
-                "keywords": review.keywords.split(',') if review.keywords else [],
-                "ai_summary": review.ai_summary or "Issue reported",
-                "action_item": review.action_item or "Requires investigation",
-                "created_at": review.created_at.isoformat()
+                "customer_name": r.customer_name,
+                "rating": r.rating,
+                "comment": r.comment,
+                "keywords": r.keywords.split(',') if r.keywords else [],
+                "ai_summary": r.ai_summary or "Issue reported",
+                "action_item": r.action_item or "Requires investigation",
+                "created_at": r.created_at.isoformat(),
+                "sentiment_label": p["label"],
+                "sentiment_score": p["score"],
+                "sentiment_confidence": p["confidence"],
+                "label": p["label"],
+                "score": p["score"],
+                "confidence": p["confidence"]
             })
-        
-        # Generate AI response draft for the latest negative review
+            
+        # Generate AI response draft for the latest negative review using Gemini
         response_draft = None
         if negative_reviews:
-            latest_negative = negative_reviews[0]
+            latest_negative, latest_pred = negative_reviews[0]
             
-            # If not already processed, process it now
+            # If not already processed, process it now (Gemini remains only for response drafts generation)
             if not latest_negative.action_item or not latest_negative.ai_summary:
+                from app.services.ai_agent import process_review
                 analysis = await process_review(latest_negative.comment)
                 if analysis.get("status") == "success":
-                    # Use the AI analysis to craft a response
                     response_draft = {
                         "to_customer": latest_negative.customer_name,
                         "rating": latest_negative.rating,
@@ -1076,7 +1097,6 @@ async def get_reputation_analytics(
                         "created_at": datetime.now(timezone.utc).isoformat()
                     }
             else:
-                # Use existing analysis
                 response_draft = {
                     "to_customer": latest_negative.customer_name,
                     "rating": latest_negative.rating,
@@ -1088,7 +1108,7 @@ async def get_reputation_analytics(
                                         f"Please visit us again soon so we can show you our improvements.",
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
-        
+                
         # Get top complaint keywords
         top_complaint_keywords = sorted(
             complaint_keywords.items(),
@@ -1113,11 +1133,11 @@ async def get_reputation_analytics(
             },
             "metrics": {
                 "total_reviews": total_reviews,
-                "processed_reviews": sum(1 for r in reviews if r.is_processed),
+                "processed_reviews": sum(1 for r, _ in scored_reviews if r.is_processed),
                 "average_rating": round(float(average_rating), 2),
                 "positive_reviews": positive_count,
                 "negative_reviews": negative_count,
-                "neutral_reviews": len([r for r in reviews if r.is_neutral]),
+                "neutral_reviews": neutral_count,
                 "sentiment_trend": sentiment_trend,
                 "trend_strength_percent": trend_strength
             },
