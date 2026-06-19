@@ -731,8 +731,9 @@ async def get_revenue_forecast(
         # Calculate mathematical confidence score
         mathematical_confidence_level, mathematical_confidence_percentage = calculate_confidence_score(revenue_values)
         
-        # Generate forecast using AI
-        forecast_result = await forecast_revenue(trend_data)
+        # Generate forecast using new forecast service
+        from app.services.forecast_service import generate_forecast_report
+        forecast_result = await generate_forecast_report(current_user.tenant_id, db, days=days)
         
         if forecast_result.get("status") == "error":
             raise HTTPException(
