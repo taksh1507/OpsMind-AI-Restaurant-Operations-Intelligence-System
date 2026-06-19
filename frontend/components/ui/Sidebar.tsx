@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   LogOut,
-  Lock
+  Lock,
+  LineChart
 } from 'lucide-react'
 
 // Day 25: Role-Based Access Control
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { label: 'Menu', href: '/menu', icon: <UtensilsCrossed size={20} /> },
   { label: 'Sales', href: '/sales', icon: <TrendingUp size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },
   { label: 'AI Insights', href: '/insights', icon: <Sparkles size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },  // Financial data - hide from STAFF
+  { label: 'Model Performance', href: '/model-performance', icon: <LineChart size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },
   { label: 'Settings', href: '/settings', icon: <Settings size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },  // Admin functions
 ]
 

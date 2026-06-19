@@ -1720,3 +1720,70 @@ async def get_daily_tip(
         )
 
 
+@router.get("/model-performance")
+async def get_model_performance(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns model performance backtesting metrics for the authenticated tenant:
+    - naive_mae
+    - xgboost_mae
+    - xgboost_rmse
+    - stability_ratio
+    - weeks: array of per-week backtest metrics
+    """
+    import os
+    import pandas as pd
+    import numpy as np
+    from fastapi import HTTPException, status
+    
+    tenant_id = current_user.tenant_id
+    
+    # Try tenant-isolated path first, then fall back to global reports/backtest.csv only for tenant 1
+    report_path = os.path.join("reports", str(tenant_id), "backtest.csv")
+    if not os.path.exists(report_path) and tenant_id == 1:
+        report_path = os.path.join("reports", "backtest.csv")
+        
+    if not os.path.exists(report_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No backtest data available. Run POST /ml/retrain to generate metrics."
+        )
+        
+    try:
+        df = pd.read_csv(report_path)
+        if df.empty:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Backtest report is empty. Run POST /ml/retrain to generate metrics."
+            )
+            
+        # Parse weeks
+        weeks = df.to_dict(orient="records")
+        
+        # Calculate summary statistics
+        naive_mae = float(df["naive_mae"].mean())
+        xgboost_mae = float(df["xgb_mae"].mean())
+        xgboost_rmse = float(df["xgb_rmse"].mean())
+        
+        xgb_maes = df["xgb_mae"].values
+        mean_mae = float(np.mean(xgb_maes))
+        std_mae = float(np.std(xgb_maes))
+        stability_ratio = std_mae / mean_mae if mean_mae > 0 else 0.0
+        
+        return {
+            "status": "success",
+            "naive_mae": round(naive_mae, 2),
+            "xgboost_mae": round(xgboost_mae, 2),
+            "xgboost_rmse": round(xgboost_rmse, 2),
+            "stability_ratio": round(stability_ratio, 4),
+            "weeks": weeks
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load performance metrics: {str(e)}"
+        )
+
+

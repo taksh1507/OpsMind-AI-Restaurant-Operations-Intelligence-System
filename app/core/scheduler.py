@@ -93,6 +93,17 @@ async def check_and_retrain_tenants() -> None:
                     if forecast_res:
                         clear_forecast_model_cache(tenant_id)
                         logger.info(f"Forecast model retrained successfully for tenant {tenant_id}.")
+                        
+                        # Generate backtest report
+                        try:
+                            from app.ml.backtest import run_backtest
+                            results_df, _, _, _ = await run_backtest(tenant_id=tenant_id, session=session, num_weeks=8)
+                            report_dir = os.path.join("reports", str(tenant_id))
+                            os.makedirs(report_dir, exist_ok=True)
+                            results_df.to_csv(os.path.join(report_dir, "backtest.csv"), index=False)
+                            logger.info(f"Generated backtest report for tenant {tenant_id}.")
+                        except Exception as e_bt:
+                            logger.error(f"Failed to generate scheduled backtest report for tenant {tenant_id}: {e_bt}")
                     else:
                         logger.warning(f"Forecast model training skipped or returned no data for tenant {tenant_id}.")
                         

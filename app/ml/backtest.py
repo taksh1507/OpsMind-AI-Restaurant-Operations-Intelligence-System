@@ -25,79 +25,89 @@ from app.ml.train_forecast import encode_weather
 from app.core.math_utils import forecast_next_values
 
 
-async def run_backtest(csv_path: str, tenant_id: int = 1, num_weeks: int = 8) -> tuple[pd.DataFrame, float, float, bool]:
+async def run_backtest(
+    csv_path: str = "tests/data/kaggle_restaurant_sales.csv",
+    tenant_id: int = 1,
+    num_weeks: int = 8,
+    session: AsyncSession = None
+) -> tuple[pd.DataFrame, float, float, bool]:
     """Perform rolling-window backtesting over the specified number of weeks.
     
     Args:
-        csv_path: Path to the sales CSV dataset
+        csv_path: Path to the sales CSV dataset (only used if session is None)
         tenant_id: Target tenant ID
         num_weeks: Number of weeks to backtest (default: 8)
+        session: Active database session (if None, memory SQLite is created and seeded)
         
     Returns:
         tuple of (results_df, mean_mae, std_mae, passed_stability)
     """
-    if not os.path.exists(csv_path):
-        raise FileNotFoundError(f"CSV file not found at: {csv_path}")
-
-    print("Initializing backtest database...")
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        poolclass=StaticPool,
-        future=True,
-    )
-    
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
-    async_session = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-    
-    async with async_session() as session:
-        print("Seeding database...")
-        tenant = Tenant(
-            id=tenant_id,
-            tenant_id=f"restaurant-{tenant_id}",
-            name=f"Restaurant {tenant_id}",
-            subscription_status=SubscriptionStatus.ACTIVE
-        )
-        session.add(tenant)
-        await session.commit()
-        
-        csv_df = pd.read_csv(csv_path)
-        grouped_sales = csv_df.groupby("date")
-        
-        for date_str, group in grouped_sales:
-            dt = datetime.strptime(date_str, "%Y-%m-%d")
-            total_amount = sum(row["quantity"] * row["unit_price"] for _, row in group.iterrows())
-            
-            sale = Sale(
-                tenant_id=tenant_id,
-                total_amount=Decimal(str(round(total_amount, 2))),
-                tax_amount=Decimal("0.00"),
-                payment_method=PaymentMethod.CASH,
-                timestamp=dt
-            )
-            session.add(sale)
-            await session.flush()
-            
-            for _, row in group.iterrows():
-                sale_item = SaleItem(
-                    tenant_id=tenant_id,
-                    sale_id=sale.id,
-                    menu_item_id=int(row["item_id"]),
-                    quantity=int(row["quantity"]),
-                    unit_price_at_sale=Decimal(str(row["unit_price"]))
-                )
-                session.add(sale_item)
-                
-        await session.commit()
-        
-        print("Extracting full feature set...")
+    if session is not None:
+        print("Extracting full feature set from active DB session...")
         df = await build_training_frame(tenant_id=tenant_id, session=session)
+    else:
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(f"CSV file not found at: {csv_path}")
+
+        print("Initializing backtest database...")
+        engine = create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            poolclass=StaticPool,
+            future=True,
+        )
         
-    await engine.dispose()
-    
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            
+        async_session = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+        
+        async with async_session() as temp_session:
+            print("Seeding database...")
+            tenant = Tenant(
+                id=tenant_id,
+                tenant_id=f"restaurant-{tenant_id}",
+                name=f"Restaurant {tenant_id}",
+                subscription_status=SubscriptionStatus.ACTIVE
+            )
+            temp_session.add(tenant)
+            await temp_session.commit()
+            
+            csv_df = pd.read_csv(csv_path)
+            grouped_sales = csv_df.groupby("date")
+            
+            for date_str, group in grouped_sales:
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+                total_amount = sum(row["quantity"] * row["unit_price"] for _, row in group.iterrows())
+                
+                sale = Sale(
+                    tenant_id=tenant_id,
+                    total_amount=Decimal(str(round(total_amount, 2))),
+                    tax_amount=Decimal("0.00"),
+                    payment_method=PaymentMethod.CASH,
+                    timestamp=dt
+                )
+                temp_session.add(sale)
+                await temp_session.flush()
+                
+                for _, row in group.iterrows():
+                    sale_item = SaleItem(
+                        tenant_id=tenant_id,
+                        sale_id=sale.id,
+                        menu_item_id=int(row["item_id"]),
+                        quantity=int(row["quantity"]),
+                        unit_price_at_sale=Decimal(str(row["unit_price"]))
+                    )
+                    temp_session.add(sale_item)
+                    
+            await temp_session.commit()
+            
+            print("Extracting full feature set...")
+            df = await build_training_frame(tenant_id=tenant_id, session=temp_session)
+            
+        await engine.dispose()
+        
     if df.empty:
         raise ValueError("Feature engineering pipeline returned no data.")
 
