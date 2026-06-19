@@ -24,7 +24,8 @@ def train_customer_segmentation(
     df_features: pd.DataFrame,
     tenant_id: int,
     model_dir: str = "models",
-    version: int = None
+    version: int = None,
+    reason: str = "manual"
 ) -> Dict[str, Any]:
     """Train customer segmentation model using K-Means and save it.
     
@@ -156,7 +157,7 @@ def train_customer_segmentation(
     joblib.dump(model_data, model_path)
     
     # Update manifest
-    update_manifest(tenant_id, "segmentation", filename)
+    update_manifest(tenant_id, "segmentation", filename, reason=reason)
     
     return {
         "status": "success",

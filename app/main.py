@@ -25,10 +25,19 @@ async def lifespan(app: FastAPI):
     await init_db(settings.database_url)
     print("✅ Database initialized")
     
+    # Start automated retraining scheduler
+    from app.core.scheduler import start_scheduler
+    start_scheduler()
+    
     yield
     
     # Shutdown
     print("🛑 Shutting down...")
+    
+    # Shutdown scheduler
+    from app.core.scheduler import shutdown_scheduler
+    await shutdown_scheduler()
+    
     await close_db()
     print("✅ Database closed")
 

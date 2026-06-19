@@ -46,7 +46,8 @@ async def train_model(
     csv_path: str = "tests/data/kaggle_restaurant_sales.csv",
     tenant_id: int = 1,
     session: AsyncSession = None,
-    version: int = None
+    version: int = None,
+    reason: str = "manual"
 ) -> dict:
     """Seed DB (if session not provided), build training frame, train XGBoost model, evaluate, and save.
     
@@ -199,7 +200,7 @@ async def train_model(
     joblib.dump(model, model_path)
     
     # Update manifest
-    update_manifest(tenant_id, "forecast", filename)
+    update_manifest(tenant_id, "forecast", filename, reason=reason)
     
     print("-" * 55)
     print(f"Successfully saved trained model to: {model_path}")

@@ -82,6 +82,12 @@ class Settings(BaseSettings):
         description="Enable weather-aware reasoning in AI agent"
     )
     
+    # ===== RETRAINING CONFIGURATION =====
+    retrain_cron: str = Field(
+        default="0 2 * * 0",
+        description="Cron expression for automated model retraining (default: Sunday 2 AM)"
+    )
+    
     # ===== SECURITY & VALIDATION =====
     def validate_production_settings(self):
         """Validate that all critical secrets are set in production."""

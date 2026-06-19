@@ -34,13 +34,14 @@ def get_next_version(tenant_id: int, model_type: str) -> int:
             
     return max_v + 1
 
-def update_manifest(tenant_id: int, model_type: str, filename: str) -> dict:
+def update_manifest(tenant_id: int, model_type: str, filename: str, reason: str = "manual") -> dict:
     """Update and write manifest.json for the specified tenant and model type.
     
     Args:
         tenant_id: Tenant identifier
         model_type: 'forecast' or 'segmentation'
         filename: Name of the newly saved model file (e.g. forecast_v2.pkl)
+        reason: Why the retraining was triggered (e.g. 'manual', 'scheduled')
         
     Returns:
         dict: The updated manifest data
@@ -59,6 +60,7 @@ def update_manifest(tenant_id: int, model_type: str, filename: str) -> dict:
             
     manifest[model_type] = filename
     manifest["last_trained"] = datetime.now(timezone.utc).isoformat()
+    manifest["retrain_reason"] = reason
     
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=4)
