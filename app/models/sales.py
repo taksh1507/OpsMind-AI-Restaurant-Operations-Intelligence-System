@@ -76,9 +76,16 @@ class Sale(BaseModel):
         index=True  # Index for time-based analytics queries
     )
     
+    customer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("customers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+    
     # Relationships
     tenant = relationship("Tenant", foreign_keys=[tenant_id])
     sale_items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
+    customer = relationship("Customer")
     
     def __repr__(self) -> str:
         return f"<Sale(id={self.id}, tenant_id={self.tenant_id}, total={self.total_amount}, timestamp={self.timestamp})>"
