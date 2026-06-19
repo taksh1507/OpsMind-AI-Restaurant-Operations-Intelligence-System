@@ -27,6 +27,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Profit Calculation** | ✅ | COGS → margin analysis per item |
 | **AI Strategy** | ✅ | Autonomous business recommendations via Gemini |
 | **Revenue Forecasting** | ✅ | 3-day predictive forecasts with confidence |
+| **ML Feature Engineering** | ✅ | Daily aggregation, time-series zero-padding, lag (1,7,14), rolling mean, weather simulation |
 | **Cost Intelligence** | ✅ | Waste detection & cost optimization |
 | **Customer Sentiment** | ✅ | AI analysis of reviews & reputation tracking |
 | **Labor Optimization** | ✅ | Staffing heatmap & efficiency analysis |
@@ -344,6 +345,7 @@ graph TB
 - Predicts next 3 days of sales with confidence scores
 - Analyzes daily sales trends
 - Ranks top-performing menu items
+- **Feature Engineering Pipeline:** Time-series feature builder (`build_training_frame`) preparing lag revenue (1, 7, 14 days), rolling averages (7, 14 days), calendar components, and weather context.
 - **Endpoint:** `GET /analytics/forecast`
 
 ### **3. Stomach — Cost Analyst**
@@ -668,6 +670,9 @@ This CI/CD setup demonstrates:
 # Backend linting & formatting checks
 flake8 app
 black app --check
+
+# Run unit & integration tests
+python -m pytest tests -v
 
 # Frontend linting
 cd frontend && npm run lint
