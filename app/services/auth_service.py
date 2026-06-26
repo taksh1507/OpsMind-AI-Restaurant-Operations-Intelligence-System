@@ -8,7 +8,7 @@ import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.models import Tenant, User, SubscriptionStatus
+from app.models import Tenant, User, SubscriptionStatus, UserRole
 from app.core import hash_password, verify_password, create_access_token
 from app.models.schemas import RegisterRequest
 
@@ -79,7 +79,8 @@ async def register_user(
         email=request.email,
         hashed_password=hashed_password,
         is_active=True,
-        is_admin=True  # First user is admin
+        is_admin=True,  # First user is admin
+        role=UserRole.OWNER
     )
     session.add(user)
     
@@ -88,7 +89,8 @@ async def register_user(
         data={
             "sub": user.email,
             "user_id": user.id,
-            "tenant_id": tenant.id
+            "tenant_id": tenant.id,
+            "role": UserRole.OWNER.value
         }
     )
     

@@ -225,7 +225,8 @@ async def seed_database():
                 email=DEMO_EMAIL,
                 hashed_password=hash_password_proper(DEMO_PASSWORD),
                 is_active=True,
-                is_admin=True
+                is_admin=True,
+                role=UserRole.OWNER
             )
             session.add(user)
             await session.flush()

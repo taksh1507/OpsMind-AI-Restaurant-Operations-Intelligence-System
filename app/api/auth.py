@@ -85,7 +85,8 @@ async def login(
         data={
             "sub": user.email,
             "user_id": user.id,
-            "tenant_id": user.tenant_id
+            "tenant_id": user.tenant_id,
+            "role": user.role.value
         }
     )
     
