@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>OpsMind AI 🚀</h1>
+  <h1>OpsMind AI</h1>
   <p><strong>Restaurant Operations Intelligence System</strong></p>
   <p><i>Powered by Multi-Tenant SaaS Architecture & Agentic AI</i></p>
 
@@ -14,37 +14,37 @@
 
 ---
 
-## 🎯 Vision
+## Vision
 
 OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and operators to harness data-driven intelligence for real-time operational optimization. Using a multi-tenant architecture, advanced analytics, and autonomous AI agents, we empower restaurants to:
 
-- 📊 **Track Operations in Real-Time** — Monitor sales, inventory, and staffing with zero latency.
-- 🤖 **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Gemini provides narrative reasoning.
-- 💡 **Generate AI Insights** — Intelligent recommendations for pricing, labor, and menu optimization.
-- 📈 **Forecast Revenue** — Predictive analytics for 3-day revenue forecasting.
-- 💰 **Optimize Pricing** — Simulate price changes and analyze their impact on margins.
+- **Track Operations in Real-Time** — Monitor sales, inventory, and staffing with zero latency.
+- **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Gemini provides narrative reasoning.
+- **Generate AI Insights** — Intelligent recommendations for pricing, labor, and menu optimization.
+- **Forecast Revenue** — Predictive analytics for 3-day revenue forecasting.
+- **Optimize Pricing** — Simulate price changes and analyze their impact on margins.
 
 ---
 
-## ✨ Core Capabilities
+## Core Capabilities
 
-### 🏢 Enterprise Multi-Tenancy
+### Enterprise Multi-Tenancy
 - **Isolated Data Architecture:** Secure JWT-based authentication ensuring complete data isolation per restaurant.
 - **Role-Based Access Control (RBAC):** Three-tier hierarchy (OWNER, MANAGER, STAFF) with strict permission guards.
 
-### 🧠 Hybrid AI Intelligence
+### Hybrid AI Intelligence
 - **Revenue Forecaster (XGBoost):** Predicts the next 3 days of sales with confidence scores grounded in statistical trend analysis.
 - **Customer Sentiment Engine (scikit-learn):** Processes customer feedback locally using TF-IDF and Logistic Regression.
 - **Strategy Agent (Gemini 1.5):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
 
-### 🎨 "The Pass" Design System
+### "The Pass" Design System
 - **Enterprise-Grade Dashboard:** Next.js frontend featuring the custom "The Pass" design aesthetic.
 - **Dynamic CSS Variables:** Deep slate backgrounds, electric blue accents, and sharp ticket-style cards for a premium feel.
 - **Real-Time Data Visualization:** Dual-series AreaCharts and BarCharts built with Recharts.
 
 ---
 
-## 💾 Tech Stack
+## Tech Stack
 
 | Domain | Technology | Description |
 |--------|-----------|-------------|
@@ -58,26 +58,26 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 
 ---
 
-## 🔗 Full-Stack Architecture Flow
+## Full-Stack Architecture Flow
 
 ```mermaid
 graph TB
-    User["👤 Restaurant Owner<br/>(Web/Mobile Client)"]
-    Auth["🔐 JWT Authentication"]
-    FastAPI["⚡ FastAPI Backend"]
+    User["Restaurant Owner<br/>(Web/Mobile Client)"]
+    Auth["JWT Authentication"]
+    FastAPI["FastAPI Backend"]
     
     subgraph Core Services
-        Menu["🍽️ Menu Management"]
-        Sales["💳 Sales Tracking"]
-        Analytics["📊 Analytics Engine"]
+        Menu["Menu Management"]
+        Sales["Sales Tracking"]
+        Analytics["Analytics Engine"]
     end
     
-    Database["🗄️ PostgreSQL/SQLite<br/>(Multi-Tenant Data)"]
+    Database["PostgreSQL/SQLite<br/>(Multi-Tenant Data)"]
     
     subgraph Intelligence Layer
-        XGB["📈 XGBoost (Forecasting)"]
-        Sklearn["⭐ scikit-learn (Sentiment)"]
-        Gemini["🤖 Google Gemini 1.5"]
+        XGB["XGBoost (Forecasting)"]
+        Sklearn["scikit-learn (Sentiment)"]
+        Gemini["Google Gemini 1.5"]
     end
     
     User -->|OAuth/Request| Auth
@@ -91,7 +91,7 @@ graph TB
 
 ---
 
-## 🗄️ Database Schema
+## Database Schema
 
 The system uses a robust 12-table relational schema. **All tables are strictly scoped by `tenant_id` for complete data isolation.**
 
@@ -110,7 +110,7 @@ The system uses a robust 12-table relational schema. **All tables are strictly s
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Backend Setup
 
@@ -173,7 +173,7 @@ CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
 
 ---
 
-## 📈 Model Performance & Evaluation
+## Model Performance & Evaluation
 
 OpsMind AI features a comprehensive model backtesting pipeline that continuously measures the XGBoost forecaster performance against a naive baseline over a rolling 8-week window.
 
@@ -184,7 +184,7 @@ OpsMind AI features a comprehensive model backtesting pipeline that continuously
 
 ---
 
-## 💻 Local Quality Checks
+## Local Quality Checks
 
 Maintain high code quality with our standardized local checks:
 
@@ -202,7 +202,7 @@ cd frontend && npm run lint
 
 ---
 
-## 📄 License & Contributing
+## License & Contributing
 
 This project is licensed under the **MIT License** — See the [LICENSE](LICENSE) file for details.
 
@@ -215,6 +215,6 @@ This project is licensed under the **MIT License** — See the [LICENSE](LICENSE
 ---
 
 <div align="center">
-  <p>Built with ❤️ by <a href="https://github.com/taksh1507">Taksh Gandhi</a></p>
+  <p>Built by <a href="https://github.com/taksh1507">Taksh Gandhi</a></p>
   <p>Contact: taskshgandhi4@gmail.com</p>
 </div>
