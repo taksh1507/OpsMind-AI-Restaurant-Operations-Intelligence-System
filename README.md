@@ -66,7 +66,7 @@ graph TB
     Auth["JWT Authentication"]
     FastAPI["FastAPI Backend"]
     
-    subgraph Core Services
+    subgraph CoreServices [Core Services]
         Menu["Menu Management"]
         Sales["Sales Tracking"]
         Analytics["Analytics Engine"]
@@ -74,7 +74,7 @@ graph TB
     
     Database["PostgreSQL/SQLite<br/>(Multi-Tenant Data)"]
     
-    subgraph Intelligence Layer
+    subgraph IntelligenceLayer [Intelligence Layer]
         XGB["XGBoost (Forecasting)"]
         Sklearn["scikit-learn (Sentiment)"]
         Gemini["Google Gemini 1.5"]
@@ -82,10 +82,10 @@ graph TB
     
     User -->|OAuth/Request| Auth
     Auth -->|Validated| FastAPI
-    FastAPI --> Core Services
-    Core Services <--> Database
-    Analytics --> Intelligence Layer
-    Intelligence Layer -->|Insights & Strategy| Analytics
+    FastAPI --> CoreServices
+    CoreServices <--> Database
+    Analytics --> IntelligenceLayer
+    IntelligenceLayer -->|Insights & Strategy| Analytics
     Analytics -->|JSON Response| User
 ```
 
