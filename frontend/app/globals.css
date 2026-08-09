@@ -1,21 +1,26 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
-/* Deep Slate & Electric Blue Dark Mode Theme */
+/* "The Pass" — Kitchen Ticket Rail Theme */
 :root {
-  --background: #030712;
-  --foreground: #f0f9ff;
-  --slate-900: #111827;
-  --slate-800: #1f2937;
-  --slate-700: #374151;
-  --electric-500: #0ea5e9;
-  --electric-600: #0284c7;
+  --background: #1A1613;
+  --foreground: #F0E6D2;
+  --surface: #241F1B;
+  --surface-2: #2C2621;
+  --line: #3A322B;
+  --accent: #C77D3F;
+  --accent-dim: #8f5a2c;
+  --cream-dim: #B8A88C;
+  --success: #7A9471;
+  --alert: #C1442E;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-slate: var(--slate-900);
-  --color-electric: var(--electric-500);
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 }
 
 html {
@@ -27,8 +32,60 @@ html.dark {
 }
 
 body {
-  background: linear-gradient(135deg, #030712 0%, #0c1825 100%);
+  background: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  transition: background-color 0.3s ease;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+h1, h2, h3, .font-display {
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.font-mono, .font-data {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Ticket perforation top edge, used on stat cards */
+.ticket-perf::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  border-top: 2px dashed var(--line);
+}
+
+/* Stamp badge, replaces the old glow pill */
+.stamp {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 2px;
+  transform: rotate(-3deg);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.stamp-up {
+  color: var(--success);
+  border: 1.5px solid var(--success);
+  background: rgba(122, 148, 113, 0.08);
+}
+.stamp-down {
+  color: var(--alert);
+  border: 1.5px solid var(--alert);
+  background: rgba(193, 68, 46, 0.08);
+}
+
+/* Ticket-print entrance animation for new/urgent items */
+@keyframes ticket-print {
+  from { transform: scaleY(0); opacity: 0; transform-origin: top; }
+  to { transform: scaleY(1); opacity: 1; transform-origin: top; }
+}
+.animate-ticket-print {
+  animation: ticket-print 0.25s ease-out;
 }

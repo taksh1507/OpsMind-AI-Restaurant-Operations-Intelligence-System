@@ -19,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full scroll-smooth">
-      <body className="h-full bg-slate-950 text-slate-50 overflow-hidden">
+      <body className="h-full bg-slate-950 text-slate-50 overflow-hidden font-body">
         <Layout>{children}</Layout>
       </body>
     </html>
