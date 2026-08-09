@@ -107,18 +107,18 @@ export function CommandMenu() {
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 "
         onClick={() => setOpen(false)}
       />
 
       {/* Command Menu */}
-      <div className="relative w-full max-w-2xl mx-4 shadow-2xl rounded-lg border border-line bg-surface">
+      <div className="relative w-full max-w-2xl mx-4 shadow-2xl rounded-[3px] border border-line bg-surface">
         <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-cream-dim [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group]:overflow-hidden [&_[cmdk-group]]:px-1.5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
           <div className="flex items-center border-b border-line px-4 py-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <Command.Input
               placeholder="Search menu, staff, or navigate..."
-              className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-cream-dim text-foreground"
+              className="flex h-11 w-full rounded-[3px] bg-transparent py-3 text-sm outline-none placeholder:text-cream-dim text-foreground"
               onValueChange={handleSearch}
             />
           </div>

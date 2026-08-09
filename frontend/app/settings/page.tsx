@@ -7,7 +7,7 @@ export default function SettingsPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="border-b border-accent/20 pb-6">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-50 to-electric-300 bg-clip-text text-transparent mb-2 flex items-center gap-3">
+        <h1 className="font-display text-4xl font-bold text-foreground mb-1 flex items-center gap-3">
           <Settings size={32} className="text-accent" />
           Settings
         </h1>
@@ -19,20 +19,20 @@ export default function SettingsPage() {
       {/* Settings Sections */}
       <div className="space-y-6">
         {/* Restaurant Info */}
-        <div className="p-6 rounded-xl border border-accent/30 bg-surface-2/30 backdrop-blur-sm">
+        <div className="ticket-perf relative p-6 rounded-[3px] border border-line bg-surface ">
           <h2 className="text-lg font-semibold text-foreground mb-4">Restaurant Information</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-cream-dim mb-2">Restaurant Name</label>
+              <label className="block text-sm font-display font-semibold tracking-wide text-cream-dim mb-2">Restaurant Name</label>
               <input
                 type="text"
                 defaultValue="La Bella Italia"
-                className="w-full px-4 py-2 rounded-lg bg-surface/50 border border-line text-foreground focus:border-accent focus:outline-none transition-colors"
+                className="w-full px-4 py-2 rounded-[3px] bg-surface border border-line text-foreground focus:border-accent focus:outline-none transition-colors"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-cream-dim mb-2">Timezone</label>
-              <select className="w-full px-4 py-2 rounded-lg bg-surface/50 border border-line text-foreground focus:border-accent focus:outline-none transition-colors">
+              <label className="block text-sm font-display font-semibold tracking-wide text-cream-dim mb-2">Timezone</label>
+              <select className="w-full px-4 py-2 rounded-[3px] bg-surface border border-line text-foreground focus:border-accent focus:outline-none transition-colors">
                 <option>America/New_York (EST)</option>
                 <option>America/Chicago (CST)</option>
                 <option>America/Los_Angeles (PST)</option>
@@ -42,7 +42,7 @@ export default function SettingsPage() {
         </div>
 
         {/* API Configuration */}
-        <div className="p-6 rounded-xl border border-accent/30 bg-surface-2/30 backdrop-blur-sm">
+        <div className="ticket-perf relative p-6 rounded-[3px] border border-line bg-surface ">
           <h2 className="text-lg font-semibold text-foreground mb-4">AI Configuration</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -67,9 +67,9 @@ export default function SettingsPage() {
         </div>
 
         {/* Danger Zone */}
-        <div className="p-6 rounded-xl border border-red-500/30 bg-red-900/10 backdrop-blur-sm">
+        <div className="p-6 rounded-[3px] border border-red-500/30 bg-red-900/10 ">
           <h2 className="text-lg font-semibold text-red-300 mb-4">Danger Zone</h2>
-          <button className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors font-medium">
+          <button className="px-4 py-2 rounded-[3px] bg-red-600 hover:bg-red-700 text-white transition-colors font-medium">
             Delete Account
           </button>
           <p className="text-red-300/70 text-sm mt-2">This action cannot be undone.</p>

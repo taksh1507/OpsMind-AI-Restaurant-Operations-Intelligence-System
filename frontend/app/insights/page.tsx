@@ -8,7 +8,7 @@ export default function InsightsPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="border-b border-accent/20 pb-6">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-50 to-electric-300 bg-clip-text text-transparent mb-2 flex items-center gap-3">
+        <h1 className="font-display text-4xl font-bold text-foreground mb-1 flex items-center gap-3">
           <Sparkles size={32} className="text-accent" />
           AI Insights
         </h1>
@@ -37,8 +37,11 @@ export default function InsightsPage() {
 
       {/* AI Metrics */}
       <div>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Performance Metrics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Performance Metrics</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <StatCard
             title="Confidence Score"
             value="87%"
@@ -92,10 +95,10 @@ export default function InsightsPage() {
         ].map((rec, idx) => (
           <div
             key={idx}
-            className={`p-6 rounded-xl border backdrop-blur-sm transition-all hover:border-accent/60 ${
+            className={`p-6 rounded-[3px] border  transition-all hover:border-accent ${
               rec.priority === 'high'
                 ? 'border-red-500/30 bg-red-900/10'
-                : 'border-accent/30 bg-surface-2/30'
+                : 'border-line bg-surface'
             }`}
           >
             <div className="flex items-start justify-between mb-3">
@@ -118,7 +121,7 @@ export default function InsightsPage() {
                 {rec.impact}
               </span>
             </div>
-            <button className="mt-4 px-4 py-2 rounded-lg bg-electric-600/20 border border-accent/30 hover:bg-electric-600/30 text-electric-300 hover:text-electric-200 transition-colors text-sm font-medium">
+            <button className="mt-4 px-4 py-2 rounded-[3px] bg-electric-600/20 border border-line hover:bg-electric-600/30 text-electric-300 hover:text-electric-200 transition-colors text-sm font-display font-semibold tracking-wide">
               View Details â†’
             </button>
           </div>

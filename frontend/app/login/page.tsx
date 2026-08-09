@@ -77,14 +77,14 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md">
         <div className="relative">
           {/* Glowing border effect */}
-          <div className="absolute -inset-[2px] bg-gradient-to-r from-accent/20 via-transparent to-accent/20 rounded-2xl blur-lg opacity-0 transition-opacity duration-500" />
+          <div className="absolute -inset-[2px] bg-accent/10 rounded-[3px] blur-lg opacity-0 transition-opacity duration-500" />
 
           {/* Main card */}
-          <div className="relative bg-surface/50 backdrop-blur-xl border border-accent/20 rounded-2xl p-8 shadow-2xl">
+          <div className="relative bg-surface  border border-accent/20 rounded-[3px] p-8 shadow-2xl">
             {/* Header */}
             <div className="text-center mb-8">
               <div className="flex justify-center mb-4">
-                <div className="p-3 bg-accent/10 rounded-lg border border-accent/20">
+                <div className="p-3 bg-accent/10 rounded-[3px] border border-accent/20">
                   <LogIn className="text-accent" size={32} />
                 </div>
               </div>
@@ -96,7 +96,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4 mb-6">
               {/* Email Input */}
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-cream-dim mb-2">
+                <label htmlFor="email" className="block text-sm font-display font-semibold tracking-wide text-cream-dim mb-2">
                   Email Address
                 </label>
                 <input
@@ -109,13 +109,13 @@ export default function LoginPage() {
                   }}
                   placeholder="demo@aurora-kitchen.com"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-[3px] text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Password Input */}
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-cream-dim mb-2">
+                <label htmlFor="password" className="block text-sm font-display font-semibold tracking-wide text-cream-dim mb-2">
                   Password
                 </label>
                 <input
@@ -128,13 +128,13 @@ export default function LoginPage() {
                   }}
                   placeholder="Enter your password"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-[3px] text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Error Message */}
               {error && (
-                <div className="p-3 rounded-lg border border-red-500/30 bg-red-900/10 flex items-start gap-2">
+                <div className="p-3 rounded-[3px] border border-red-500/30 bg-red-900/10 flex items-start gap-2">
                   <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={18} />
                   <p className="text-red-300 text-sm">{error}</p>
                 </div>
@@ -142,8 +142,8 @@ export default function LoginPage() {
 
               {/* Success Message */}
               {isSuccess && (
-                <div className="p-3 rounded-lg border border-green-500/30 bg-green-900/10">
-                  <p className="text-green-300 text-sm font-medium">✅ Login successful! Redirecting...</p>
+                <div className="p-3 rounded-[3px] border border-green-500/30 bg-green-900/10">
+                  <p className="text-green-300 text-sm font-display font-semibold tracking-wide">✅ Login successful! Redirecting...</p>
                 </div>
               )}
 
@@ -151,7 +151,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading || isSuccess}
-                className="w-full py-3 px-4 bg-accent hover:bg-accent-dim text-background font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-accent/25"
+                className="w-full py-3 px-4 bg-accent hover:bg-accent-dim text-background font-semibold rounded-[3px] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-accent/25"
               >
                 {isLoading ? (
                   <>
@@ -172,7 +172,7 @@ export default function LoginPage() {
             </form>
 
             {/* Demo Credentials */}
-            <div className="p-4 rounded-lg bg-accent/5 border border-accent/20">
+            <div className="p-4 rounded-[3px] bg-accent/5 border border-accent/20">
               <p className="text-cream-dim text-sm mb-2 font-medium">Demo Credentials:</p>
               <div className="space-y-1 text-cream-dim text-sm font-mono">
                 <p>📧 demo@aurora-kitchen.com</p>

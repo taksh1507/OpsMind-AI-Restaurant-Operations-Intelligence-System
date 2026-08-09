@@ -87,14 +87,14 @@ export default function RegisterPage() {
       <div className="relative w-full max-w-md">
         <div className="relative">
           {/* Glowing border effect */}
-          <div className="absolute -inset-[2px] bg-gradient-to-r from-accent/20 via-transparent to-accent/20 rounded-2xl blur-lg opacity-0 transition-opacity duration-500" />
+          <div className="absolute -inset-[2px] bg-accent/10 rounded-[3px] blur-lg opacity-0 transition-opacity duration-500" />
 
           {/* Main card */}
-          <div className="relative bg-surface/50 backdrop-blur-xl border border-accent/20 rounded-2xl p-8 shadow-2xl">
+          <div className="relative bg-surface  border border-accent/20 rounded-[3px] p-8 shadow-2xl">
             {/* Header */}
             <div className="text-center mb-8">
               <div className="flex justify-center mb-4">
-                <div className="p-3 bg-accent/10 rounded-lg border border-accent/20">
+                <div className="p-3 bg-accent/10 rounded-[3px] border border-accent/20">
                   <UserPlus className="text-accent" size={32} />
                 </div>
               </div>
@@ -106,7 +106,7 @@ export default function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-4 mb-6">
               {/* Full Name Input */}
               <div>
-                <label htmlFor="fullName" className="block text-sm font-medium text-cream-dim mb-2">
+                <label htmlFor="fullName" className="block text-sm font-display font-semibold tracking-wide text-cream-dim mb-2">
                   Full Name (Optional)
                 </label>
                 <input
@@ -119,13 +119,13 @@ export default function RegisterPage() {
                   }}
                   placeholder="John Doe"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-[3px] text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Restaurant Name Input */}
               <div>
-                <label htmlFor="restaurantName" className="block text-sm font-medium text-cream-dim mb-2">
+                <label htmlFor="restaurantName" className="block text-sm font-display font-semibold tracking-wide text-cream-dim mb-2">
                   Restaurant Name (Optional)
                 </label>
                 <input
@@ -138,13 +138,13 @@ export default function RegisterPage() {
                   }}
                   placeholder="Aurora's Kitchen"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-[3px] text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Email Input */}
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-cream-dim mb-2">
+                <label htmlFor="email" className="block text-sm font-display font-semibold tracking-wide text-cream-dim mb-2">
                   Email Address
                 </label>
                 <input
@@ -157,13 +157,13 @@ export default function RegisterPage() {
                   }}
                   placeholder="your.email@restaurant.com"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-[3px] text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Password Input */}
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-cream-dim mb-2">
+                <label htmlFor="password" className="block text-sm font-display font-semibold tracking-wide text-cream-dim mb-2">
                   Password (min 8 characters)
                 </label>
                 <input
@@ -176,13 +176,13 @@ export default function RegisterPage() {
                   }}
                   placeholder="Enter a strong password"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-[3px] text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Error Message */}
               {error && (
-                <div className="p-3 rounded-lg border border-red-500/30 bg-red-900/10 flex items-start gap-2">
+                <div className="p-3 rounded-[3px] border border-red-500/30 bg-red-900/10 flex items-start gap-2">
                   <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={18} />
                   <p className="text-red-300 text-sm">{error}</p>
                 </div>
@@ -190,8 +190,8 @@ export default function RegisterPage() {
 
               {/* Success Message */}
               {isSuccess && (
-                <div className="p-3 rounded-lg border border-green-500/30 bg-green-900/10">
-                  <p className="text-green-300 text-sm font-medium">✅ Account created! Redirecting...</p>
+                <div className="p-3 rounded-[3px] border border-green-500/30 bg-green-900/10">
+                  <p className="text-green-300 text-sm font-display font-semibold tracking-wide">✅ Account created! Redirecting...</p>
                 </div>
               )}
 
@@ -199,7 +199,7 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={isLoading || isSuccess}
-                className="w-full py-3 px-4 bg-accent hover:bg-accent-dim text-background font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-accent/25"
+                className="w-full py-3 px-4 bg-accent hover:bg-accent-dim text-background font-semibold rounded-[3px] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-accent/25"
               >
                 {isLoading ? (
                   <>

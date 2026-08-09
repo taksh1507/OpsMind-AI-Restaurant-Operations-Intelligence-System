@@ -8,7 +8,7 @@ export default function SalesPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="border-b border-accent/20 pb-6">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-50 to-electric-300 bg-clip-text text-transparent mb-2 flex items-center gap-3">
+        <h1 className="font-display text-4xl font-bold text-foreground mb-1 flex items-center gap-3">
           <BarChart3 size={32} className="text-accent" />
           Sales Analytics
         </h1>
@@ -18,7 +18,7 @@ export default function SalesPage() {
       </div>
 
       {/* Sales KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Weekly Revenue"
           value="$28,450"
@@ -50,10 +50,11 @@ export default function SalesPage() {
       </div>
 
       {/* Hourly Sales Trend */}
-      <div className="p-6 rounded-xl border border-accent/30 bg-surface-2/30 backdrop-blur-sm">
-        <h2 className="text-xl font-semibold text-foreground mb-6">
-          Today's Hourly Performance
-        </h2>
+      <div className="ticket-perf relative p-6 rounded-[3px] border border-line bg-surface ">
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Today's Hourly Performance</h2>
+        </div>
         <div className="space-y-4">
           {Array.from({ length: 8 }).map((_, idx) => {
             const hour = 10 + idx
@@ -65,9 +66,9 @@ export default function SalesPage() {
                   <span className="text-cream-dim">{hour}:00 - {hour + 1}:00</span>
                   <span className="text-accent font-semibold">${sales}</span>
                 </div>
-                <div className="w-full bg-surface/50 rounded-full h-2 overflow-hidden border border-line">
+                <div className="w-full bg-surface rounded-full h-2 overflow-hidden border border-line">
                   <div
-                    className="h-full bg-gradient-to-r from-electric-500 to-electric-400 transition-all duration-500"
+                    className="h-full bg-accent transition-all duration-500"
                     style={{ width: `${percentage}%` }}
                   />
                 </div>

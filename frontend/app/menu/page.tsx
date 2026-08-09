@@ -15,7 +15,7 @@ export default function MenuPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="border-b border-accent/20 pb-6">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-50 to-electric-300 bg-clip-text text-transparent mb-2 flex items-center gap-3">
+        <h1 className="font-display text-4xl font-bold text-foreground mb-1 flex items-center gap-3">
           <UtensilsCrossed size={32} className="text-accent" />
           Menu Management
         </h1>
@@ -25,7 +25,7 @@ export default function MenuPage() {
       </div>
 
       {/* Menu Categories Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {menuCategories.map((category) => (
           <StatCard
             key={category.name}
@@ -38,10 +38,11 @@ export default function MenuPage() {
       </div>
 
       {/* Menu Items Sample */}
-      <div className="p-6 rounded-xl border border-accent/30 bg-surface-2/30 backdrop-blur-sm">
-        <h2 className="text-xl font-semibold text-foreground mb-6">
-          Top Performing Items
-        </h2>
+      <div className="ticket-perf relative p-6 rounded-[3px] border border-line bg-surface ">
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Top Performing Items</h2>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -59,7 +60,7 @@ export default function MenuPage() {
                 { name: 'Caesar Salad', category: 'Appetizers', sales: 15, revenue: '$105' },
                 { name: 'Tiramisu', category: 'Desserts', sales: 22, revenue: '$176' },
               ].map((item, idx) => (
-                <tr key={idx} className="border-b border-line/50 hover:bg-surface-2/30 transition-colors">
+                <tr key={idx} className="border-b border-line/50 hover:bg-surface transition-colors">
                   <td className="py-3 px-4 text-foreground">{item.name}</td>
                   <td className="py-3 px-4 text-cream-dim">{item.category}</td>
                   <td className="py-3 px-4 text-right text-electric-300">{item.sales}</td>

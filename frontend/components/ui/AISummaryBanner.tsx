@@ -67,7 +67,7 @@ export function AISummaryBanner() {
 
   if (error) {
     return (
-      <div className="w-full bg-red-900/20 border border-red-500/30 rounded-xl p-6 backdrop-blur-sm">
+      <div className="w-full bg-red-900/20 border border-red-500/30 rounded-[3px] p-6 ">
         <div className="flex items-start gap-4">
           <AlertTriangle size={24} className="text-red-400 mt-1 flex-shrink-0" />
           <div className="flex-1">
@@ -80,11 +80,11 @@ export function AISummaryBanner() {
   }
 
   return (
-    <div className="w-full bg-gradient-to-r from-electric-900/40 to-electric-800/20 border border-accent/30 rounded-xl p-6 backdrop-blur-sm overflow-hidden">
+    <div className="w-full bg-surface ticket-perf border border-line rounded-[3px] p-6  overflow-hidden">
       {/* Animated background pulse */}
       <div className="absolute inset-0 -z-10">
         <div
-          className="absolute inset-0 bg-gradient-to-r from-electric-500/0 via-electric-500/10 to-electric-500/0 animate-pulse"
+          className="absolute inset-0 hidden"
           style={{
             animation: 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
           }}
@@ -95,12 +95,12 @@ export function AISummaryBanner() {
         {/* AI Icon with pulse animation */}
         <div className="relative flex-shrink-0">
           <div
-            className="absolute inset-0 bg-electric-400/20 rounded-lg blur-lg animate-pulse"
+            className="absolute inset-0 bg-electric-400/20 rounded-[3px] blur-lg animate-pulse"
             style={{
               animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }}
           />
-          <div className="relative bg-gradient-to-br from-electric-500 to-electric-600 rounded-lg p-3">
+          <div className="relative bg-surface ticket-perf rounded-[3px] p-3">
             {loading ? (
               <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (

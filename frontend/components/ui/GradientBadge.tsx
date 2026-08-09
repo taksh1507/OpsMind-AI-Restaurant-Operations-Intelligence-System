@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React from 'react'
 
@@ -9,17 +9,17 @@ interface GradientBadgeProps {
 
 export function GradientBadge({ label, type = 'info' }: GradientBadgeProps) {
   const typeStyles = {
-    success: 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-500/30 text-green-300',
-    warning: 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/30 text-yellow-300',
-    error: 'bg-gradient-to-r from-red-500/20 to-pink-500/20 border-red-500/30 text-red-300',
-    info: 'bg-gradient-to-r from-electric-500/20 to-blue-500/20 border-accent/30 text-electric-300',
+    success: 'bg-success/10 border-success/30 text-success',
+    warning: 'bg-warning/10 border-warning/30 text-warning',
+    error: 'bg-alert/10 border-alert/30 text-alert',
+    info: 'bg-accent/10 border-accent/30 text-accent',
   }
 
   return (
     <span
       className={`
-        inline-block px-3 py-1 rounded-full border text-xs font-semibold
-        transition-all duration-200 hover:shadow-lg
+        inline-block px-3 py-1 rounded-[3px] border text-xs font-display font-semibold tracking-wide
+        transition-colors hover:border-opacity-60
         ${typeStyles[type]}
       `}
     >

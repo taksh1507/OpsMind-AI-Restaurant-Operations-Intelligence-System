@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React from 'react'
 
@@ -12,19 +12,17 @@ export function ChartCard({ title, description, children }: ChartCardProps) {
   return (
     <div
       className={`
-        relative overflow-hidden rounded-xl p-6
-        bg-gradient-to-br from-slate-800/50 to-slate-900/50
-        border border-accent/30 hover:border-accent/60
-        transition-all duration-300
-        hover:shadow-glow-electric-md
-        group backdrop-blur-sm
+        ticket-perf relative overflow-hidden rounded-[3px] p-6
+        bg-surface border border-line hover:border-accent
+        transition-colors
+        group 
       `}
     >
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+        <h3 className="font-display text-lg font-bold tracking-wide text-foreground">{title}</h3>
         {description && (
-          <p className="text-xs text-cream-dim mt-1">{description}</p>
+          <p className="text-sm text-cream-dim mt-1">{description}</p>
         )}
       </div>
 
@@ -32,14 +30,6 @@ export function ChartCard({ title, description, children }: ChartCardProps) {
       <div className="relative z-10">
         {children}
       </div>
-
-      {/* Glow effect on hover */}
-      <div
-        className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.1) 0%, transparent 70%)',
-        }}
-      />
     </div>
   )
 }

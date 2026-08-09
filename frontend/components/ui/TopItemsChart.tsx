@@ -60,9 +60,9 @@ export function TopItemsChart() {
 
   if (loading) {
     return (
-      <div className="h-96 w-full bg-surface/30 border border-line/50 rounded-xl p-6 flex items-center justify-center">
+      <div className="h-96 w-full bg-surface/30 border border-line/50 rounded-[3px] p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-accent/30 border-t-electric-400 rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-line border-t-electric-400 rounded-full animate-spin" />
           <p className="text-cream-dim text-sm">Loading items data...</p>
         </div>
       </div>
@@ -71,7 +71,7 @@ export function TopItemsChart() {
 
   if (error || items.length === 0) {
     return (
-      <div className="h-96 w-full bg-surface/30 border border-line/50 rounded-xl p-6 flex items-center justify-center">
+      <div className="h-96 w-full bg-surface/30 border border-line/50 rounded-[3px] p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <AlertCircle size={24} className="text-red-400" />
           <p className="text-cream-dim">{error || 'No items data available'}</p>
@@ -102,8 +102,8 @@ export function TopItemsChart() {
     if (active && payload && payload.length) {
       const item = payload[0].payload
       return (
-        <div className="bg-surface/95 border border-accent/30 rounded-lg p-3 backdrop-blur-md">
-          <p className="text-cream-dim text-sm font-medium">{item.name}</p>
+        <div className="bg-surface/95 border border-line rounded-[3px] p-3 ">
+          <p className="text-cream-dim text-sm font-display font-semibold tracking-wide">{item.name}</p>
           <p className="text-electric-300 text-sm">
             Quantity Sold: <span className="font-bold">{item.quantity_sold}</span>
           </p>
@@ -120,7 +120,7 @@ export function TopItemsChart() {
   }
 
   return (
-    <div className="w-full bg-surface/30 border border-accent/20 rounded-xl p-6 backdrop-blur-sm">
+    <div className="w-full bg-surface/30 border border-accent/20 rounded-[3px] p-6 ">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
           ðŸ† Top-Selling Items
@@ -171,13 +171,13 @@ export function TopItemsChart() {
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-[3px] p-3">
           <p className="text-cream-dim">Total Items Sold</p>
           <p className="text-blue-300 font-bold text-lg">
             {itemsWithMetrics.reduce((sum, item) => sum + item.quantity_sold, 0)}
           </p>
         </div>
-        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+        <div className="bg-green-500/10 border border-green-500/30 rounded-[3px] p-3">
           <p className="text-cream-dim">Total Revenue (Top 8)</p>
           <p className="text-green-300 font-bold text-lg">
             {formatRupee(itemsWithMetrics.reduce((sum, item) => sum + item.revenue_generated, 0))}

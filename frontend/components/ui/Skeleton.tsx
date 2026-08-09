@@ -2,7 +2,7 @@
 
 export function StatCardSkeleton() {
   return (
-    <div className="relative overflow-hidden rounded-xl p-6 bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-accent/30">
+    <div className="relative overflow-hidden rounded-[3px] p-6 bg-surface ticket-perf border border-line">
       {/* Animated pulse effect */}
       <div className="animate-pulse space-y-4">
         {/* Title skeleton */}
@@ -31,21 +31,21 @@ export function DashboardSkeleton() {
       </div>
 
       {/* Stats grid skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <StatCardSkeleton key={i} />
         ))}
       </div>
 
       {/* Secondary stats skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 2 }).map((_, i) => (
           <StatCardSkeleton key={i} />
         ))}
       </div>
 
       {/* Insights section skeleton */}
-      <div className="p-6 rounded-xl border border-accent/30 bg-surface-2/30 animate-pulse">
+      <div className="ticket-perf relative p-6 rounded-[3px] border border-line bg-surface animate-pulse">
         <div className="h-6 bg-slate-700/50 rounded w-40 mb-4"></div>
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (

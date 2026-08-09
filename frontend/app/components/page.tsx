@@ -17,7 +17,7 @@ export default function ComponentsShowcase() {
     <div className="space-y-12">
       {/* Header */}
       <div className="border-b border-accent/20 pb-6">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-50 to-electric-300 bg-clip-text text-transparent mb-2">
+        <h1 className="font-display text-4xl font-bold text-foreground mb-1">
           Component Gallery
         </h1>
         <p className="text-cream-dim">
@@ -27,8 +27,11 @@ export default function ComponentsShowcase() {
 
       {/* StatCard Showcase */}
       <div>
-        <h2 className="text-2xl font-semibold text-foreground mb-6">StatCard Variants</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">StatCard Variants</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Revenue"
             value="$12,450"
@@ -62,7 +65,10 @@ export default function ComponentsShowcase() {
 
       {/* Badge Showcase */}
       <div>
-        <h2 className="text-2xl font-semibold text-foreground mb-6">Gradient Badges</h2>
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Gradient Badges</h2>
+        </div>
         <div className="flex flex-wrap gap-4">
           <GradientBadge label="Success" type="success" />
           <GradientBadge label="Warning" type="warning" />
@@ -75,8 +81,11 @@ export default function ComponentsShowcase() {
 
       {/* Progress Bars */}
       <div>
-        <h2 className="text-2xl font-semibold text-foreground mb-6">Progress Indicators</h2>
-        <div className="p-6 rounded-xl border border-accent/30 bg-surface-2/30 backdrop-blur-sm space-y-6">
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Progress Indicators</h2>
+        </div>
+        <div className="ticket-perf relative p-6 rounded-[3px] border border-line bg-surface  space-y-6">
           <ProgressBar label="AI Model Confidence" value={87} color="electric" />
           <ProgressBar label="System Optimization" value={72} color="warning" />
           <ProgressBar label="API Response Time" value={95} color="success" />
@@ -87,14 +96,17 @@ export default function ComponentsShowcase() {
 
       {/* Chart Card Examples */}
       <div>
-        <h2 className="text-2xl font-semibold text-foreground mb-6">Chart Cards</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Chart Cards</h2>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ChartCard title="Daily Revenue Trend" description="Last 7 days">
             <div className="h-40 flex items-end justify-around">
               {[65, 78, 92, 88, 95, 110, 105].map((height, idx) => (
                 <div
                   key={idx}
-                  className="w-8 bg-gradient-to-t from-electric-500 to-electric-400 rounded-t-md transition-all hover:from-electric-400 hover:to-electric-300 hover:shadow-glow-electric"
+                  className="w-8 bg-accent rounded-t-md transition-all hover:from-electric-400 hover:to-electric-300 hover:"
                   style={{ height: `${height * 1.5}px` }}
                 />
               ))}
@@ -108,8 +120,8 @@ export default function ComponentsShowcase() {
                   <span className="text-sm text-cream-dim">Very Satisfied</span>
                   <span className="text-sm font-semibold text-electric-300">68%</span>
                 </div>
-                <div className="w-full h-2 bg-surface/50 rounded-full overflow-hidden border border-line">
-                  <div className="h-full w-[68%] bg-gradient-to-r from-green-500 tp-emerald-400" />
+                <div className="w-full h-2 bg-surface rounded-full overflow-hidden border border-line">
+                  <div className="h-full w-[68%] bg-success" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -117,8 +129,8 @@ export default function ComponentsShowcase() {
                   <span className="text-sm text-cream-dim">Satisfied</span>
                   <span className="text-sm font-semibold text-electric-300">24%</span>
                 </div>
-                <div className="w-full h-2 bg-surface/50 rounded-full overflow-hidden border border-line">
-                  <div className="h-full w-[24%] bg-gradient-to-r from-yellow-500 to-orange-400" />
+                <div className="w-full h-2 bg-surface rounded-full overflow-hidden border border-line">
+                  <div className="h-full w-[24%] bg-warning" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -126,8 +138,8 @@ export default function ComponentsShowcase() {
                   <span className="text-sm text-cream-dim">Needs Improvement</span>
                   <span className="text-sm font-semibold text-electric-300">8%</span>
                 </div>
-                <div className="w-full h-2 bg-surface/50 rounded-full overflow-hidden border border-line">
-                  <div className="h-full w-[8%] bg-gradient-to-r from-red-500 to-pink-400" />
+                <div className="w-full h-2 bg-surface rounded-full overflow-hidden border border-line">
+                  <div className="h-full w-[8%] bg-alert" />
                 </div>
               </div>
             </div>
@@ -137,17 +149,19 @@ export default function ComponentsShowcase() {
 
       {/* Advanced Card Patterns */}
       <div>
-        <h2 className="text-2xl font-semibold text-foreground mb-6">Advanced Patterns</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Advanced Patterns</h2>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Feature Card */}
           <div
             className={`
-              relative overflow-hidden rounded-xl p-6
-              bg-gradient-to-br from-slate-800/50 to-slate-900/50
-              border border-accent/30 hover:border-accent/60
+              relative overflow-hidden rounded-[3px] p-6
+              bg-surface ticket-perf border border-line hover:border-accent
               transition-all duration-300
-              hover:shadow-glow-electric-md
-              group backdrop-blur-sm
+              hover:
+              group 
             `}
           >
             <div className="absolute top-0 right-0 w-40 h-40 bg-accent/10 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -163,11 +177,10 @@ export default function ComponentsShowcase() {
           {/* Alert Card */}
           <div
             className={`
-              relative overflow-hidden rounded-xl p-6
-              bg-gradient-to-br from-red-900/20 to-slate-900/50
-              border border-red-500/30 hover:border-red-500/60
+              relative overflow-hidden rounded-[3px] p-6
+              bg-surface ticket-perf border border-red-500/30 hover:border-red-500/60
               transition-all duration-300
-              group backdrop-blur-sm
+              group 
             `}
           >
             <div className="absolute top-0 right-0 w-40 h-40 bg-red-500/10 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />

@@ -64,9 +64,9 @@ export function RevenueChart() {
 
   if (loading) {
     return (
-      <div className="h-80 w-full bg-surface/30 border border-line/50 rounded-xl p-6 flex items-center justify-center">
+      <div className="h-80 w-full bg-surface/30 border border-line/50 rounded-[3px] p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-accent/30 border-t-electric-400 rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-line border-t-electric-400 rounded-full animate-spin" />
           <p className="text-cream-dim text-sm">Loading chart data...</p>
         </div>
       </div>
@@ -75,7 +75,7 @@ export function RevenueChart() {
 
   if (error || data.length === 0) {
     return (
-      <div className="h-80 w-full bg-surface/30 border border-line/50 rounded-xl p-6 flex items-center justify-center">
+      <div className="h-80 w-full bg-surface/30 border border-line/50 rounded-[3px] p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <AlertCircle size={24} className="text-red-400" />
           <p className="text-cream-dim">{error || 'No data available'}</p>
@@ -96,12 +96,12 @@ export function RevenueChart() {
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-surface/95 border border-accent/30 rounded-lg p-3 backdrop-blur-md">
-          <p className="text-cream-dim text-sm font-medium">{payload[0].payload.date}</p>
+        <div className="bg-surface/95 border border-line rounded-[3px] p-3 ">
+          <p className="text-cream-dim text-sm font-display font-semibold tracking-wide">{payload[0].payload.date}</p>
           {payload.map((entry: any, index: number) => (
             <p
               key={index}
-              className="text-sm font-medium"
+              className="text-sm font-display font-semibold tracking-wide"
               style={{ color: entry.color }}
             >
               {entry.name}: {formatRupee(entry.value)}
@@ -114,7 +114,7 @@ export function RevenueChart() {
   }
 
   return (
-    <div className="w-full bg-surface/30 border border-accent/20 rounded-xl p-6 backdrop-blur-sm">
+    <div className="w-full bg-surface/30 border border-accent/20 rounded-[3px] p-6 ">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
           ðŸ“Š Revenue vs. Cost Trends
@@ -186,19 +186,19 @@ export function RevenueChart() {
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-4 text-sm">
-        <div className="bg-accent/10 border border-accent/30 rounded-lg p-3">
+        <div className="bg-accent/10 border border-line rounded-[3px] p-3">
           <p className="text-cream-dim">Avg Daily Revenue</p>
           <p className="text-electric-300 font-bold text-lg">
             {formatRupee(data.reduce((sum, d) => sum + d.revenue, 0) / data.length)}
           </p>
         </div>
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-[3px] p-3">
           <p className="text-cream-dim">Avg Daily Cost</p>
           <p className="text-red-300 font-bold text-lg">
             {formatRupee(data.reduce((sum, d) => sum + d.cost, 0) / data.length)}
           </p>
         </div>
-        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+        <div className="bg-green-500/10 border border-green-500/30 rounded-[3px] p-3">
           <p className="text-cream-dim">Avg Daily Profit</p>
           <p className="text-green-300 font-bold text-lg">
             {formatRupee(
