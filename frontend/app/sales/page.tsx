@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { StatCard } from '@/components/ui'
 import { TrendingUp, BarChart3 } from 'lucide-react'
@@ -7,12 +7,12 @@ export default function SalesPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="border-b border-electric-500/20 pb-6">
+      <div className="border-b border-accent/20 pb-6">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-50 to-electric-300 bg-clip-text text-transparent mb-2 flex items-center gap-3">
-          <BarChart3 size={32} className="text-electric-400" />
+          <BarChart3 size={32} className="text-accent" />
           Sales Analytics
         </h1>
-        <p className="text-slate-400">
+        <p className="text-cream-dim">
           Real-time sales tracking and performance metrics
         </p>
       </div>
@@ -50,8 +50,8 @@ export default function SalesPage() {
       </div>
 
       {/* Hourly Sales Trend */}
-      <div className="p-6 rounded-xl border border-electric-500/30 bg-slate-800/30 backdrop-blur-sm">
-        <h2 className="text-xl font-semibold text-slate-50 mb-6">
+      <div className="p-6 rounded-xl border border-accent/30 bg-surface-2/30 backdrop-blur-sm">
+        <h2 className="text-xl font-semibold text-foreground mb-6">
           Today's Hourly Performance
         </h2>
         <div className="space-y-4">
@@ -62,10 +62,10 @@ export default function SalesPage() {
             return (
               <div key={idx} className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">{hour}:00 - {hour + 1}:00</span>
-                  <span className="text-electric-400 font-semibold">${sales}</span>
+                  <span className="text-cream-dim">{hour}:00 - {hour + 1}:00</span>
+                  <span className="text-accent font-semibold">${sales}</span>
                 </div>
-                <div className="w-full bg-slate-900/50 rounded-full h-2 overflow-hidden border border-slate-800">
+                <div className="w-full bg-surface/50 rounded-full h-2 overflow-hidden border border-line">
                   <div
                     className="h-full bg-gradient-to-r from-electric-500 to-electric-400 transition-all duration-500"
                     style={{ width: `${percentage}%` }}

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React from 'react'
 
@@ -29,12 +29,12 @@ export function ProgressBar({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-slate-300">{label}</label>
+        <label className="text-sm font-medium text-cream-dim">{label}</label>
         {showPercentage && (
           <span className="text-sm font-semibold text-electric-300">{percentage.toFixed(0)}%</span>
         )}
       </div>
-      <div className="relative w-full h-2 bg-slate-900/50 rounded-full overflow-hidden border border-slate-800">
+      <div className="relative w-full h-2 bg-surface/50 rounded-full overflow-hidden border border-line">
         <div
           className={`h-full bg-gradient-to-r ${colorClasses[color]} transition-all duration-500 ease-out`}
           style={{ width: `${percentage}%` }}

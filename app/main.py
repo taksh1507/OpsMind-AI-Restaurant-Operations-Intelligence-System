@@ -21,9 +21,9 @@ async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup and shutdown events."""
     
     # Startup
-    print(f"🚀 Starting {settings.app_name} v{settings.app_version}")
+    print(f"Starting {settings.app_name} v{settings.app_version}")
     await init_db(settings.database_url)
-    print("✅ Database initialized")
+    print("Database initialized")
     
     # Start automated retraining scheduler
     from app.core.scheduler import start_scheduler
@@ -32,14 +32,14 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    print("🛑 Shutting down...")
+    print("Shutting down...")
     
     # Shutdown scheduler
     from app.core.scheduler import shutdown_scheduler
     await shutdown_scheduler()
     
     await close_db()
-    print("✅ Database closed")
+    print("Database closed")
 
 
 def create_app() -> FastAPI:
@@ -208,7 +208,7 @@ def create_app() -> FastAPI:
         except Exception as e:
             db_status = "disconnected"
             # Log the error for debugging
-            print(f"❌ Database health check failed: {str(e)}")
+            print(f"Database health check failed: {str(e)}")
         
         # 🕐 Calculate current time in IST (UTC+5:30)
         utc_now = datetime.now(timezone.utc)

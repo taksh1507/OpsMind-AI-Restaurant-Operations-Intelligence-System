@@ -1,4 +1,4 @@
-/**
+﻿/**
  * useWebSocket Hook - Real-time Event Listener
  * 
  * Connects to the backend WebSocket at /ws endpoint for real-time event notifications.
@@ -195,7 +195,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               
               // Show toast notification
               showToast(
-                `💰 New Sale: ₹${amount.toFixed(2)} (${itemCount} items)`,
+                `ðŸ’° New Sale: â‚¹${amount.toFixed(2)} (${itemCount} items)`,
                 'success'
               );
               
@@ -211,7 +211,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               playDingSound();
               
               showToast(
-                `🍽️ New Order #${orderId} for Table ${tableNumber}`,
+                `ðŸ½ï¸ New Order #${orderId} for Table ${tableNumber}`,
                 'info'
               );
               
@@ -225,7 +225,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               playDingSound();
               
               showToast(
-                `✅ Table ${tableNumber} is ready!`,
+                `âœ… Table ${tableNumber} is ready!`,
                 'info'
               );
               

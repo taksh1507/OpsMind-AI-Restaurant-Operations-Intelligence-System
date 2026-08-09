@@ -76,37 +76,37 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       {/* Animated background gradient */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-electric-500/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-electric-500/5 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl animate-pulse delay-1000" />
       </div>
 
       {/* Register Card */}
       <div className="relative w-full max-w-md">
         <div className="relative">
           {/* Glowing border effect */}
-          <div className="absolute -inset-[2px] bg-gradient-to-r from-electric-500/20 via-transparent to-electric-500/20 rounded-2xl blur-lg opacity-0 transition-opacity duration-500" />
+          <div className="absolute -inset-[2px] bg-gradient-to-r from-accent/20 via-transparent to-accent/20 rounded-2xl blur-lg opacity-0 transition-opacity duration-500" />
 
           {/* Main card */}
-          <div className="relative bg-slate-900/50 backdrop-blur-xl border border-electric-500/20 rounded-2xl p-8 shadow-2xl">
+          <div className="relative bg-surface/50 backdrop-blur-xl border border-accent/20 rounded-2xl p-8 shadow-2xl">
             {/* Header */}
             <div className="text-center mb-8">
               <div className="flex justify-center mb-4">
-                <div className="p-3 bg-electric-500/10 rounded-lg border border-electric-500/20">
-                  <UserPlus className="text-electric-400" size={32} />
+                <div className="p-3 bg-accent/10 rounded-lg border border-accent/20">
+                  <UserPlus className="text-accent" size={32} />
                 </div>
               </div>
-              <h1 className="text-3xl font-bold text-slate-50 mb-2">Create Account</h1>
-              <p className="text-slate-400">Join OpsMind AI</p>
+              <h1 className="text-3xl font-bold text-foreground mb-2">Create Account</h1>
+              <p className="text-cream-dim">Join OpsMind AI</p>
             </div>
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4 mb-6">
               {/* Full Name Input */}
               <div>
-                <label htmlFor="fullName" className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="fullName" className="block text-sm font-medium text-cream-dim mb-2">
                   Full Name (Optional)
                 </label>
                 <input
@@ -119,13 +119,13 @@ export default function RegisterPage() {
                   }}
                   placeholder="John Doe"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-lg text-slate-50 placeholder-slate-500 focus:outline-none focus:border-electric-500/50 focus:ring-2 focus:ring-electric-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Restaurant Name Input */}
               <div>
-                <label htmlFor="restaurantName" className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="restaurantName" className="block text-sm font-medium text-cream-dim mb-2">
                   Restaurant Name (Optional)
                 </label>
                 <input
@@ -138,13 +138,13 @@ export default function RegisterPage() {
                   }}
                   placeholder="Aurora's Kitchen"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-lg text-slate-50 placeholder-slate-500 focus:outline-none focus:border-electric-500/50 focus:ring-2 focus:ring-electric-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Email Input */}
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="email" className="block text-sm font-medium text-cream-dim mb-2">
                   Email Address
                 </label>
                 <input
@@ -157,13 +157,13 @@ export default function RegisterPage() {
                   }}
                   placeholder="your.email@restaurant.com"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-lg text-slate-50 placeholder-slate-500 focus:outline-none focus:border-electric-500/50 focus:ring-2 focus:ring-electric-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Password Input */}
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="password" className="block text-sm font-medium text-cream-dim mb-2">
                   Password (min 8 characters)
                 </label>
                 <input
@@ -176,7 +176,7 @@ export default function RegisterPage() {
                   }}
                   placeholder="Enter a strong password"
                   disabled={isLoading}
-                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-lg text-slate-50 placeholder-slate-500 focus:outline-none focus:border-electric-500/50 focus:ring-2 focus:ring-electric-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-surface-2/50 border border-line/50 rounded-lg text-foreground placeholder-cream-dim/50 focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -199,7 +199,7 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={isLoading || isSuccess}
-                className="w-full py-3 px-4 bg-gradient-to-r from-electric-500 to-electric-600 hover:from-electric-600 hover:to-electric-700 text-slate-950 font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-electric-500/25"
+                className="w-full py-3 px-4 bg-accent hover:bg-accent-dim text-background font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-accent/25"
               >
                 {isLoading ? (
                   <>
@@ -220,10 +220,10 @@ export default function RegisterPage() {
             </form>
 
             {/* Footer */}
-            <div className="text-center text-slate-400 text-sm">
+            <div className="text-center text-cream-dim text-sm">
               <p>
                 Already have an account?{' '}
-                <Link href="/login" className="text-electric-400 hover:text-electric-300 transition-colors font-semibold">
+                <Link href="/login" className="text-accent hover:text-accent-dim transition-colors font-semibold">
                   Sign in
                 </Link>
               </p>
@@ -234,7 +234,7 @@ export default function RegisterPage() {
 
       {/* Bottom branding */}
       <div className="absolute bottom-8 left-0 right-0 text-center">
-        <p className="text-slate-500 text-xs">OpsMind AI © 2026 • Restaurant Operations Intelligence</p>
+        <p className="text-cream-dim text-xs">OpsMind AI © 2026 • Restaurant Operations Intelligence</p>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { Sparkles, AlertTriangle, TrendingUp } from 'lucide-react'
@@ -80,7 +80,7 @@ export function AISummaryBanner() {
   }
 
   return (
-    <div className="w-full bg-gradient-to-r from-electric-900/40 to-electric-800/20 border border-electric-500/30 rounded-xl p-6 backdrop-blur-sm overflow-hidden">
+    <div className="w-full bg-gradient-to-r from-electric-900/40 to-electric-800/20 border border-accent/30 rounded-xl p-6 backdrop-blur-sm overflow-hidden">
       {/* Animated background pulse */}
       <div className="absolute inset-0 -z-10">
         <div
@@ -130,7 +130,7 @@ export function AISummaryBanner() {
               {summary}
             </p>
           ) : (
-            <p className="text-slate-400 text-sm italic">
+            <p className="text-cream-dim text-sm italic">
               No AI insights available at this time.
             </p>
           )}
@@ -138,13 +138,13 @@ export function AISummaryBanner() {
           {/* Call-to-action hint */}
           <div className="mt-4 flex items-center gap-2 text-xs text-electric-300">
             <TrendingUp size={14} />
-            <span>Powered by Gemini 1.5 Flash • Real-time analysis</span>
+            <span>Powered by Gemini 1.5 Flash â€¢ Real-time analysis</span>
           </div>
         </div>
       </div>
 
       {/* Decorative corner accent */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-electric-500/5 rounded-bl-3xl -z-10" />
+      <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-bl-3xl -z-10" />
     </div>
   )
 }

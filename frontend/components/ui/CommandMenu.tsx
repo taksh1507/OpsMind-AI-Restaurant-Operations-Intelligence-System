@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useEffect, useState } from 'react'
 import { Command } from 'cmdk'
@@ -112,19 +112,19 @@ export function CommandMenu() {
       />
 
       {/* Command Menu */}
-      <div className="relative w-full max-w-2xl mx-4 shadow-2xl rounded-lg border border-slate-700 bg-slate-900">
-        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-slate-500 [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group]:overflow-hidden [&_[cmdk-group]]:px-1.5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
-          <div className="flex items-center border-b border-slate-700 px-4 py-3">
+      <div className="relative w-full max-w-2xl mx-4 shadow-2xl rounded-lg border border-line bg-surface">
+        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-cream-dim [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group]:overflow-hidden [&_[cmdk-group]]:px-1.5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+          <div className="flex items-center border-b border-line px-4 py-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <Command.Input
               placeholder="Search menu, staff, or navigate..."
-              className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-slate-500 text-slate-100"
+              className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-cream-dim text-foreground"
               onValueChange={handleSearch}
             />
           </div>
 
           <Command.List className="max-h-96 overflow-y-auto">
-            <Command.Empty className="px-4 py-8 text-center text-sm text-slate-400">
+            <Command.Empty className="px-4 py-8 text-center text-sm text-cream-dim">
               {loading ? 'Searching...' : 'No results found.'}
             </Command.Empty>
 
@@ -144,7 +144,7 @@ export function CommandMenu() {
                         handleNavigation(`/menu?category=${result.id}`)
                       }
                     }}
-                    className="cursor-pointer hover:bg-slate-800"
+                    className="cursor-pointer hover:bg-surface-2"
                   >
                     <div>
                       {result.category === 'menu' && <UtensilsCrossed className="mr-2 h-4 w-4" />}
@@ -152,9 +152,9 @@ export function CommandMenu() {
                       {result.category === 'category' && <Menu className="mr-2 h-4 w-4" />}
                     </div>
                     <div className="flex flex-col">
-                      <span className="font-medium text-slate-100">{result.name}</span>
+                      <span className="font-medium text-foreground">{result.name}</span>
                       {result.description && (
-                        <span className="text-xs text-slate-400">{result.description}</span>
+                        <span className="text-xs text-cream-dim">{result.description}</span>
                       )}
                     </div>
                   </Command.Item>
@@ -166,45 +166,45 @@ export function CommandMenu() {
             <Command.Group heading="Navigate">
               <Command.Item
                 onSelect={() => handleNavigation('/dashboard')}
-                className="cursor-pointer hover:bg-slate-800"
+                className="cursor-pointer hover:bg-surface-2"
               >
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
-                  <span className="text-slate-100">Dashboard</span>
-                  <span className="text-xs text-slate-500">G then D</span>
+                  <span className="text-foreground">Dashboard</span>
+                  <span className="text-xs text-cream-dim">G then D</span>
                 </div>
               </Command.Item>
 
               <Command.Item
                 onSelect={() => handleNavigation('/menu')}
-                className="cursor-pointer hover:bg-slate-800"
+                className="cursor-pointer hover:bg-surface-2"
               >
                 <UtensilsCrossed className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
-                  <span className="text-slate-100">Menu</span>
-                  <span className="text-xs text-slate-500">G then M</span>
+                  <span className="text-foreground">Menu</span>
+                  <span className="text-xs text-cream-dim">G then M</span>
                 </div>
               </Command.Item>
 
               <Command.Item
                 onSelect={() => handleNavigation('/insights')}
-                className="cursor-pointer hover:bg-slate-800"
+                className="cursor-pointer hover:bg-surface-2"
               >
                 <BarChart3 className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
-                  <span className="text-slate-100">Analytics</span>
-                  <span className="text-xs text-slate-500">G then A</span>
+                  <span className="text-foreground">Analytics</span>
+                  <span className="text-xs text-cream-dim">G then A</span>
                 </div>
               </Command.Item>
 
               <Command.Item
                 onSelect={() => handleNavigation('/sales')}
-                className="cursor-pointer hover:bg-slate-800"
+                className="cursor-pointer hover:bg-surface-2"
               >
                 <Zap className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
-                  <span className="text-slate-100">Sales</span>
-                  <span className="text-xs text-slate-500">G then S</span>
+                  <span className="text-foreground">Sales</span>
+                  <span className="text-xs text-cream-dim">G then S</span>
                 </div>
               </Command.Item>
             </Command.Group>
@@ -213,26 +213,26 @@ export function CommandMenu() {
             <Command.Group heading="Theme">
               <Command.Item
                 onSelect={handleThemeToggle}
-                className="cursor-pointer hover:bg-slate-800"
+                className="cursor-pointer hover:bg-surface-2"
               >
                 {isDark ? (
                   <>
                     <Sun className="mr-2 h-4 w-4" />
-                    <span className="text-slate-100">Light Mode</span>
+                    <span className="text-foreground">Light Mode</span>
                   </>
                 ) : (
                   <>
                     <Moon className="mr-2 h-4 w-4" />
-                    <span className="text-slate-100">Dark Mode</span>
+                    <span className="text-foreground">Dark Mode</span>
                   </>
                 )}
               </Command.Item>
             </Command.Group>
           </Command.List>
 
-          <div className="border-t border-slate-700 px-4 py-2 text-right text-xs text-slate-500">
+          <div className="border-t border-line px-4 py-2 text-right text-xs text-cream-dim">
             <div className="flex items-center justify-end gap-2">
-              <kbd className="rounded px-2 py-1 bg-slate-800 text-slate-300 text-xs font-semibold">
+              <kbd className="rounded px-2 py-1 bg-surface-2 text-cream-dim text-xs font-semibold">
                 ESC
               </kbd>
               <span>to close</span>

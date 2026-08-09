@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.core import settings
 from app.models.base import Base
 from app.models.tenant import Tenant
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.menu import Category, MenuItem, Ingredient, Recipe
 from app.models.sales import Sale, SaleItem, PaymentMethod
 from app.models.review import Review

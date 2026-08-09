@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React from 'react'
 
@@ -14,7 +14,7 @@ export function ChartCard({ title, description, children }: ChartCardProps) {
       className={`
         relative overflow-hidden rounded-xl p-6
         bg-gradient-to-br from-slate-800/50 to-slate-900/50
-        border border-electric-500/30 hover:border-electric-500/60
+        border border-accent/30 hover:border-accent/60
         transition-all duration-300
         hover:shadow-glow-electric-md
         group backdrop-blur-sm
@@ -22,9 +22,9 @@ export function ChartCard({ title, description, children }: ChartCardProps) {
     >
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-slate-50">{title}</h3>
+        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="text-xs text-slate-400 mt-1">{description}</p>
+          <p className="text-xs text-cream-dim mt-1">{description}</p>
         )}
       </div>
 

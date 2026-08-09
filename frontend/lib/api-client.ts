@@ -1,8 +1,8 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
+﻿import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
 
 // Create Axios instance with base URL
 const apiClient: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

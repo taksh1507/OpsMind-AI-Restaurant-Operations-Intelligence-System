@@ -111,8 +111,8 @@ export function Sidebar() {
   if (loading) {
     // Show loading state while role is being loaded
     return (
-      <aside className="fixed left-0 top-0 h-screen w-20 md:w-64 bg-slate-900 border-r border-slate-700 hidden md:flex md:flex-col items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-electric-500"></div>
+      <aside className="fixed left-0 top-0 h-screen w-20 md:w-64 bg-surface border-r border-line hidden md:flex md:flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-accent"></div>
       </aside>
     )
   }
@@ -123,7 +123,7 @@ export function Sidebar() {
       <div className="fixed top-4 left-4 z-50 md:hidden">
         <button
           onClick={toggleMobile}
-          className="p-2 rounded-[3px] bg-slate-800 border border-slate-700 hover:border-electric-700 transition-colors"
+          className="p-2 rounded-[3px] bg-surface-2 border border-line hover:border-accent transition-colors"
           aria-label="Toggle menu"
         >
           {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -133,9 +133,8 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed left-0 top-0 h-screen bg-slate-900 border-r border-slate-700
+          fixed left-0 top-0 h-screen bg-surface border-r border-line
           transition-all duration-300 z-40 overflow-hidden
-          relative
           before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px]
           before:bg-[repeating-linear-gradient(to_bottom,var(--accent)_0_6px,transparent_6px_12px)] before:opacity-50
           ${isExpanded ? 'w-64' : 'w-20'}
@@ -144,20 +143,20 @@ export function Sidebar() {
         `}
       >
         {/* Header */}
-        <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+        <div className="p-4 border-b border-line flex items-center justify-between">
           {isExpanded && (
             <div>
-              <h1 className="font-display text-xl font-bold tracking-wide text-slate-50">
-                Ops<span className="text-electric-500">Mind</span>
+              <h1 className="font-display text-xl font-bold tracking-wide text-foreground">
+                Ops<span className="text-accent">Mind</span>
               </h1>
-              <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400 mt-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-cream-dim mt-0.5">
                 Kitchen Intelligence
               </p>
             </div>
           )}
           <button
             onClick={toggleSidebar}
-            className="p-1.5 rounded-[3px] hover:bg-slate-800 transition-colors hidden md:block"
+            className="p-1.5 rounded-[3px] hover:bg-surface-2 transition-colors hidden md:block"
             aria-label="Toggle sidebar"
           >
             {isExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
@@ -166,10 +165,10 @@ export function Sidebar() {
 
         {/* Day 25: Role Badge */}
         {isExpanded && userRole && (
-          <div className="px-4 py-2 mx-4 mt-3 rounded-[3px] bg-slate-800 border border-slate-700">
+          <div className="px-4 py-2 mx-4 mt-3 rounded-[3px] bg-surface-2 border border-line">
             <div className="flex items-center gap-2">
-              <Lock size={13} className="text-electric-500" />
-              <span className="font-display text-xs font-semibold uppercase tracking-wide text-slate-200">{userRole}</span>
+              <Lock size={13} className="text-accent" />
+              <span className="font-display text-xs font-semibold uppercase tracking-wide text-foreground">{userRole}</span>
             </div>
           </div>
         )}
@@ -183,13 +182,13 @@ export function Sidebar() {
               className={`
                 relative flex items-center gap-3 px-4 py-2.5 rounded-[3px]
                 transition-colors duration-150
-                hover:bg-slate-800 text-slate-300 hover:text-slate-50
+                hover:bg-surface-2 text-cream-dim hover:text-foreground
                 group
                 ${!isExpanded && 'justify-center px-0'}
               `}
               title={!isExpanded ? item.label : undefined}
             >
-              <span className="flex-shrink-0 text-electric-500">
+              <span className="flex-shrink-0 text-accent">
                 {item.icon}
               </span>
               {isExpanded && (
@@ -200,24 +199,24 @@ export function Sidebar() {
 
           {/* Day 25: Show message if user has no visible items (shouldn't happen, but good UX) */}
           {visibleNavItems.length === 0 && (
-            <div className="px-4 py-3 text-xs text-slate-500 text-center">
+            <div className="px-4 py-3 text-xs text-cream-dim text-center">
               No accessible items
             </div>
           )}
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-700 space-y-2">
+        <div className="p-4 border-t border-line space-y-2">
           <div
             className={`
               flex items-center gap-3 px-3 py-1
-              ${isExpanded ? 'text-xs text-slate-400' : 'justify-center'}
+              ${isExpanded ? 'text-xs text-cream-dim' : 'justify-center'}
             `}
           >
             {isExpanded && (
               <div>
-                <p className="font-display text-sm font-semibold tracking-wide text-slate-200">Tandoor House</p>
-                <p className="text-slate-500 text-[11px]">Owner &middot; JWT verified</p>
+                <p className="font-display text-sm font-semibold tracking-wide text-foreground">Tandoor House</p>
+                <p className="text-cream-dim text-[11px]">Owner &middot; JWT verified</p>
               </div>
             )}
           </div>
@@ -229,13 +228,13 @@ export function Sidebar() {
               w-full flex items-center gap-3 px-4 py-2.5 rounded-[3px]
               transition-colors duration-150
               hover:bg-alert/10 hover:text-alert
-              text-slate-300
+              text-cream-dim
               group
               ${!isExpanded && 'justify-center px-0'}
             `}
             title={!isExpanded ? 'Logout' : undefined}
           >
-            <span className="flex-shrink-0 text-slate-400 group-hover:text-alert">
+            <span className="flex-shrink-0 text-cream-dim group-hover:text-alert">
               <LogOut size={18} />
             </span>
             {isExpanded && <span className="font-display text-[15px] font-semibold tracking-wide">Logout</span>}

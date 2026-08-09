@@ -31,11 +31,11 @@ export default function Home() {
   if (isError || !stats) {
     return (
       <div className="space-y-8">
-        <div className="border-b border-slate-700 pb-6">
-          <h1 className="font-display text-4xl font-bold text-slate-50 mb-1">
+        <div className="border-b border-line pb-6">
+          <h1 className="font-display text-4xl font-bold text-foreground mb-1">
             Tonight&rsquo;s Pass
           </h1>
-          <p className="text-slate-400">Unable to load dashboard data</p>
+          <p className="text-cream-dim">Unable to load dashboard data</p>
         </div>
 
         <div className="p-6 rounded-[3px] border border-alert/40 bg-alert/5">
@@ -62,11 +62,11 @@ export default function Home() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="border-b border-slate-700 pb-6">
-        <h1 className="font-display text-4xl font-bold text-slate-50 mb-1">
+      <div className="border-b border-line pb-6">
+        <h1 className="font-display text-4xl font-bold text-foreground mb-1">
           Tonight&rsquo;s Pass
         </h1>
-        <p className="text-slate-400">
+        <p className="text-cream-dim">
           Here&rsquo;s what&rsquo;s happening in the kitchen right now
         </p>
       </div>
@@ -119,14 +119,14 @@ export default function Home() {
       </div>
 
       {/* Insights Panel */}
-      <div className="mt-4 p-6 rounded-[3px] border border-slate-700 bg-slate-900">
+      <div className="mt-4 p-6 rounded-[3px] border border-line bg-surface">
         <div className="flex items-center gap-2.5 mb-4">
-          <span className="w-[3px] h-[18px] bg-electric-500 rounded-sm" />
-          <h2 className="font-display text-lg font-bold tracking-wide text-slate-50">
+          <span className="w-[3px] h-[18px] bg-accent rounded-sm" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">
             Real-Time Analytics
           </h2>
         </div>
-        <div className="divide-y divide-slate-700">
+        <div className="divide-y divide-line">
           {[
             ['Status', 'All systems operational'],
             ['Data Source', 'FastAPI backend (live)'],
@@ -134,8 +134,8 @@ export default function Home() {
             ['Authentication', 'JWT bearer token'],
           ].map(([k, v]) => (
             <div key={k} className="flex items-center justify-between py-2.5 text-sm">
-              <span className="font-display text-xs font-semibold uppercase tracking-wide text-slate-400">{k}</span>
-              <span className="font-data text-slate-100 text-[13px]">{v}</span>
+              <span className="font-display text-xs font-semibold uppercase tracking-wide text-cream-dim">{k}</span>
+              <span className="font-data text-foreground text-[13px]">{v}</span>
             </div>
           ))}
         </div>

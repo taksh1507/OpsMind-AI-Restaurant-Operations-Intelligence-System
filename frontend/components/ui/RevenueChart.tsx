@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import {
@@ -64,10 +64,10 @@ export function RevenueChart() {
 
   if (loading) {
     return (
-      <div className="h-80 w-full bg-slate-900/30 border border-slate-700/50 rounded-xl p-6 flex items-center justify-center">
+      <div className="h-80 w-full bg-surface/30 border border-line/50 rounded-xl p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-electric-500/30 border-t-electric-400 rounded-full animate-spin" />
-          <p className="text-slate-400 text-sm">Loading chart data...</p>
+          <div className="w-8 h-8 border-2 border-accent/30 border-t-electric-400 rounded-full animate-spin" />
+          <p className="text-cream-dim text-sm">Loading chart data...</p>
         </div>
       </div>
     )
@@ -75,10 +75,10 @@ export function RevenueChart() {
 
   if (error || data.length === 0) {
     return (
-      <div className="h-80 w-full bg-slate-900/30 border border-slate-700/50 rounded-xl p-6 flex items-center justify-center">
+      <div className="h-80 w-full bg-surface/30 border border-line/50 rounded-xl p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <AlertCircle size={24} className="text-red-400" />
-          <p className="text-slate-300">{error || 'No data available'}</p>
+          <p className="text-cream-dim">{error || 'No data available'}</p>
         </div>
       </div>
     )
@@ -96,8 +96,8 @@ export function RevenueChart() {
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-slate-900/95 border border-electric-500/30 rounded-lg p-3 backdrop-blur-md">
-          <p className="text-slate-300 text-sm font-medium">{payload[0].payload.date}</p>
+        <div className="bg-surface/95 border border-accent/30 rounded-lg p-3 backdrop-blur-md">
+          <p className="text-cream-dim text-sm font-medium">{payload[0].payload.date}</p>
           {payload.map((entry: any, index: number) => (
             <p
               key={index}
@@ -114,12 +114,12 @@ export function RevenueChart() {
   }
 
   return (
-    <div className="w-full bg-slate-900/30 border border-electric-500/20 rounded-xl p-6 backdrop-blur-sm">
+    <div className="w-full bg-surface/30 border border-accent/20 rounded-xl p-6 backdrop-blur-sm">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-50 flex items-center gap-2">
-          📊 Revenue vs. Cost Trends
+        <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          ðŸ“Š Revenue vs. Cost Trends
         </h2>
-        <p className="text-slate-400 text-sm mt-2">
+        <p className="text-cream-dim text-sm mt-2">
           Last 14 days of revenue and cost of goods sold
         </p>
       </div>
@@ -151,8 +151,8 @@ export function RevenueChart() {
                 fontSize: '12px',
               }}
               tickFormatter={(value) => {
-                if (value >= 10000) return `₹${(value / 1000).toFixed(0)}K`
-                return `₹${value}`
+                if (value >= 10000) return `â‚¹${(value / 1000).toFixed(0)}K`
+                return `â‚¹${value}`
               }}
             />
             <Tooltip content={<CustomTooltip />} />
@@ -186,20 +186,20 @@ export function RevenueChart() {
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-4 text-sm">
-        <div className="bg-electric-500/10 border border-electric-500/30 rounded-lg p-3">
-          <p className="text-slate-400">Avg Daily Revenue</p>
+        <div className="bg-accent/10 border border-accent/30 rounded-lg p-3">
+          <p className="text-cream-dim">Avg Daily Revenue</p>
           <p className="text-electric-300 font-bold text-lg">
             {formatRupee(data.reduce((sum, d) => sum + d.revenue, 0) / data.length)}
           </p>
         </div>
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-          <p className="text-slate-400">Avg Daily Cost</p>
+          <p className="text-cream-dim">Avg Daily Cost</p>
           <p className="text-red-300 font-bold text-lg">
             {formatRupee(data.reduce((sum, d) => sum + d.cost, 0) / data.length)}
           </p>
         </div>
         <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
-          <p className="text-slate-400">Avg Daily Profit</p>
+          <p className="text-cream-dim">Avg Daily Profit</p>
           <p className="text-green-300 font-bold text-lg">
             {formatRupee(
               data.reduce((sum, d) => sum + (d.revenue - d.cost), 0) / data.length
