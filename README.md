@@ -1,450 +1,141 @@
-# OpsMind AI — Restaurant Operations Intelligence System
+<div align="center">
+  <h1>OpsMind AI 🚀</h1>
+  <p><strong>Restaurant Operations Intelligence System</strong></p>
+  <p><i>Powered by Multi-Tenant SaaS Architecture & Agentic AI</i></p>
 
-**Restaurant Operations Intelligence powered by Multi-Tenant SaaS Architecture & Agentic AI**
+  <div>
+    <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
+    <img src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
+    <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+    <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+    <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
+  </div>
+</div>
 
 ---
 
 ## 🎯 Vision
 
-OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and operators to harness data-driven intelligence for real-time operational optimization. Using multi-tenant architecture, advanced analytics, and autonomous AI agents, we empower restaurants to:
+OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and operators to harness data-driven intelligence for real-time operational optimization. Using a multi-tenant architecture, advanced analytics, and autonomous AI agents, we empower restaurants to:
 
-- 📊 **Track Operations in Real-Time** — Monitor sales, inventory, and staffing
-- 🤖 **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) for metrics with Gemini narrative support
-- 💡 **Generate AI Insights** — Intelligent recommendations powered by LLM chains
-- 📈 **Forecast Revenue** — Predictive analytics for better planning
-- 💰 **Optimize Pricing** — Simulate price changes and analyze impact
+- 📊 **Track Operations in Real-Time** — Monitor sales, inventory, and staffing with zero latency.
+- 🤖 **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Gemini provides narrative reasoning.
+- 💡 **Generate AI Insights** — Intelligent recommendations for pricing, labor, and menu optimization.
+- 📈 **Forecast Revenue** — Predictive analytics for 3-day revenue forecasting.
+- 💰 **Optimize Pricing** — Simulate price changes and analyze their impact on margins.
 
 ---
 
-## 🏗️ Core Features (25 Systems)
+## ✨ Core Capabilities
 
-| System | Status | Description |
-|--------|--------|-------------|
-| **Multi-Tenant Auth** | ✅ | Isolated data per restaurant owner with JWT |
-| **Menu Management** | ✅ | Categories, items, ingredients, recipes |
-| **Sales Tracking** | ✅ | Transaction logging & line items |
-| **Revenue Analytics** | ✅ | Per-dish, hourly, daily analysis |
-| **Profit Calculation** | ✅ | COGS → margin analysis per item |
-| **AI Strategy** | ✅ | Strategy recommendations compiled from ML metrics via Gemini |
-| **Revenue Forecasting** | ✅ | 3-day predictive forecasts with XGBoost |
-| **ML Feature Engineering** | ✅ | Daily aggregation, time-series zero-padding, lag (1,7,14), rolling mean, weather simulation |
-| **Cost Intelligence** | ✅ | Waste detection & cost optimization (Gemini-assisted) |
-| **Customer Sentiment** | ✅ | Local TF-IDF + Logistic Regression analysis of reviews |
-| **Labor Optimization** | ✅ | Staffing heatmap & efficiency analysis (Gemini-assisted) |
-| **Mathematical Forecasting** | ✅ | Linear regression & confidence scoring |
-| **Environmental Awareness** | ✅ | Weather-aware recommendations & context |
-| **Recommendation Tracking** | ✅ | Save, accept/reject, and verify AI suggestions |
-| **Impact Verification** | ✅ | Measure ROI of implemented recommendations |
-| **API Caching** | ✅ | Intelligent request caching with 70% quota savings |
-| **Dashboard UI** | ✅ | Enterprise-grade Next.js dashboard with glassmorphism |
-| **API Client** | ✅ | Authenticated Axios + JWT interceptor |
-| **Data Integration** | ✅ | SWR hooks for real-time backend data fetching |
-| **Revenue vs Cost AreaChart** | ✅ | 14-day dual-series visualization with Recharts |
-| **Top Items BarChart** | ✅ | Performance visualization with color intensity margins |
-| **AI Summary Banner** | ✅ | Natural language insights with Gemini 1.5 Flash |
-| **Customer Persona Engine** | ✅ | Hyper-personalized customer profiling with JSONB preferences |
-| **Table-Side Briefing** | ✅ | 3-bullet AI cheat sheet for waiters (LTV + suggested action) |
-| **RBAC** | ✅ | Three-tier role hierarchy (OWNER, MANAGER, STAFF) with permission guards |
-| **Role-Based UI** | ✅ | JWT-driven conditional rendering for security clearance |
-| **REST API** | ✅ | 40+ endpoints across all systems |
+### 🏢 Enterprise Multi-Tenancy
+- **Isolated Data Architecture:** Secure JWT-based authentication ensuring complete data isolation per restaurant.
+- **Role-Based Access Control (RBAC):** Three-tier hierarchy (OWNER, MANAGER, STAFF) with strict permission guards.
+
+### 🧠 Hybrid AI Intelligence
+- **Revenue Forecaster (XGBoost):** Predicts the next 3 days of sales with confidence scores grounded in statistical trend analysis.
+- **Customer Sentiment Engine (scikit-learn):** Processes customer feedback locally using TF-IDF and Logistic Regression.
+- **Strategy Agent (Gemini 1.5):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
+
+### 🎨 "The Pass" Design System
+- **Enterprise-Grade Dashboard:** Next.js frontend featuring the custom "The Pass" design aesthetic.
+- **Dynamic CSS Variables:** Deep slate backgrounds, electric blue accents, and sharp ticket-style cards for a premium feel.
+- **Real-Time Data Visualization:** Dual-series AreaCharts and BarCharts built with Recharts.
 
 ---
 
 ## 💾 Tech Stack
 
-| Component | Technology | Notes |
-|-----------|-----------|-------|
-| **Backend** | FastAPI (Python) | Async, type-safe, auto-docs with OpenAPI |
-| **Database** | PostgreSQL/SQLite | SQLAlchemy 2.0 ORM with async support |
-| **Auth** | JWT | Access token + refresh token pattern |
-| **AI Engine** | XGBoost, sklearn, Gemini | XGBoost (forecasting), sklearn (sentiment + segmentation), Gemini (strategy narrative only) |
-| **Analytics** | Python (NumPy/Pandas) | Time-series analysis & trend calculation |
-| **Async Driver** | asyncpg | Non-blocking PostgreSQL connection pooling |
-| **Validation** | Pydantic | Request/response schema validation |
-| **Frontend Framework** | Next.js 14 | App Router, React 19, TypeScript |
-| **Frontend Styling** | Tailwind CSS 4 | Utility-first CSS with custom theme |
-| **Client-Side API** | Axios + SWR | Authenticated HTTP client + intelligent caching |
-| **Frontend Icons** | Lucide React | Modern, customizable icon library |
-| **Data Visualization** | Recharts | Composable React components for charts (AreaChart, BarChart) |
-| **State Management** | SWR (Vercel) | Client-side data fetching with automatic caching |
-| **Type Safety** | TypeScript | Full-stack type safety (backend + frontend) |
-| **Package Manager** | npm | Node.js dependency management |
+| Domain | Technology | Description |
+|--------|-----------|-------------|
+| **Backend** | FastAPI (Python) | Async, type-safe, auto-generated OpenAPI documentation |
+| **Database** | PostgreSQL / SQLite | SQLAlchemy 2.0 ORM with async connection pooling (`asyncpg`) |
+| **Auth** | JWT | Secure access token + refresh token pattern |
+| **AI Engine** | XGBoost, scikit-learn, Gemini | ML for forecasting/segmentation, Gemini for strategy narrative |
+| **Frontend** | Next.js 14, React 19 | App Router, Server Components, TypeScript |
+| **Styling** | Tailwind CSS | Utility-first CSS with a custom dynamic theme |
+| **Data Fetching**| Axios + SWR | Authenticated HTTP client with intelligent client-side caching |
 
 ---
 
-## 🔗 Full-Stack Data Integration
-
-### Request Flow: Dashboard → Backend Analytics
-
-```
-1. User visits http://localhost:3000 (Next.js Frontend)
-2. Dashboard page mounts
-3. useDashboardStats() hook initializes
-4. SWR triggers GET /analytics/summary
-5. Axios interceptor:
-   - Attaches JWT Bearer token from localStorage
-   - Sends to http://localhost:8000/api/v1/analytics/summary
-6. FastAPI backend:
-   - Validates JWT token
-   - Extracts tenant_id from token
-   - Queries database (filtered by tenant_id)
-   - Performs calculations (revenue, profit margin, etc.)
-   - Checks AICache for Gemini insights (70% faster!)
-   - Returns JSON response: DashboardStats
-7. Frontend receives data:
-   - SWR caches for 1 minute
-   - Maps data to StatCard components
-   - Real-time glowing cards update with values
-   - Skeleton loaders disappear
-8. Result: Live, secure, cached dashboard ✨
-```
-
-### Frontend Architecture
-
-**Project Structure:**
-```
-/frontend
-├── app/                    # Next.js App Router
-│   ├── page.tsx           # Dashboard (real-time stats)
-│   ├── menu/page.tsx      # Menu management
-│   ├── sales/page.tsx     # Sales analytics
-│   ├── insights/page.tsx  # AI recommendations
-│   ├── settings/page.tsx  # Configuration
-│   ├── layout.tsx         # Root layout with Layout component
-│   └── globals.css        # Dark theme + animations
-├── components/
-│   └── ui/                # Reusable components
-│       ├── Sidebar.tsx    # Glassmorphism navigation
-│       ├── Layout.tsx     # Main wrapper
-│       ├── StatCard.tsx   # Glowing metric cards
-│       ├── Skeleton.tsx   # Loading states
-│       ├── ChartCard.tsx  # Chart container
-│       ├── ProgressBar.tsx # Metric bars
-│       └── index.ts       # Component exports
-├── hooks/
-│   └── useDashboardStats.ts  # Real-time data fetching with SWR
-├── lib/
-│   └── api-client.ts      # Authenticated Axios instance
-├── types/
-│   └── api.ts             # TypeScript interfaces for API
-├── services/              # API service methods
-├── public/                # Static assets
-├── package.json           # Dependencies (Next.js, Axios, SWR, etc.)
-├── tailwind.config.ts     # Deep Slate + Electric Blue theme
-├── tsconfig.json          # TypeScript configuration
-└── next.config.ts         # Next.js configuration
-```
-
-### Theme & Design System
-
-**Color Palette:**
-- **Primary**: Deep Slate (`#030712`, `#1f2937`, `#374151`)
-- **Accent**: Electric Blue (`#0ea5e9`, `#0284c7`)
-- **Effects**: Glassmorphism (blur + semi-transparent), glowing borders
-
-**Components:**
-- StatCard with hover glow effect
-- Animated skeleton loaders (pulsing effect)
-- Gradient badges for status
-- Progress bars with smooth animations
-- Responsive mobile-first design
-
----
-
-### Data Flow Diagram
+## 🔗 Full-Stack Architecture Flow
 
 ```mermaid
 graph TB
     User["👤 Restaurant Owner<br/>(Web/Mobile Client)"]
-    Auth["🔐 JWT Authentication<br/>(Token-Based Access)"]
-    FastAPI["⚡ FastAPI Backend<br/>(Async Routes)"]
+    Auth["🔐 JWT Authentication"]
+    FastAPI["⚡ FastAPI Backend"]
     
-    Router1["🍽️ Menu Management<br/>(Categories, Items, Recipes)"]
-    Router2["💳 Sales Tracking<br/>(Transactions, Line Items)"]
-    Router3["📊 Analytics Engine<br/>(Forecasts, Insights)"]
-    Router4["✅ Recommendations<br/>(AI Suggestions + Tracking)"]
-    
-    SQLAlchemy["🗄️ SQLAlchemy ORM<br/>(Type-Safe Queries)"]
-    Database["🔷 PostgreSQL/SQLite<br/>(12 Tables, Multi-Tenant)"]
-    
-    subgraph Local ML Core
-        XGB["📈 XGBoost<br/>(Revenue Forecasting)"]
-        Sklearn["⭐ scikit-learn<br/>(Sentiment & Segmentation)"]
+    subgraph Core Services
+        Menu["🍽️ Menu Management"]
+        Sales["💳 Sales Tracking"]
+        Analytics["📊 Analytics Engine"]
     end
     
-    Gemini["🤖 Google Gemini 1.5<br/>(Narrative Strategy only)"]
-    Weather["🌡️ OpenWeatherMap API<br/>(Context Integration)"]
+    Database["🗄️ PostgreSQL/SQLite<br/>(Multi-Tenant Data)"]
     
-    Cache["⚡ In-Memory Cache<br/>(Weather, Predictions)"]
-    Response["✨ JSON Response<br/>(Insights & Recommendations)"]
+    subgraph Intelligence Layer
+        XGB["📈 XGBoost (Forecasting)"]
+        Sklearn["⭐ scikit-learn (Sentiment)"]
+        Gemini["🤖 Google Gemini 1.5"]
+    end
     
-    User -->|OAuth/Register| Auth
-    Auth -->|Validated Token| FastAPI
-    
-    FastAPI --> Router1
-    FastAPI --> Router2
-    FastAPI --> Router3
-    FastAPI --> Router4
-    
-    Router1 --> SQLAlchemy
-    Router2 --> SQLAlchemy
-    Router3 --> SQLAlchemy
-    Router4 --> SQLAlchemy
-    
-    SQLAlchemy <-->|Async Queries| Database
-    
-    Router3 -->|Run Forecaster| XGB
-    Router3 -->|Run Sentiment/RFM| Sklearn
-    
-    XGB -->|Forecasting Metrics| Gemini
-    Sklearn -->|Sentiment & Segment Data| Gemini
-    Router4 -->|Generate Recommendations| Gemini
-    
-    Router3 -.->|Cache Lookup| Cache
-    Router3 -->|Weather Context| Weather
-    Weather -->|Cached Response| Cache
-    
-    Router3 -->|AI Insights| Response
-    Router4 -->|Verified Recommendations| Response
-    Response -->|JSON + Status| User
-    
-    style User fill:#e1f5ff
-    style Auth fill:#fff9c4
-    style FastAPI fill:#f3e5f5
-    style Router1 fill:#c8e6c9
-    style Router2 fill:#c8e6c9
-    style Router3 fill:#c8e6c9
-    style Router4 fill:#c8e6c9
-    style SQLAlchemy fill:#ffe0b2
-    style Database fill:#ffccbc
-    style Gemini fill:#f8bbd0
-    style Weather fill:#d1c4e9
-    style Cache fill:#fff9c4
-    style Response fill:#b2dfdb
-    style XGB fill:#bbdefb
-    style Sklearn fill:#bbdefb
-```
-
-### Architecture Layers
-
-| Layer | Component | Technology | Purpose |
-|-------|-----------|-----------|---------|
-| **Presentation** | FastAPI Routes | Python FastAPI | HTTP endpoints with OpenAPI/Swagger docs |
-| **Authentication** | JWT middleware | Python-Jose | Token validation & tenant isolation |
-| **Application Logic** | Service Layer | AsyncIO | Business logic (forecasting, sentiment, strategy) |
-| **Data Access** | SQLAlchemy ORM | SQLAlchemy 2.0 | Type-safe async database queries |
-| **Persistence** | Database | PostgreSQL / SQLite | 12-table schema with relationships & constraints |
-| **AI Intelligence** | Gemini Integration | google.generativeai | NLP, strategy reasoning, impact analysis |
-| **External Context** | Weather API | OpenWeatherMap | Environmental data for context-aware decisions |
-
-### Multi-Tenant Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                          FastAPI App                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────────  Restaurant A (Tenant 1) ──────────────┐ │
-│  │  User: Owner1  Menus: [Items...]  Sales: [Trans...]  │ │
-│  │  Isolated Data Access via JWT + tenant_id validation │ │
-│  └────────────────────────────────────────────────────┘ │
-│                                                             │
-│  ┌──────────────  Restaurant B (Tenant 2) ──────────────┐ │
-│  │  User: Owner2  Menus: [Items...]  Sales: [Trans...]  │ │
-│  │  Isolated Data Access via JWT + tenant_id validation │ │
-│  └────────────────────────────────────────────────────┘ │
-│                                                             │
-│  ┌──────────────  Restaurant N (Tenant N) ──────────────┐ │
-│  │  User: OwnerN  Menus: [Items...]  Sales: [Trans...]  │ │
-│  │  Isolated Data Access via JWT + tenant_id validation │ │
-│  └────────────────────────────────────────────────────┘ │
-│                                                             │
-├─────────────────────────────────────────────────────────────┤
-│           Shared Infrastructure (Gemini, DB, Cache)        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Request-Response Flow Example
-
-**User requests AI strategy (Autonomous Agent)**
-
-```
-1. POST /analytics/daily-strategy
-2. FastAPI validates JWT token → extracts tenant_id
-3. Service calls app/services/ai_agent.py
-4. AI Agent:
-   - Fetches last 7 days of sales (filtered by tenant_id)
-   - Fetches today's weather (cached)
-   - Extracts star dishes, underperformers, pricing insights
-   - Calls Gemini with strategy prompt + context
-5. Gemini returns structured recommendations
-6. Service formats response with:
-   - Strategy (natural language from AI)
-   - Actionable recommendations (pricing, staffing, menu)
-   - Confidence levels & reasoning
-7. Response returned to client as JSON
-```
-
-### Data Security & Isolation
-
-- **JWT Authentication**: Validates every request, extracts `tenant_id`
-- **Database Queries**: All queries filtered by `WHERE tenant_id = ?`
-- **Foreign Keys**: `restaurant_id`/`tenant_id` enforced at schema level
-- **Cascade Deletes**: Deleting a restaurant deletes all related data
-- **No Cross-Tenant Data Leakage**: Impossible for Owner A to see Owner B's data
-
-### Performance & Caching
-
-| Feature | Technology | TTL | Use Case |
-|---------|-----------|-----|----------|
-| **Weather Context** | In-memory cache | 30 min | Avoid unnecessary API calls |
-| **Forecast Predictions** | Cached NumPy arrays | 1 hour | Recurring forecast requests |
-| **Database Connections** | asyncpg pool | N/A | Connection pooling for efficiency |
-| **Async I/O** | FastAPI + asyncio | N/A | Non-blocking request handling |
-
----
-
-## 🚀 Project Structure
-
-```
-/OpsMind-AI
-├── app/
-│   ├── api/               # Route handlers (FastAPI endpoints)
-│   ├── core/              # Config, security, database sessions
-│   ├── models/            # SQLAlchemy database models
-│   ├── services/          # Business logic (Gemini AI, weather, margin details)
-│   └── main.py            # FastAPI application entry point
-├── frontend/              # Next.js 14 Dashboard Web App
-├── .github/workflows/     # CI/CD (GitHub Actions)
-├── requirements.txt       # Python dependencies
-├── README.md              # Project documentation
-├── LICENSE                # MIT license
-└── .gitignore             # Git ignored files
+    User -->|OAuth/Request| Auth
+    Auth -->|Validated| FastAPI
+    FastAPI --> Core Services
+    Core Services <--> Database
+    Analytics --> Intelligence Layer
+    Intelligence Layer -->|Insights & Strategy| Analytics
+    Analytics -->|JSON Response| User
 ```
 
 ---
 
-## 🗄️ Database Schema (12 Tables)
+## 🗄️ Database Schema
 
-```
-1. tenants          → Restaurant organizations (parent)
-2. users            → Staff/managers with JWT auth
-3. categories       → Menu organization structure
-4. menu_items       → Dishes with pricing & costs
-5. ingredients      → Raw materials with unit costs
-6. recipes          → Menu item ↔ Ingredient mapping
-7. sales            → Completed transactions/bills
-8. sale_items       → Line items within transactions
-9. reviews          → Customer feedback & AI sentiment
-10. staff           → Employee records & hourly rates
-11. shifts          → Work shifts & cost calculations
-12. recommendations → AI suggestions with impact tracking
-```
+The system uses a robust 12-table relational schema. **All tables are strictly scoped by `tenant_id` for complete data isolation.**
 
-**Multi-Tenant Architecture:** All 12 tables scoped by `tenant_id` for complete data isolation.
+1. `tenants` — Restaurant organizations (parent)
+2. `users` — Staff/managers with JWT auth
+3. `categories` — Menu organization structure
+4. `menu_items` — Dishes with pricing & costs
+5. `ingredients` — Raw materials with unit costs
+6. `recipes` — Menu item ↔ Ingredient mapping
+7. `sales` — Completed transactions/bills
+8. `sale_items` — Line items within transactions
+9. `reviews` — Customer feedback & AI sentiment
+10. `staff` — Employee records & hourly rates
+11. `shifts` — Work shifts & cost calculations
+12. `recommendations` — AI suggestions with impact tracking
 
 ---
 
-## 🤖 AI Systems (Hybrid ML + LLM Core)
+## 🚀 Getting Started
 
-### **1. Heart — Revenue Forecaster**
-- Predicts next 3 days of sales with confidence scores grounded in statistical trend analysis.
-- **Model Type**: XGBoost Regressor with time-series feature engineering.
-- **Features**: Lag revenue (1, 7, 14 days), rolling averages (7, 14 days), calendar components, and OpenWeatherMap context.
-- **Key Metrics**: MAE: 642.04 (34% improvement over naive baseline), Stability Ratio: 12.92%.
-- **Endpoint:** `GET /analytics/forecast`
+### 1. Backend Setup
 
-### **2. Ears — Sentiment Analyzer**
-- Processes customer feedback and parses reputation insights locally and instantly.
-- **Model Type**: scikit-learn Pipeline (TF-IDF Vectorizer + Logistic Regression classifier).
-- **Key Metrics**: F1-score: 0.757 on holdout reviews dataset.
-- **LLM Role**: Google Gemini calls are preserved solely for generating draft replies to negative reviews (creative text generation), rather than raw sentiment classification.
-- **Endpoint:** `GET /analytics/reputation`
+**Prerequisites:** Python 3.10+, PostgreSQL 14+ (or SQLite3)
 
-### **3. Persona Engine**
-- Segments and profiles customers based on their historical purchasing behavior instead of static rule-based groups.
-- **Model Type**: scikit-learn K-Means clustering.
-- **Features**: Order frequency (90 days), average spend, recency (days), top menu category, total items ordered, and average items per order.
-- **Centroids**: Silhouette-tuned cluster selection (3 to 6 clusters) with dynamic centroid labeling mapping to personas (e.g., "VIP Regular", "Occasional Visitor", "Big Spender", "At-Risk").
-- **Endpoint:** `GET /customers/{id}/briefing`
-
-### **4. Brain — Strategy Agent**
-- Evaluates overall performance metrics and translates machine learning patterns into high-level business advice.
-- **LLM Role**: Google Gemini-powered narrative generation only (interpreting ML output rather than running classification/forecasting directly).
-- **Endpoint:** `GET /analytics/ai-briefing`
-
-### **5. Stomach — Cost Analyst (Gemini-Assisted)**
-- Calculates Cost of Goods Sold (COGS) per dish, identifies low-margin products, and highlights ingredient waste.
-- **Endpoint:** `GET /analytics/margin-report`
-
-### **6. Nervous System — Labor Optimizer (Gemini-Assisted)**
-- Generates 24-hour staffing heatmaps, calculates labor-to-sales efficiency, and optimizes employee shift scheduling.
-- **Endpoint:** `GET /analytics/staffing-plan`
-
----
-
-## 📈 Model Performance & Evaluation
-
-OpsMind AI features a comprehensive model backtesting dashboard that continuously measures XGBoost forecaster performance against a naive baseline over a rolling 8-week window.
-
-### Backtesting Performance Indicators
-- **Overall MAE Lift**: Average improvement of XGBoost forecasting vs. naive baseline (current baseline: **+34.0%**).
-- **Model Stability Ratio**: Standard deviation of weekly error metrics divided by the mean. Measures consistency (target: `< 20.0%`, currently at **12.92%**).
-- **Outlier Penalty (RMSE)**: Identifies scale of prediction errors.
-
-### Weekly Evaluation Benchmark Logs
-| Week | Date Range | Naive MAE | XGB MAE | XGB RMSE | Performance Lift |
-|---|---|---|---|---|---|
-| Week 1 | 2026-04-23 to 2026-04-30 | ₹646.86 | ₹600.00 | ₹800.00 | +7.2% |
-| Week 2 | 2026-04-30 to 2026-05-07 | ₹712.57 | ₹500.00 | ₹700.00 | +29.8% |
-
-![Model Performance Dashboard Mockup](file:///C:/Users/richa/.gemini/antigravity-ide/brain/6692ed15-055a-4933-882b-7113a6f81062/model_performance_dashboard_1781895618109.png)
-
----
-
-## 📝 Getting Started
-
-### 📊 Data Import & Model Retraining
-
-Before models can serve tenant-specific forecasting or segmentation, they must be trained on the tenant's data:
-1. **Upload Sales History**: Send a multipart CSV file containing historical sales records to:
-   `POST /api/v1/data/upload-sales`
-2. **Trigger Model Retraining**: Trigger retraining and backtesting on-demand:
-   `POST /api/v1/ml/retrain?model_type=all`
-   - This retrains the forecasting models, updates customer segmentation clusters, and executes the 8-week rolling backtest, writing a fresh performance report to `reports/{tenant_id}/backtest.csv`.
-
-### Backend Setup
-
-#### Prerequisites
-- Python 3.10+
-- PostgreSQL 14+ (or SQLite3)
-
-#### Installation
 ```bash
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Setup database (Alembic migrations)
+# Run database migrations
 python -m alembic upgrade head
 
-# Run server
+# Start the API server
 uvicorn app.main:app --reload
 ```
-Visit: `http://localhost:8000/docs` for API Swagger documentation.
+*Visit `http://localhost:8000/docs` for the interactive API documentation.*
 
----
+### 2. Frontend Setup
 
-### Frontend Setup
+**Prerequisites:** Node.js 18+
 
-#### Prerequisites
-- Node.js 18+
-- npm
-
-#### Installation
 ```bash
 # Navigate to frontend directory
 cd frontend
@@ -452,118 +143,21 @@ cd frontend
 # Install dependencies
 npm install
 
-# Run Next.js local dev server
+# Start the development server
 npm run dev
 ```
-Visit: `http://localhost:3000` to access the Dashboard UI.
+*Visit `http://localhost:3000` to access the Dashboard UI.*
 
----
+### 3. Environment Configuration
 
-## 📚 API Endpoints (30+ Routes)
+Create a `.env` file in the root directory:
 
-### **Authentication**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/auth/register` | Register new restaurant |
-| `POST` | `/auth/login` | Get JWT token |
-| `POST` | `/auth/refresh` | Refresh access token |
-| `GET` | `/auth/me` | Verify session |
-
-### **Menu Management**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/menu/categories` | List categories |
-| `POST` | `/menu/categories` | Create category |
-| `GET` | `/menu/items` | List menu items |
-| `POST` | `/menu/items` | Create menu item |
-| `GET` | `/menu/ingredients` | List ingredients |
-| `POST` | `/menu/ingredients` | Create ingredient |
-| `GET` | `/menu/recipes` | List recipes |
-| `POST` | `/menu/recipes` | Create recipe |
-
-### **Sales**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/sales` | Get sales records |
-| `POST` | `/sales` | Log new sale |
-
-### **Analytics & AI**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/analytics/summary` | Revenue dashboard |
-| `GET` | `/analytics/metrics/revenue` | Revenue breakdown |
-| `GET` | `/analytics/top-items` | Best-selling items |
-| `GET` | `/analytics/ai-briefing` | AI strategy recommendations |
-| `GET` | `/analytics/forecast` | Revenue forecast |
-| `GET` | `/analytics/margin-report` | Profit margin analysis |
-| `GET` | `/analytics/reputation` | Customer sentiment dashboard |
-| `GET` | `/analytics/staffing-plan` | Labor optimization & heatmap |
-
-**Total:** 30+ endpoints across all systems
-
----
-
-## 🚀 CI/CD Pipeline (Production-Ready DevOps)
-
-OpsMind AI implements **professional DevOps practices** with automated testing, security scanning, and deployment readiness. Every code push triggers our CI/CD pipeline to ensure quality and security.
-
-### 📋 Pipeline Overview
-
-```
-Code Push → GitHub Actions
-    ├─ 🧪 Backend Checks
-    │   └─ Linting (flake8) + Code Format Check (black)
-    ├─ 🎨 Frontend Validation (ESLint + Next.js Build)
-    │   └─ Type checking (TypeScript)
-    ├─ 🐳 Docker Build
-    │   └─ 🔐 Trivy Security Scan (vulnerability detection)
-    └─ ✅ Status Check
-        └─ Deploy only if all checks pass
-```
-
-### 🔐 GitHub Secrets Setup (REQUIRED FOR CI/CD)
-
-These secrets must be added to your GitHub repository for the pipeline to work:
-
-**Go to:** `GitHub Repository → Settings → Secrets and variables → Actions → New repository secret`
-
-#### **Required Secrets:**
-
-| Secret Name | Value | Description |
-|------------|-------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://user:password@host:5432/dbname` | Production database connection |
-| `SECRET_KEY` | Generate with: `openssl rand -hex 32` | JWT signing key (DO NOT use default) |
-| `GEMINI_API_KEY` | Your Google Gemini API key | Required for AI agent features |
-| `OPENWEATHER_API_KEY` | Your OpenWeatherMap API key | Optional but recommended |
-
-#### **How to Generate Secrets Securely:**
-
-```bash
-# Generate strong JWT secret
-openssl rand -hex 32
-# Output: a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6...
-
-# Store this value in GitHub Secrets as SECRET_KEY
-```
-
-#### **Optional Secrets:**
-
-| Secret Name | Value | Description |
-|------------|-------|-------------|
-| `DOCKER_REGISTRY_USERNAME` | Your Docker Hub username | For pushing images to registry |
-| `DOCKER_REGISTRY_PASSWORD` | Your Docker Hub token | For pushing images to registry |
-
-### 🔧 Environment Variables Reference
-
-**For Local Development (.env file):**
 ```env
 # Database
 DATABASE_URL=sqlite+aiosqlite:///./opsmind_demo.db
-# Or for PostgreSQL:
-# DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/opsmind
 
 # JWT Security
-SECRET_KEY=dev-only-generate-strong-key-for-production
+SECRET_KEY=generate-a-strong-secret-key-here
 DEBUG=True
 ENVIRONMENT=development
 
@@ -577,161 +171,25 @@ APP_VERSION=1.0.0
 CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
 ```
 
-**For Production (via GitHub Secrets/Environment):**
-```env
-DATABASE_URL=postgresql+asyncpg://prod_user:prod_pass@prod_host:5432/opsmind_prod
-SECRET_KEY=<generated-strong-secret>
-GEMINI_API_KEY=<your-gemini-key>
-DEBUG=False
-ENVIRONMENT=production
-```
-
-### 🧪 Pipeline Jobs Explained
-
-#### **1️⃣ Backend Checks Job**
-```yaml
-- Runs Python 3.11
-- Code quality checks (flake8)
-- Code format checks (black)
-- Fails pipeline if checks fail
-```
-
-**Run locally:**
-```bash
-# Code quality checks
-flake8 app
-# Code format checks
-black app --check
-```
-
-#### **2️⃣ Frontend Tests Job**
-```yaml
-- Sets up Node.js 18
-- Installs dependencies (npm ci)
-- Runs ESLint type checking
-- Builds Next.js project
-- Ensures no TypeScript errors
-```
-
-**Run locally:**
-```bash
-cd frontend
-npm run lint
-npm run build
-```
-
-#### **3️⃣ Docker Build & Security Scan Job**
-```yaml
-- Depends on: Backend ✓ AND Frontend ✓
-- Builds Dockerfile
-- Scans image with Trivy for vulnerabilities
-- Uploads SARIF report to GitHub Security tab
-- Stops deployment if CRITICAL/HIGH vulnerabilities found
-```
-
-**Run locally:**
-```bash
-docker build -t opsmind-ai:latest .
-trivy image opsmind-ai:latest
-```
-
-### 📊 Viewing Pipeline Results
-
-1. **Go to:** GitHub Repository → Actions tab
-2. **Select:** Latest workflow run
-3. **View:**
-   - ✅ Passed jobs (green)
-   - ❌ Failed jobs (red) — Click to see error details
-   - 🔐 Security scan results
-
-### 🛡️ Security Best Practices
-
-#### ❌ **What NOT to do:**
-```python
-# ❌ NEVER commit secrets in code
-SECRET_KEY = "super-secret-key"
-GEMINI_API_KEY = "abc123xyz"
-```
-
-#### ✅ **What TO do:**
-```python
-# ✅ Load from environment only
-from app.core.config import settings
-api_key = settings.gemini_api_key  # Pulled from env var or .env
-```
-
-#### 🔐 **Protection Checklist:**
-- [ ] All secrets in GitHub Secrets (never in git)
-- [ ] `.env` file in `.gitignore` (not committed)
-- [ ] Production DATABASE_URL uses strong passwords
-- [ ] SECRET_KEY regenerated for each environment
-- [ ] API keys rotated quarterly
-- [ ] Trivy scan runs on every build
-
-### 🚨 Troubleshooting Pipeline Failures
-
-| Error | Solution |
-|-------|----------|
-| `GEMINI_API_KEY not found` | Add secret to GitHub → Settings → Secrets |
-| `Trivy found CRITICAL vulnerability` | Review security scan in Actions tab → Security tab, patch dependencies |
-| `Docker build failed` | Check `docker build -t test .` locally first |
-| `Next.js build failed` | Check `cd frontend && npm run build` locally first |
-
-### 📈 What's Checked (Quality Gate)
-
-✅ **Code Quality:**
-- Python syntax (flake8)
-- Code formatting (black)
-- TypeScript types
-
-✅ **Functionality:**
-- Frontend builds successfully
-
-✅ **Security:**
-- Trivy vulnerability scan (0 CRITICAL/HIGH)
-- No secrets in git history
-- Environment-based config only
-
-✅ **Performance:**
-- Docker image builds in <5 minutes
-
-### 🌟 Why This Matters (Placement Interview Gold)
-
-This CI/CD setup demonstrates:
-1. **DevOps Maturity** — Automated deployments like Google/Zomato
-2. **Security-First Mindset** — Shift-left security scanning
-3. **Professional Practices** — Never deploy broken code
-4. **Scalability** — Ready for cloud deployment (Kubernetes, Lambda)
-5. **Compliance** — Audit trail of all deployments
-
 ---
 
-## 🧠 Machine Learning & Sentiment Bootstrapping
+## 📈 Model Performance & Evaluation
 
-To replace external API calls (e.g., Gemini LLM calls) with a local classifier for reputation and sentiment analysis, we have implemented a self-contained training data preparation pipeline.
+OpsMind AI features a comprehensive model backtesting pipeline that continuously measures the XGBoost forecaster performance against a naive baseline over a rolling 8-week window.
 
-### Sentiment Data Pipeline (`sentiment_data.py`)
-This script prepares a weak-labeled and balanced training dataset of customer feedback comments.
+- **Data Import:** Send historical sales records via `POST /api/v1/data/upload-sales`
+- **Model Retraining:** Trigger retraining on-demand via `POST /api/v1/ml/retrain?model_type=all`
 
-- **Data Sources**:
-  1. **Database reviews**: Pulls real comments from the `reviews` table (`opsmind_demo.db`). If empty, seeds the pipeline with diverse synthetic cases.
-  2. **External reviews**: Merges with a public dataset (fetched from a raw GitHub TSV) and caches the download to `data/external_reviews.csv` to avoid redundant network hits.
-- **Weak-Labeling**: Annotates reviews using Gemini's prior output (`process_review` AI agent service). If the `GEMINI_API_KEY` is not present, it gracefully falls back to a deterministic keyword-matching heuristic labeler.
-- **Upsampling & Balance**: Enforces a minimum size of 300 rows and a class balance where no single class (positive, negative, neutral) exceeds 60% of the dataset by upsampling minority classes (duplicating/rephrasing minority rows).
-- **Cold-Start Architecture**: This allows the model to be bootstrapped on synthetic and weak-labeled data until a larger pool of real customer feedback reviews accumulates.
-
-To run the pipeline standalone:
-```bash
-python app/ml/sentiment_data.py
-```
-This generates the final balanced training set at `data/sentiment_train.csv`.
+*Current Benchmark:* Forecasting MAE demonstrates a **+34.0% performance lift** over naive baseline predictions.
 
 ---
 
 ## 💻 Local Quality Checks
 
+Maintain high code quality with our standardized local checks:
+
 ```bash
-# Backend linting & formatting checks
+# Backend linting & formatting
 flake8 app
 black app --check
 
@@ -740,35 +198,23 @@ python -m pytest tests -v
 
 # Frontend linting
 cd frontend && npm run lint
-
-# Local Docker build
-docker build -t opsmind-ai:latest .
-docker run -p 8000:8000 opsmind-ai:latest
 ```
 
 ---
 
-## 📄 License
+## 📄 License & Contributing
 
-MIT License — See [LICENSE](LICENSE) file
-
----
-
-## 👥 Contributing
+This project is licensed under the **MIT License** — See the [LICENSE](LICENSE) file for details.
 
 1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/agents`)
-3. Commit changes (`git commit -m "feat: add agent framework"`)
-4. Push to branch (`git push origin feature/agents`)
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m "feat: add amazing feature"`)
+4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
 ---
 
-## 📧 Contact
-
-**Email:** taskshgandhi4@gmail.com  
-**GitHub:** [taksh1507](https://github.com/taksh1507)
-
----
-
-**Last Updated:** March 21, 2026
+<div align="center">
+  <p>Built with ❤️ by <a href="https://github.com/taksh1507">Taksh Gandhi</a></p>
+  <p>Contact: taskshgandhi4@gmail.com</p>
+</div>
