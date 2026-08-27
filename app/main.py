@@ -6,70 +6,96 @@ Initializes the FastAPI application, configures routers, middleware, and lifecyc
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Depends
-from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
+from app.core.logging_config import setup_logging, setup_app_logger, AccessLogMiddleware
 from app.database import init_db, close_db, get_db
-from app.api import auth, categories, menu_items, sales, analytics, recommendations, search, customers_router, data_import, training
+from app.api import (
+    auth,
+    categories,
+    menu_items,
+    sales,
+    analytics,
+    recommendations,
+    search,
+    customers_router,
+    data_import,
+    training,
+)
 from app.api import ws
+
+logger = setup_app_logger("opsmind.main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup and shutdown events."""
-    
+
     # Startup
-    print(f"Starting {settings.app_name} v{settings.app_version}")
+    setup_logging()
+    logger.info("Starting %s v%s", settings.app_name, settings.app_version)
+    # Fail fast on insecure configuration in non-development environments
+    settings.validate_production_settings()
     await init_db(settings.database_url)
-    print("Database initialized")
-    
+    logger.info("Database initialized")
+
+    # Warm the currency exchange rate from the configured/live source (best-effort)
+    try:
+        from app.core.finance import refresh_exchange_rate_from_live_source
+
+        await refresh_exchange_rate_from_live_source()
+    except Exception:
+        logger.warning("Currency exchange rate refresh failed; using configured fallback.")
+
     # Start automated retraining scheduler
     from app.core.scheduler import start_scheduler
+
     start_scheduler()
-    
+
     yield
-    
+
     # Shutdown
-    print("Shutting down...")
-    
+    logger.info("Shutting down...")
+
     # Shutdown scheduler
     from app.core.scheduler import shutdown_scheduler
+
     await shutdown_scheduler()
-    
+
     await close_db()
-    print("Database closed")
+    logger.info("Database closed")
 
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application.
-    
+
     Returns:
         FastAPI: Configured application instance
-    
+
     OpenAPI Documentation:
         - Interactive API docs (Swagger UI): /docs
         - ReDoc documentation: /redoc
-    
+
     System Architecture:
         User → Authentication (JWT) → Multi-Tenant Isolation → Business Logic
         → Gemini AI Analysis → Database (PostgreSQL/SQLite)
-    
+
     Core Capabilities:
         🤖 AI-Powered Analytics: Autonomous restaurant consultant via Gemini 1.5
         📊 Real-Time Insights: Revenue forecasting, staffing optimization, margin analysis
         💰 Profit Intelligence: Cost reduction recommendations, waste detection
         🎯 Agentic Learning Loop: Track, accept/reject, and verify AI recommendation impact
         🌍 Environmental Awareness: Weather-aware menu promotions and staffing
-    
+
     Implementation Highlights:
         ✅ Days 2-3: Multi-tenant SaaS foundation with JWT auth
         ✅ Days 7-11: AI strategy, forecasting, costs, sentiment, labor optimization
         ✅ Days 12-14: Mathematical confidence scoring, weather integration, feedback loop
         ✅ Day 15: Professional documentation and live demo capability
     """
-    
+
     app = FastAPI(
         title="OpsMind AI — Restaurant Operations Intelligence",
         version=settings.app_version,
@@ -90,7 +116,7 @@ def create_app() -> FastAPI:
             "- 🔒 **Multi-Tenant Security**: Complete tenant isolation with JWT authentication\n\n"
             "**Tech Stack:**\n"
             "Backend: FastAPI (async) | Database: PostgreSQL/SQLite | ORM: SQLAlchemy 2.0 | "
-            "AI: Google Gemini 1.5 Flash | Auth: JWT + bcrypt | Analytics: NumPy/Pandas\n\n"
+            "AI: Google Gemini 2.0 Flash | Auth: JWT + Argon2/bcrypt | Analytics: NumPy/Pandas\n\n"
             "**Live Demo:** Seed the database with `scripts/seed_data.py` to see AI analytics in action."
         ),
         contact={
@@ -102,89 +128,59 @@ def create_app() -> FastAPI:
             "url": "https://opensource.org/licenses/MIT",
         },
         lifespan=lifespan,
-        debug=settings.debug
+        debug=settings.debug,
     )
-    
+
     # CORS Middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["*"]
+        allow_headers=["*"],
     )
-    
+
+    # Structured access logging for every HTTP request
+    app.add_middleware(AccessLogMiddleware)
+
     # Include routers with /api/v1 prefix and tags for Swagger organization
     app.include_router(
-        auth.router,
-        prefix="/api/v1",
-        tags=["🔐 Authentication & Authorization"]
+        auth.router, prefix="/api/v1", tags=["🔐 Authentication & Authorization"]
+    )
+    app.include_router(categories.router, prefix="/api/v1", tags=["🏷️ Menu Management"])
+    app.include_router(
+        menu_items.router, prefix="/api/v1", tags=["🍽️ Menu Items & Recipes"]
+    )
+    app.include_router(sales.router, prefix="/api/v1", tags=["💳 Sales & Transactions"])
+    app.include_router(
+        analytics.router, prefix="/api/v1", tags=["📊 Analytics & AI Insights"]
     )
     app.include_router(
-        categories.router,
-        prefix="/api/v1",
-        tags=["🏷️ Menu Management"]
+        recommendations.router, prefix="/api/v1", tags=["✅ Recommendation Tracking"]
     )
+    app.include_router(search.router, prefix="/api/v1", tags=["🔍 Global Search"])
     app.include_router(
-        menu_items.router,
-        prefix="/api/v1",
-        tags=["🍽️ Menu Items & Recipes"]
+        customers_router, prefix="/api/v1", tags=["👤 Customer Intelligence"]
     )
-    app.include_router(
-        sales.router,
-        prefix="/api/v1",
-        tags=["💳 Sales & Transactions"]
-    )
-    app.include_router(
-        analytics.router,
-        prefix="/api/v1",
-        tags=["📊 Analytics & AI Insights"]
-    )
-    app.include_router(
-        recommendations.router,
-        prefix="/api/v1",
-        tags=["✅ Recommendation Tracking"]
-    )
-    app.include_router(
-        search.router,
-        prefix="/api/v1",
-        tags=["🔍 Global Search"]
-    )
-    app.include_router(
-        customers_router,
-        prefix="/api/v1",
-        tags=["👤 Customer Intelligence"]
-    )
-    app.include_router(
-        data_import.router,
-        prefix="/api/v1",
-        tags=["📂 Data Import"]
-    )
-    app.include_router(
-        training.router,
-        prefix="/api/v1",
-        tags=["🏋️ Model Training"]
-    )
-    app.include_router(
-        ws.router,
-        tags=["🔌 WebSocket Real-Time"]
-    )
-    
+    app.include_router(data_import.router, prefix="/api/v1", tags=["📂 Data Import"])
+    app.include_router(training.router, prefix="/api/v1", tags=["🏋️ Model Training"])
+    app.include_router(ws.router, tags=["🔌 WebSocket Real-Time"])
+
     # Health check endpoint
     @app.get(
         "/health",
         tags=["🏥 System Health"],
         summary="System Health Check",
-        description="Returns the current health status of the OpsMind AI system with database connectivity check."
+        description="Returns the current health status of the OpsMind AI system with database connectivity check.",
     )
     async def health_check(db: AsyncSession = Depends(get_db)):
         """System health check endpoint for automated deployment monitoring.
-        
+
         Checks:
         - Database connectivity and responsiveness
         - Application availability
         - Current server time in IST (Indian Standard Time)
-        
+
         Returns:
             - status: "healthy" or "unhealthy"
             - app: Application name
@@ -193,7 +189,7 @@ def create_app() -> FastAPI:
             - timestamp_ist: Current time in IST (IS 8601 format)
             - database: "connected" or "disconnected"
             - uptime_check: True if responsive
-            
+
         Use Cases:
             - AWS/Azure health checks for auto-scaling and load balancing
             - CloudWatch, DataDog, and other monitoring tools
@@ -203,22 +199,23 @@ def create_app() -> FastAPI:
         try:
             # ✅ Check database connectivity by executing a simple query
             from sqlalchemy import text
+
             await db.execute(text("SELECT 1"))
             db_status = "connected"
         except Exception as e:
             db_status = "disconnected"
             # Log the error for debugging
-            print(f"Database health check failed: {str(e)}")
-        
+            logger.error("Database health check failed: %s", e)
+
         # 🕐 Calculate current time in IST (UTC+5:30)
         utc_now = datetime.now(timezone.utc)
         ist_tz = timezone(timedelta(hours=5, minutes=30))
         ist_now = utc_now.astimezone(ist_tz)
-        
+
         # Determine overall health status
         is_healthy = db_status == "connected"
         status = "healthy" if is_healthy else "degraded"
-        
+
         return {
             "status": status,
             "app": settings.app_name,
@@ -227,19 +224,19 @@ def create_app() -> FastAPI:
             "timestamp_ist": ist_now.isoformat(),
             "database": db_status,
             "uptime_check": True,
-            "environment": "production" if not settings.debug else "development"
+            "environment": "production" if not settings.debug else "development",
         }
-    
+
     # Root endpoint
     @app.get(
         "/",
         tags=["📋 Welcome"],
         summary="API Welcome",
-        description="Welcome endpoint with API information and documentation links."
+        description="Welcome endpoint with API information and documentation links.",
     )
     async def root():
         """Welcome to OpsMind AI.
-        
+
         Returns:
             - message: Welcome message
             - version: Current API version
@@ -258,11 +255,11 @@ def create_app() -> FastAPI:
                 "👥 Labor efficiency analysis",
                 "⭐ Customer sentiment analysis",
                 "🌡️ Weather-aware promotions",
-                "✅ Recommendation impact verification"
+                "✅ Recommendation impact verification",
             ],
-            "github": "https://github.com/taksh1507/OpsMind-AI-Restaurant-Operations-Intelligence-System"
+            "github": "https://github.com/taksh1507/OpsMind-AI-Restaurant-Operations-Intelligence-System",
         }
-    
+
     return app
 
 
@@ -272,10 +269,5 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.debug
-    )
+
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=settings.debug)

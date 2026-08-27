@@ -35,7 +35,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 ### Hybrid AI Intelligence
 - **Revenue Forecaster (XGBoost):** Predicts the next 3 days of sales with confidence scores grounded in statistical trend analysis.
 - **Customer Sentiment Engine (scikit-learn):** Processes customer feedback locally using TF-IDF and Logistic Regression.
-- **Strategy Agent (Gemini 1.5):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
+- **Strategy Agent (Gemini 2.0 Flash):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
 
 ### "The Pass" Design System
 - **Enterprise-Grade Dashboard:** Next.js frontend featuring the custom "The Pass" design aesthetic.
@@ -52,7 +52,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Database** | PostgreSQL / SQLite | SQLAlchemy 2.0 ORM with async connection pooling (`asyncpg`) |
 | **Auth** | JWT | Secure access token + refresh token pattern |
 | **AI Engine** | XGBoost, scikit-learn, Gemini | ML for forecasting/segmentation, Gemini for strategy narrative |
-| **Frontend** | Next.js 14, React 19 | App Router, Server Components, TypeScript |
+| **Frontend** | Next.js 16, React 19 | App Router, Server Components, TypeScript |
 | **Styling** | Tailwind CSS | Utility-first CSS with a custom dynamic theme |
 | **Data Fetching**| Axios + SWR | Authenticated HTTP client with intelligent client-side caching |
 
@@ -124,8 +124,8 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run database migrations
-python -m alembic upgrade head
+# Create database tables and seed demo data
+python scripts/seed_data.py
 
 # Start the API server
 uvicorn app.main:app --reload

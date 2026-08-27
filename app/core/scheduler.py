@@ -7,6 +7,7 @@ Automates checking and retraining per-tenant machine learning models
 import os
 import json
 import logging
+import asyncio
 from datetime import datetime, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -110,7 +111,10 @@ async def check_and_retrain_tenants() -> None:
                     # Retrain Customer Segmentation (if enough customers)
                     df_features = await build_segmentation_features(session, tenant_id)
                     if not df_features.empty and len(df_features) >= 3:
-                        train_customer_segmentation(df_features, tenant_id, reason="scheduled")
+                        # CPU-bound K-Means training -> offload to worker thread
+                        await asyncio.to_thread(
+                            train_customer_segmentation, df_features, tenant_id, "models", None, "scheduled"
+                        )
                         logger.info(f"Customer segmentation model retrained successfully for tenant {tenant_id}.")
                     else:
                         logger.warning(

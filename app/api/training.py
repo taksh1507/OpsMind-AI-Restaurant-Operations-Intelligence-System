@@ -4,6 +4,7 @@ Provides on-demand model retraining endpoints for forecasting and customer segme
 """
 
 from typing import Optional, Dict, Any
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,7 +86,11 @@ async def retrain_models(
     if model_type in ("segmentation", "all"):
         try:
             df_features = await build_segmentation_features(db, tenant_id)
-            segmentation_res = train_customer_segmentation(df_features, tenant_id)
+            # K-Means fitting + silhouette scoring is CPU-bound and synchronous;
+            # offload to a worker thread so the event loop is not blocked.
+            segmentation_res = await asyncio.to_thread(
+                train_customer_segmentation, df_features, tenant_id
+            )
             
             response_data["segmentation"] = {
                 "version": segmentation_res["version"],

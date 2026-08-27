@@ -65,6 +65,18 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RefreshRequest(BaseModel):
+    """Refresh token request schema."""
+
+    refresh_token: str
+
+
+class RevokeRequest(BaseModel):
+    """Revoke (logout) request schema."""
+
+    refresh_token: str
+
+
 class TokenResponse(BaseModel):
     """Token response schema."""
     
@@ -80,6 +92,7 @@ class RegisterResponse(BaseModel):
     user: UserSchema
     tenant: TenantSchema
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
 
 

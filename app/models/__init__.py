@@ -23,6 +23,7 @@ from .review import Review
 from .staff import Staff, Shift, StaffRole
 from .recommendation import Recommendation, RecommendationCategory, RecommendationStatus
 from .aicache import AICache
+from .refresh_token import RefreshToken
 from .schemas import (
     RegisterRequest,
     LoginRequest,
@@ -57,6 +58,7 @@ __all__ = [
     "RecommendationCategory",
     "RecommendationStatus",
     "AICache",
+    "RefreshToken",
     "RegisterRequest",
     "LoginRequest",
     "TenantSchema",

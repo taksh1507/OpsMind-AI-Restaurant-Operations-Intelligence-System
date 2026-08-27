@@ -131,7 +131,8 @@ CRITICAL RULES:
                 generation_config=genai.types.GenerationConfig(
                     temperature=0.7,
                     top_p=0.95,
-                    max_output_tokens=600
+                    max_output_tokens=600,
+                    response_mime_type="application/json"
                 )
             )
             ai_response = response.text
@@ -220,7 +221,8 @@ Instructions:
                 generation_config=genai.types.GenerationConfig(
                     temperature=0.6,
                     top_p=0.95,
-                    max_output_tokens=1200
+                    max_output_tokens=1200,
+                    response_mime_type="application/json"
                 )
             )
             ai_response = response.text
@@ -284,7 +286,8 @@ Instructions:
                     temperature=0.7,
                     top_p=0.95,
                     top_k=40,
-                    max_output_tokens=2048
+                    max_output_tokens=2048,
+                    response_mime_type="application/json"
                 )
             )
             
@@ -362,7 +365,8 @@ What inventory should be prioritized?"""
                     temperature=0.7,
                     top_p=0.95,
                     top_k=40,
-                    max_output_tokens=2048
+                    max_output_tokens=2048,
+                    response_mime_type="application/json"
                 )
             )
             
@@ -463,7 +467,7 @@ CRITICAL RULES for Day 13:
 - Connect weather to menu, staffing, and customer psychology
 - ALWAYS output valid JSON only"""
     
-    def _build_analysis_message(self, performance_data: Dict[str, Any]) -> str:
+    def _get_default_consultant_prompt(self) -> str:
         """Return the default system prompt for restaurant consulting.
         
         This prompt teaches the AI to find "Hidden Problems" in restaurant data
@@ -726,7 +730,8 @@ Provide your response as valid JSON."""
                     temperature=0.7,
                     top_p=0.95,
                     top_k=40,
-                    max_output_tokens=1500
+                    max_output_tokens=1500,
+                    response_mime_type="application/json"
                 )
             )
             
@@ -992,7 +997,8 @@ Respond with ONLY valid JSON."""
                     temperature=0.7,
                     top_p=0.95,
                     top_k=40,
-                    max_output_tokens=2000
+                    max_output_tokens=2000,
+                    response_mime_type="application/json"
                 )
             )
             
@@ -1330,7 +1336,8 @@ RESPOND WITH VALID JSON ONLY."""
                 generation_config=genai.types.GenerationConfig(
                     temperature=0.7,
                     top_p=0.95,
-                    max_output_tokens=1500
+                    max_output_tokens=1500,
+                    response_mime_type="application/json"
                 )
             )
             
@@ -1470,7 +1477,8 @@ Provide your response as valid JSON with the following structure:
                     temperature=0.5,
                     top_p=0.95,
                     top_k=40,
-                    max_output_tokens=500
+                    max_output_tokens=500,
+                    response_mime_type="application/json"
                 )
             )
             
@@ -1653,7 +1661,8 @@ Provide response as valid JSON."""
                     temperature=0.6,
                     top_p=0.95,
                     top_k=40,
-                    max_output_tokens=1500
+                    max_output_tokens=1500,
+                    response_mime_type="application/json"
                 )
             )
             
@@ -1872,7 +1881,8 @@ OUTPUT FORMAT - MUST BE VALID JSON:"""
                     temperature=0.8,
                     top_p=0.95,
                     top_k=40,
-                    max_output_tokens=1024
+                    max_output_tokens=1024,
+                    response_mime_type="application/json"
                 )
             )
             
@@ -2001,23 +2011,6 @@ def get_ai_consultant() -> AIConsultant:
     if _consultant is None:
         _consultant = AIConsultant()
     return _consultant
-
-
-async def generate_restaurant_strategy(
-    performance_data: Dict[str, Any],
-    weather_data: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    """Convenience function to generate strategy using the global consultant.
-    
-    Optionally integrates weather context for weather-aware decision-making.
-    Day 13: Environmental Awareness Integration.
-    """
-    consultant = get_ai_consultant()
-    
-    if weather_data:
-        return await consultant.generate_strategy_with_weather(performance_data, weather_data)
-    else:
-        return await consultant.generate_strategy(performance_data)
 
 
 async def forecast_revenue(

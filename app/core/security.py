@@ -7,6 +7,7 @@ Includes:
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
+from uuid import uuid4
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -117,8 +118,10 @@ def create_refresh_token(
             days=settings.refresh_token_expire_days
         )
     
-    to_encode.update({"exp": expire, "type": "refresh"})
-    
+    # Unique jti (JWT ID) guarantees each refresh token is distinct, even when
+    # issued within the same second, so rotating/revoking cannot collide.
+    to_encode.update({"exp": expire, "type": "refresh", "jti": uuid4().hex})
+
     encoded_jwt = jwt.encode(
         to_encode,
         settings.secret_key,
