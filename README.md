@@ -18,7 +18,7 @@
 
 OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and operators to harness data-driven intelligence for real-time operational optimization. Using a multi-tenant architecture, advanced analytics, and autonomous AI agents, we empower restaurants to:
 
-- **Track Operations in Real-Time** — Monitor sales, inventory, and staffing with zero latency.
+- **Tracks Operations in Real-Time** — Monitor sales, inventory, and staffing with zero latency.
 - **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Gemini provides narrative reasoning.
 - **Generate AI Insights** — Intelligent recommendations for pricing, labor, and menu optimization.
 - **Forecast Revenue** — Predictive analytics for 3-day revenue forecasting.
