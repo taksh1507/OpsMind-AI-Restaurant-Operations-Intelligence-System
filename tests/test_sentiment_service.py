@@ -1,7 +1,7 @@
 """Unit tests for the sentiment service routing and fallbacks.
 
 Verifies that the sentiment service loads the local Logistic Regression model when present
-and falls back to Gemini or heuristic methods when the model file is missing.
+and falls back to Claude or heuristic methods when the model file is missing.
 """
 
 import os
@@ -50,12 +50,12 @@ def test_sentiment_service_both_paths():
         try:
             # Predict with model file absent - should fallback
             res_absent = await sentiment_service.predict_sentiment("The food was absolutely delicious and the service was top-notch.")
-            assert res_absent["model_used"] in ["gemini_fallback", "heuristic_fallback"]
+            assert res_absent["model_used"] in ["claude_fallback", "heuristic_fallback"]
             assert res_absent["label"] == "positive"
             assert res_absent["score"] > 0.0
             
             res_absent_neg = await sentiment_service.predict_sentiment("The pasta was cold and the waiter was very rude.")
-            assert res_absent_neg["model_used"] in ["gemini_fallback", "heuristic_fallback"]
+            assert res_absent_neg["model_used"] in ["claude_fallback", "heuristic_fallback"]
             assert res_absent_neg["label"] == "negative"
             assert res_absent_neg["score"] < 0.0
             

@@ -89,9 +89,16 @@ class AICache(BaseModel):
     @staticmethod
     def is_valid(cache_entry: 'AICache') -> bool:
         """Check if cache entry is still valid (not expired)."""
-        if cache_entry is None:
+        if cache_entry is None or cache_entry.expires_at is None:
             return False
-        return cache_entry.expires_at > datetime.now(timezone.utc)
+        expires_at = cache_entry.expires_at
+        # Postgres (timestamptz) returns timezone-aware datetimes, but SQLite —
+        # used by the test suite — drops the tzinfo and hands back a naive value.
+        # Treat a naive timestamp as UTC so the comparison never raises
+        # "can't compare offset-naive and offset-aware datetimes".
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return expires_at > datetime.now(timezone.utc)
 
 
 __all__ = ["AICache"]

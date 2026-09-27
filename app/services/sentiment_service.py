@@ -2,7 +2,7 @@
 
 Provides local sentiment prediction using the trained TF-IDF + Logistic
 Regression classifier, caching loaded models in-memory with a 1-hour TTL,
-and falling back gracefully to Gemini or keyword heuristics if model is absent.
+and falling back gracefully to Claude or keyword heuristics if model is absent.
 """
 
 import os
@@ -90,7 +90,7 @@ def get_heuristic_sentiment(text: str) -> tuple[str, float]:
 
 
 async def predict_sentiment(text: str) -> Dict[str, Any]:
-    """Predict review sentiment using the local classifier, with Gemini and heuristic fallbacks.
+    """Predict review sentiment using the local classifier, with Claude and heuristic fallbacks.
     
     Args:
         text: Review comment text

@@ -5,6 +5,7 @@ Provides on-demand model retraining endpoints for forecasting and customer segme
 
 from typing import Optional, Dict, Any
 import asyncio
+import math
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,23 @@ from app.ml.segmentation_features import build_segmentation_features
 from app.services.forecast_service import clear_forecast_model_cache
 
 router = APIRouter(prefix="/ml", tags=["🏋️ Model Training"])
+
+
+def _json_safe_float(value: Any) -> Optional[float]:
+    """Return a JSON-compliant float, or None for NaN/Infinity/None.
+
+    Starlette's JSONResponse encodes with ``allow_nan=False``, so a NaN or
+    Infinity metric (which happens when a tenant has too little data for a
+    holdout split) would otherwise raise and turn a successful retrain into a
+    500. Surfacing ``null`` is the correct contract for "not computable".
+    """
+    if value is None:
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    return num if math.isfinite(num) else None
 
 
 @router.post("/retrain", status_code=status.HTTP_200_OK)
@@ -66,8 +84,8 @@ async def retrain_models(
             
             response_data["forecast"] = {
                 "version": forecast_res["version"],
-                "mae": forecast_res["mae"],
-                "rmse": forecast_res["rmse"]
+                "mae": _json_safe_float(forecast_res["mae"]),
+                "rmse": _json_safe_float(forecast_res["rmse"])
             }
         except Exception as e:
             if model_type == "forecast":
@@ -95,7 +113,7 @@ async def retrain_models(
             response_data["segmentation"] = {
                 "version": segmentation_res["version"],
                 "best_k": segmentation_res["best_k"],
-                "silhouette_score": segmentation_res["silhouette_score"]
+                "silhouette_score": _json_safe_float(segmentation_res["silhouette_score"])
             }
         except ValueError as e:
             # Expected error when not enough customers exist
