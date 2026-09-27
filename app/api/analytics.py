@@ -124,7 +124,9 @@ from app.services.analytics import (
     get_daily_revenue_and_cost,
     USD_TO_INR
 )
-from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review, calculate_labor_efficiency, AIConsultant
+from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review, calculate_labor_efficiency, AIConsultant, get_ai_consultant
+from app.services import settings_service
+from app.services import ai_usage_service
 from app.services.margin_analysis import (
     get_all_menu_items_with_costs,
     get_margin_report_summary
@@ -507,7 +509,7 @@ async def get_ai_briefing(
 ):
     """Get AI-powered strategic briefing for the restaurant.
     
-    This endpoint leverages Google Gemini to analyze restaurant performance
+    This endpoint leverages Anthropic Claude to analyze restaurant performance
     and provide expert recommendations. It's the "consultant" that tells
     the owner exactly what to do to improve their business.
     
@@ -627,11 +629,18 @@ async def get_ai_briefing(
         }
         
         # Generate strategy using AI (with caching support)
-        # Pass db session and refresh flag to enable intelligent caching
-        ai_result = await generate_restaurant_strategy(
-            performance_data,
-            db=db,
-            refresh=refresh
+        # Pass db session and refresh flag to enable intelligent caching.
+        # Metered: enforces the tenant's monthly AI cap and records token usage.
+        # (Cache hits make no API call, so they consume no tokens and record none.)
+        ai_result = await ai_usage_service.metered_ai_call(
+            db,
+            current_user.tenant_id,
+            "strategy_briefing",
+            lambda: generate_restaurant_strategy(
+                performance_data,
+                db=db,
+                refresh=refresh,
+            ),
         )
         
         if ai_result.get("status") == "error":
@@ -851,8 +860,15 @@ async def get_margin_report(
         # Get summary metrics
         summary = await get_margin_report_summary(db, current_user.tenant_id)
         
-        # Use AI to generate optimization plan
-        ai_result = await analyze_profit_margins(menu_items)
+        # Use AI to generate optimization plan (with this tenant's chosen model).
+        # Metered: enforces the monthly cap and records token usage.
+        ai_model = await settings_service.resolve_ai_model(db, current_user.tenant_id)
+        ai_result = await ai_usage_service.metered_ai_call(
+            db,
+            current_user.tenant_id,
+            "margin_analysis",
+            lambda: analyze_profit_margins(menu_items, model=ai_model),
+        )
         
         if ai_result.get("status") == "error":
             raise HTTPException(
@@ -1075,15 +1091,21 @@ async def get_reputation_analytics(
                 "confidence": p["confidence"]
             })
             
-        # Generate AI response draft for the latest negative review using Gemini
+        # Generate AI response draft for the latest negative review using Claude
         response_draft = None
         if negative_reviews:
             latest_negative, latest_pred = negative_reviews[0]
-            
-            # If not already processed, process it now (Gemini remains only for response drafts generation)
+
+            # If not already processed, process it now (Claude drafts the response)
             if not latest_negative.action_item or not latest_negative.ai_summary:
                 from app.services.ai_agent import process_review
-                analysis = await process_review(latest_negative.comment)
+                ai_model = await settings_service.resolve_ai_model(db, current_user.tenant_id)
+                analysis = await ai_usage_service.metered_ai_call(
+                    db,
+                    current_user.tenant_id,
+                    "review_response",
+                    lambda: process_review(latest_negative.comment, model=ai_model),
+                )
                 if analysis.get("status") == "success":
                     response_draft = {
                         "to_customer": latest_negative.customer_name,
@@ -1368,7 +1390,8 @@ async def get_staffing_plan(
                 )
             })
         
-        # Use AI to analyze labor efficiency
+        # Use AI to analyze labor efficiency (with this tenant's chosen model)
+        ai_model = await settings_service.resolve_ai_model(db, current_user.tenant_id)
         analysis_payload = {
             "date": analysis_date or analysis_dt.strftime("%Y-%m-%d"),
             "hours": hourly_data,
@@ -1376,8 +1399,13 @@ async def get_staffing_plan(
             "daily_total_labor": float(total_labor),
             "staff_scheduled": len(set(s.staff_id for s in shifts))
         }
-        
-        ai_analysis = await calculate_labor_efficiency(analysis_payload)
+
+        ai_analysis = await ai_usage_service.metered_ai_call(
+            db,
+            current_user.tenant_id,
+            "labor_efficiency",
+            lambda: calculate_labor_efficiency(analysis_payload, model=ai_model),
+        )
         
         if ai_analysis.get("status") == "error":
             raise HTTPException(
@@ -1411,7 +1439,16 @@ async def get_staffing_plan(
                     f"day_{i}": float(row.daily_revenue or 0)
                     for i, row in enumerate(forecast_rows[-7:])  # Last 7 days
                 }
-                forecast_result = await forecast_revenue(trend_data)
+                # Secondary call within an already-admitted request: record token
+                # usage but skip enforcement (the labor call above already checked
+                # the cap, and this whole block is best-effort inside try/except).
+                forecast_result = await ai_usage_service.metered_ai_call(
+                    db,
+                    current_user.tenant_id,
+                    "revenue_forecast",
+                    lambda: forecast_revenue(trend_data, model=ai_model),
+                    enforce=False,
+                )
                 if forecast_result.get("status") == "success":
                     forecast_data = forecast_result.get("forecast", {})
         except:
@@ -1549,15 +1586,34 @@ async def get_daily_tip(
     """
     
     try:
-        # Determine city for weather lookup
+        # Respect this tenant's AI preferences (set on the Settings page).
+        prefs = await settings_service.get_ai_flags(db, current_user.tenant_id)
+        if not prefs.ai_insights_enabled:
+            return {
+                "status": "disabled",
+                "reason": "ai_insights",
+                "message": "AI insights are turned off in Settings. Enable them to see the daily tip.",
+            }
+        if not prefs.weather_enabled:
+            return {
+                "status": "disabled",
+                "reason": "weather",
+                "message": "Weather-aware recommendations are turned off in Settings. Enable weather context to see the daily tip.",
+            }
+
+        # Determine city for weather lookup: explicit param wins, else the
+        # tenant's saved default city (Settings), else ask for one.
         if not city:
-            # TODO: Read from restaurant settings/profile
-            # For now, default to a sensible value or require parameter
+            city = prefs.default_city
+        if not city:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="city parameter is required. Usage: /analytics/daily-tip?city=Mumbai"
+                detail="No city set. Pass ?city=... or set a default city in Settings.",
             )
-        
+
+        # Which Claude model this tenant chose for AI calls.
+        ai_model = prefs.ai_model
+
         # Fetch current weather
         weather_data = await get_current_weather(city)
         
@@ -1609,8 +1665,8 @@ async def get_daily_tip(
         # Correlate weather with sales patterns
         weather_impact = await correlate_weather_with_sales(weather_data, sales_summary)
         
-        # Get AI consultant recommendation
-        ai_agent = AIConsultant()
+        # Get AI consultant recommendation (using this tenant's chosen model)
+        ai_agent = get_ai_consultant(ai_model)
         
         # Prepare performance data for AI
         performance_data = {
@@ -1619,18 +1675,59 @@ async def get_daily_tip(
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
-        # Generate weather-aware strategy
-        strategy_result = await ai_agent.generate_strategy_with_weather(
-            performance_data,
-            weather_data
+        # Generate weather-aware strategy (metered: enforces cap + records usage)
+        strategy_result = await ai_usage_service.metered_ai_call(
+            db,
+            current_user.tenant_id,
+            "daily_tip",
+            lambda: ai_agent.generate_strategy_with_weather(
+                performance_data,
+                weather_data,
+            ),
         )
         
-        # Extract key recommendation
-        promotion_item = strategy_result.get("weather_optimized_promotion", "")
-        weather_context = strategy_result.get("weather_context", "")
+        # Extract key recommendation from the nested weather-aware strategy.
+        # generate_strategy_with_weather() returns {status, strategy, ...} where
+        # the AI's actual fields live under "strategy" (see the weather-aware
+        # prompt in ai_agent._get_weather_aware_consultant_prompt). Reading them
+        # off the top level always yielded blanks, so pull from "strategy" and
+        # tolerate both the string form the AI emits and any legacy dict/list.
+        strategy = strategy_result.get("strategy")
+        if not isinstance(strategy, dict):
+            strategy = {}
+
+        promotion_item = (
+            strategy.get("weather_optimized_promotion")
+            or strategy.get("daily_weather_menu_tip")
+            or ""
+        )
+        weather_context = strategy.get("weather_context", "")
+        if not weather_context:
+            weather_context = (
+                f"{weather_data.get('condition', 'current')} conditions "
+                f"in {weather_data.get('city', city)}"
+            )
         impact_percentage = weather_impact.get("expected_impact_percent", 0)
-        staffing_recommendation = strategy_result.get("staffing_adjustment", {})
-        inventory_focus = strategy_result.get("inventory_focus_items", [])
+
+        # Staffing/inventory guidance comes back as free-text; wrap in the
+        # structured shapes the response payload below expects (omitting
+        # focus_areas so its ['front-of-house'] default still applies).
+        staffing_raw = strategy.get("weather_staffing_adjustment", "")
+        if isinstance(staffing_raw, dict):
+            staffing_recommendation = staffing_raw
+        else:
+            staffing_recommendation = {
+                "adjustment": staffing_raw or "",
+                "reason": strategy.get("environmental_strategy", ""),
+            }
+
+        inventory_raw = strategy.get("weather_inventory_focus", "")
+        if isinstance(inventory_raw, list):
+            inventory_focus = inventory_raw
+        elif inventory_raw:
+            inventory_focus = [inventory_raw]
+        else:
+            inventory_focus = []
         
         # Format confidence score
         confidence = min(

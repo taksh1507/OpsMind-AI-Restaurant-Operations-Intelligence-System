@@ -83,17 +83,17 @@ export function TopItemsChart() {
   // Calculate profit per item (assuming uniform margin for visualization)
   const itemsWithMetrics = items.map((item) => ({
     ...item,
-    profitMargin: Math.random() * 40 + 20, // Simulated margin between 20-60%
+    profitMargin: 20 + ((item.menu_item_id * 137) % 400) / 10, // Deterministic est. margin 20-60%
     displayName: item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name,
   }))
 
   // Color mapping based on quantity sold (performance)
   const getColorIntensity = (quantity: number, maxQuantity: number) => {
     const ratio = quantity / maxQuantity
-    if (ratio >= 0.8) return '#00D9FF' // Bright electric blue for top performers
-    if (ratio >= 0.6) return '#0099CC' // Medium blue
-    if (ratio >= 0.4) return '#006699' // Darker blue
-    return '#003366' // Darkest blue
+    if (ratio >= 0.8) return '#DE9C64' // Bright copper for top performers
+    if (ratio >= 0.6) return '#C77D3F' // Copper
+    if (ratio >= 0.4) return '#A5652F' // Deep copper
+    return '#6B4522' // Darkest copper
   }
 
   const maxQuantity = Math.max(...itemsWithMetrics.map((i) => i.quantity_sold))
@@ -107,10 +107,10 @@ export function TopItemsChart() {
           <p className="text-electric-300 text-sm">
             Quantity Sold: <span className="font-bold">{item.quantity_sold}</span>
           </p>
-          <p className="text-green-300 text-sm">
+          <p className="text-success text-sm">
             Revenue: <span className="font-bold">{formatRupee(item.revenue_generated)}</span>
           </p>
-          <p className="text-yellow-300 text-sm">
+          <p className="text-warning text-sm">
             Est. Margin: <span className="font-bold">{item.profitMargin.toFixed(1)}%</span>
           </p>
         </div>
@@ -122,9 +122,10 @@ export function TopItemsChart() {
   return (
     <div className="w-full bg-surface/30 border border-accent/20 rounded-[3px] p-6 ">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          ðŸ† Top-Selling Items
-        </h2>
+        <div className="flex items-center gap-2.5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Top-Selling Items</h2>
+        </div>
         <p className="text-cream-dim text-sm mt-2">
           Menu items ranked by quantity sold and color intensity shows profit margin
         </p>
@@ -133,10 +134,10 @@ export function TopItemsChart() {
       <div className="overflow-x-auto">
         <ResponsiveContainer width="100%" height={350} minWidth={500}>
           <BarChart data={itemsWithMetrics} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#3A322B" opacity={0.5} />
             <XAxis
               dataKey="displayName"
-              stroke="#94a3b8"
+              stroke="#B8A88C"
               style={{
                 fontSize: '11px',
               }}
@@ -145,7 +146,7 @@ export function TopItemsChart() {
               height={100}
             />
             <YAxis
-              stroke="#94a3b8"
+              stroke="#B8A88C"
               style={{
                 fontSize: '12px',
               }}
@@ -171,15 +172,15 @@ export function TopItemsChart() {
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-[3px] p-3">
+        <div className="bg-accent/10 border border-line rounded-[3px] p-3">
           <p className="text-cream-dim">Total Items Sold</p>
-          <p className="text-blue-300 font-bold text-lg">
+          <p className="text-electric-300 font-bold text-lg">
             {itemsWithMetrics.reduce((sum, item) => sum + item.quantity_sold, 0)}
           </p>
         </div>
-        <div className="bg-green-500/10 border border-green-500/30 rounded-[3px] p-3">
+        <div className="bg-success/10 border border-success/30 rounded-[3px] p-3">
           <p className="text-cream-dim">Total Revenue (Top 8)</p>
-          <p className="text-green-300 font-bold text-lg">
+          <p className="text-success font-bold text-lg">
             {formatRupee(itemsWithMetrics.reduce((sum, item) => sum + item.revenue_generated, 0))}
           </p>
         </div>
@@ -190,19 +191,19 @@ export function TopItemsChart() {
         <p className="text-cream-dim text-xs font-semibold mb-3">Performance Legend:</p>
         <div className="grid grid-cols-4 gap-3">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#00D9FF' }} />
+            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#DE9C64' }} />
             <span className="text-cream-dim text-xs">80%+ Sales</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#0099CC' }} />
+            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#C77D3F' }} />
             <span className="text-cream-dim text-xs">60-80%</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#006699' }} />
+            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#A5652F' }} />
             <span className="text-cream-dim text-xs">40-60%</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#003366' }} />
+            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#6B4522' }} />
             <span className="text-cream-dim text-xs">&lt;40%</span>
           </div>
         </div>

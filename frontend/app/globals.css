@@ -31,6 +31,38 @@
   --font-mono: 'IBM Plex Mono', monospace;
 }
 
+/* Legacy color scales from tailwind.config.ts. Tailwind v4 resolves theme
+   tokens from CSS (@theme), not the JS config, so these must be declared here
+   for the `electric-*` / `slate-*` / `warning` utilities used across the app
+   to render. Values mirror tailwind.config.ts. */
+@theme {
+  --color-electric-50: #FBF0E7;
+  --color-electric-100: #F5DDC6;
+  --color-electric-200: #EBBD93;
+  --color-electric-300: #DE9C64;
+  --color-electric-400: #D2894B;
+  --color-electric-500: #C77D3F;
+  --color-electric-600: #A5652F;
+  --color-electric-700: #8f5a2c;
+  --color-electric-800: #6B4522;
+  --color-electric-900: #4C3119;
+  --color-electric-950: #2E1D0F;
+
+  --color-slate-50: #F0E6D2;
+  --color-slate-100: #E4D7BC;
+  --color-slate-200: #CBB995;
+  --color-slate-300: #B8A88C;
+  --color-slate-400: #9C8A73;
+  --color-slate-500: #6E5F4C;
+  --color-slate-600: #4A3F33;
+  --color-slate-700: #3A322B;
+  --color-slate-800: #2C2621;
+  --color-slate-900: #241F1B;
+  --color-slate-950: #1A1613;
+
+  --color-warning: #D9A441;
+}
+
 html {
   scroll-behavior: smooth;
 }

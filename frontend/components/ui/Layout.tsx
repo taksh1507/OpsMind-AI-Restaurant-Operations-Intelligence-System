@@ -13,7 +13,10 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const pathname = usePathname()
-  const isAuthPage = pathname === '/login' || pathname === '/register'
+  const isAuthPage =
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/change-password'
 
   // Initialize WebSocket connection for real-time events
   useWebSocket({
@@ -31,9 +34,16 @@ export function Layout({ children }: LayoutProps) {
     reconnectDelay: 3000,
   });
 
-  // Render raw children for auth pages (no sidebar, no header)
+  // Auth pages render without the sidebar/header. The body is `overflow-hidden`
+  // for the fixed dashboard shell, so wrap auth content in its own full-height
+  // scroll container — otherwise a tall form (e.g. register) gets clipped on
+  // short viewports instead of scrolling.
   if (isAuthPage) {
-    return <>{children}</>
+    return (
+      <div className="dark h-full overflow-y-auto bg-background text-foreground">
+        {children}
+      </div>
+    )
   }
 
   return (

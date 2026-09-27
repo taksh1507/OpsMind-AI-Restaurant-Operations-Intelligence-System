@@ -53,18 +53,17 @@ export default function SalesPage() {
       <div className="ticket-perf relative p-6 rounded-[3px] border border-line bg-surface ">
         <div className="flex items-center gap-2.5 mb-5">
           <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
-          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Today's Hourly Performance</h2>
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Today&rsquo;s Hourly Performance</h2>
         </div>
         <div className="space-y-4">
-          {Array.from({ length: 8 }).map((_, idx) => {
+          {[1200, 2100, 3800, 4200, 2600, 1800, 2400, 3200].map((sales, idx) => {
             const hour = 10 + idx
-            const sales = Math.floor(Math.random() * 4000) + 1000
             const percentage = (sales / 5000) * 100
             return (
               <div key={idx} className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-cream-dim">{hour}:00 - {hour + 1}:00</span>
-                  <span className="text-accent font-semibold">${sales}</span>
+                  <span className="text-accent font-semibold">${sales.toLocaleString('en-US')}</span>
                 </div>
                 <div className="w-full bg-surface rounded-full h-2 overflow-hidden border border-line">
                   <div

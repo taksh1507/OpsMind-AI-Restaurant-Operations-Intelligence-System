@@ -21,7 +21,7 @@ from app.models.base import Base
 from app.models.tenant import Tenant, SubscriptionStatus
 from app.models.sales import Sale, SaleItem, PaymentMethod
 from app.ml.features import build_training_frame
-from app.ml.eval import score_model
+from app.ml.eval import score_model, compute_naive_baseline
 
 
 def encode_weather(df: pd.DataFrame) -> pd.DataFrame:
@@ -128,35 +128,66 @@ async def train_model(
         print("Error: Feature engineering pipeline returned no data.")
         return {}
 
+    # Offload the CPU-bound fit/eval/serialize step to a worker thread so the
+    # blocking XGBoost training does not stall the async event loop.
+    return await asyncio.to_thread(
+        _fit_and_save_model, df, tenant_id, version, reason
+    )
+
+
+def _fit_and_save_model(
+    df: pd.DataFrame,
+    tenant_id: int,
+    version: int = None,
+    reason: str = "manual",
+) -> dict:
+    """Train, evaluate, and serialize the forecast model (CPU-bound).
+
+    Split out of train_model so the blocking XGBoost fit runs off the event
+    loop via asyncio.to_thread. Operates purely on the prepared feature frame.
+    """
     # Apply encoding
     df = encode_weather(df)
-    
+
     # Define features and target
     feature_cols = [
-        "item_id", "lag_1", "lag_7", "lag_14", 
-        "rolling_mean_7", "rolling_mean_14", 
+        "item_id", "lag_1", "lag_7", "lag_14",
+        "rolling_mean_7", "rolling_mean_14",
         "day_of_week", "month", "temp_c", "weather_condition_encoded"
     ]
-    
-    # Holdout Split: Last 14 days per item
+
+    # Holdout Split: last 14 days per item. Items with 14 or fewer rows have no
+    # room for a holdout, so they go entirely into training; without this guard
+    # train_size goes negative and silently pushes real data into the test set.
     train_dfs = []
     test_dfs = []
-    
+
     items = sorted(df["item_id"].unique())
     for item_id in items:
         item_df = df[df["item_id"] == item_id].sort_values("date").reset_index(drop=True)
+        if len(item_df) <= 14:
+            train_dfs.append(item_df)
+            continue
         train_size = len(item_df) - 14
         train_dfs.append(item_df.iloc[:train_size])
         test_dfs.append(item_df.iloc[train_size:])
-        
-    train_df = pd.concat(train_dfs).reset_index(drop=True)
-    test_df = pd.concat(test_dfs).reset_index(drop=True)
-    
+
+    train_df = (
+        pd.concat(train_dfs).reset_index(drop=True)
+        if train_dfs else pd.DataFrame(columns=df.columns)
+    )
+    test_df = (
+        pd.concat(test_dfs).reset_index(drop=True)
+        if test_dfs else pd.DataFrame(columns=df.columns)
+    )
+
+    if train_df.empty:
+        print("Error: Not enough data remaining to train after the holdout split.")
+        return {}
+
     X_train = train_df[feature_cols]
     y_train = train_df["revenue"]
-    X_test = test_df[feature_cols]
-    y_test = test_df["revenue"]
-    
+
     print(f"Training XGBRegressor on {len(X_train)} samples...")
     # Controlling depth and estimators for regularization on a small dataset
     model = XGBRegressor(
@@ -166,53 +197,67 @@ async def train_model(
         random_state=42,
         n_jobs=-1
     )
-    
+
     model.fit(X_train, y_train)
-    
-    # Predict and evaluate
-    y_pred = model.predict(X_test)
-    mae, rmse = score_model(y_test.tolist(), y_pred.tolist())
-    
+
+    # Predict and evaluate only when a holdout is available. The naive baseline
+    # (same-day-last-week / lag_7) is scored on the same holdout so the
+    # comparison reflects this dataset instead of stale hardcoded numbers.
+    if not test_df.empty:
+        X_test = test_df[feature_cols]
+        y_test = test_df["revenue"]
+        y_pred = model.predict(X_test)
+        mae, rmse = score_model(y_test.tolist(), y_pred.tolist())
+        naive_mae, naive_rmse = score_model(
+            y_test.tolist(), compute_naive_baseline(test_df)
+        )
+    else:
+        print("Warning: no holdout samples available; skipping evaluation.")
+        mae, rmse = float("nan"), float("nan")
+        naive_mae, naive_rmse = float("nan"), float("nan")
+
     print("\n" + "=" * 55)
     print("              XGBOOST FORECASTER PERFORMANCE")
     print("=" * 55)
-    print(f"Model MAE:          {mae:.2f} (Naive baseline ~976.71)")
-    print(f"Model RMSE:         {rmse:.2f} (Naive baseline ~1347.68)")
+    print(f"Model MAE:          {mae:.2f} (Naive baseline {naive_mae:.2f})")
+    print(f"Model RMSE:         {rmse:.2f} (Naive baseline {naive_rmse:.2f})")
     print("-" * 55)
-    
+
     print("Feature Importances:")
     importances = model.feature_importances_
     for col, imp in sorted(zip(feature_cols, importances), key=lambda x: x[1], reverse=True):
         print(f"  {col:<28}: {imp:.4f}")
-        
     # Serialize model using manifest_helper
     from app.ml.manifest_helper import get_next_version, update_manifest
 
     if version is None:
         version = get_next_version(tenant_id, "forecast")
-        
+
     model_dir = os.path.join("models", str(tenant_id))
     os.makedirs(model_dir, exist_ok=True)
     filename = f"forecast_v{version}.pkl"
     model_path = os.path.join(model_dir, filename)
-    
+
     # Save the model
     joblib.dump(model, model_path)
-    
+
     # Update manifest
     update_manifest(tenant_id, "forecast", filename, reason=reason)
-    
+
     print("-" * 55)
     print(f"Successfully saved trained model to: {model_path}")
     print("=" * 55 + "\n")
-    
+
     return {
         "status": "success",
         "version": version,
         "mae": float(mae),
         "rmse": float(rmse),
+        "naive_mae": float(naive_mae),
+        "naive_rmse": float(naive_rmse),
         "model_path": model_path
     }
+
 
 
 if __name__ == "__main__":

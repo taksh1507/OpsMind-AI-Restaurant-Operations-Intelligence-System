@@ -57,6 +57,14 @@ class Tenant(BaseModel):
     
     # Relationship to recommendations
     recommendations = relationship("Recommendation", back_populates="tenant", cascade="all, delete-orphan")
-    
+
+    # 1:1 owner-managed preferences (AI model, feature toggles, timezone).
+    settings = relationship(
+        "TenantSettings",
+        back_populates="tenant",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         return f"<Tenant(id={self.id}, tenant_id={self.tenant_id}, name={self.name})>"

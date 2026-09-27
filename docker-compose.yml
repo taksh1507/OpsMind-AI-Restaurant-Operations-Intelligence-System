@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Docker Compose configuration for OpsMind AI multi-service orchestration
 # Usage: docker-compose up -d
 # To stop: docker-compose down
@@ -65,7 +63,14 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       
       # AI Configuration (from .env - REQUIRED)
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      # Primary LLM: Anthropic Claude. Provide an API key (official API) OR an
+      # auth token + base URL (Anthropic-compatible gateway/proxy).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-8}
+      # Per-tenant monthly AI token cap (Phase 4). 0/negative disables enforcement.
+      AI_MONTHLY_TOKEN_CAP: ${AI_MONTHLY_TOKEN_CAP:-1500000}
       
       # Server Configuration
       HOST: "0.0.0.0"

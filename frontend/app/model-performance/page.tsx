@@ -182,7 +182,7 @@ export default function ModelPerformancePage() {
           </div>
           <p className="text-sm font-display font-semibold tracking-wide text-cream-dim uppercase tracking-wider">Overall MAE Lift</p>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className={`text-3xl font-extrabold ${isLiftPositive ? 'text-green-400' : 'text-red-400'}`}>
+            <span className={`text-3xl font-extrabold ${isLiftPositive ? 'text-success' : 'text-alert'}`}>
               {isLiftPositive ? '+' : ''}{lift.toFixed(1)}%
             </span>
             <span className="text-xs text-cream-dim">improvement</span>
@@ -200,11 +200,11 @@ export default function ModelPerformancePage() {
           <p className="text-sm font-display font-semibold tracking-wide text-cream-dim uppercase tracking-wider">Stability Check</p>
           <div className="mt-2 flex items-center gap-2">
             {isStable ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-300 border border-green-500/30">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-success/20 text-success border border-success/30">
                 <CheckCircle2 size={14} /> PASSED
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/30">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-alert/20 text-alert border border-alert/30">
                 <XCircle size={14} /> FAILED
               </span>
             )}
@@ -260,10 +260,10 @@ export default function ModelPerformancePage() {
                   <tr key={week.week_idx} className="hover:bg-surface-2/20 transition-colors">
                     <td className="px-6 py-4 font-semibold text-accent">Week {week.week_idx}</td>
                     <td className="px-6 py-4 text-cream-dim">{week.start_date} to {week.end_date}</td>
-                    <td className="px-6 py-4 text-right font-mono">â‚¹{week.naive_mae.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-right font-mono text-foreground font-semibold">â‚¹{week.xgb_mae.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-right font-mono text-cream-dim">â‚¹{week.xgb_rmse.toFixed(2)}</td>
-                    <td className={`px-6 py-4 text-right font-mono font-semibold ${isWeekLiftPositive ? 'text-green-400' : 'text-red-400'}`}>
+                    <td className="px-6 py-4 text-right font-mono">₹{week.naive_mae.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-right font-mono text-foreground font-semibold">₹{week.xgb_mae.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-right font-mono text-cream-dim">₹{week.xgb_rmse.toFixed(2)}</td>
+                    <td className={`px-6 py-4 text-right font-mono font-semibold ${isWeekLiftPositive ? 'text-success' : 'text-alert'}`}>
                       {isWeekLiftPositive ? '+' : ''}{weekLift.toFixed(1)}%
                     </td>
                   </tr>

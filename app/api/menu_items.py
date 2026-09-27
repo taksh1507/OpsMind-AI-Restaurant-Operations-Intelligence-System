@@ -10,7 +10,7 @@ from sqlalchemy import select
 from decimal import Decimal
 
 from app.database import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_manager
 from app.models import User, MenuItem, Category
 from app.models.schemas import MenuItemCreate, MenuItemResponse, MenuItemUpdate
 
@@ -57,7 +57,12 @@ async def verify_category_ownership(
     return category
 
 
-@router.post("", response_model=MenuItemResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=MenuItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_manager)],
+)
 async def create_menu_item(
     request: MenuItemCreate,
     current_user: User = Depends(get_current_user),
@@ -129,41 +134,47 @@ async def create_menu_item(
 @router.get("", response_model=list[MenuItemResponse])
 async def list_menu_items(
     category_id: int | None = None,
+    include_unavailable: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all menu items for the authenticated user's restaurant.
-    
+
     Uses tenant_id from get_current_user to ensure data isolation.
     Restaurant A can only see their own items, not Restaurant B's.
-    
+
     Optional category_id filter to get items from a specific category.
-    
+    By default only available items are returned (for storefront/dashboard
+    consumers); the management UI passes include_unavailable=True so the owner
+    can see and re-enable items they previously marked unavailable.
+
     Args:
         category_id: Optional category ID to filter items
+        include_unavailable: When True, also return items marked unavailable
         current_user: Authenticated user with tenant context (injected)
         db: Database session (injected)
-        
+
     Returns:
         List of menu items belonging to the user's restaurant
-        
+
     Raises:
         HTTPException 401: If user is not authenticated
         HTTPException 404: If category doesn't belong to user (if filtered)
     """
-    
+
     try:
         # Build base query: only items for this user's tenant
-        query = select(MenuItem).where(
-            (MenuItem.tenant_id == current_user.tenant_id) &
-            (MenuItem.is_available == True)
-        )
-        
+        query = select(MenuItem).where(MenuItem.tenant_id == current_user.tenant_id)
+
+        # Hide unavailable items unless the caller explicitly asks for them
+        if not include_unavailable:
+            query = query.where(MenuItem.is_available == True)
+
         # Optional: filter by category_id with ownership verification
         if category_id is not None:
             # Verify category belongs to user before showing items
             await verify_category_ownership(category_id, current_user, db)
-            
+
             query = query.where(MenuItem.category_id == category_id)
         
         query = query.order_by(MenuItem.created_at)
@@ -234,7 +245,11 @@ async def get_menu_item(
         )
 
 
-@router.put("/{item_id}", response_model=MenuItemResponse)
+@router.put(
+    "/{item_id}",
+    response_model=MenuItemResponse,
+    dependencies=[Depends(get_current_manager)],
+)
 async def update_menu_item(
     item_id: int,
     request: MenuItemUpdate,
@@ -317,7 +332,11 @@ async def update_menu_item(
         )
 
 
-@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_current_manager)],
+)
 async def delete_menu_item(
     item_id: int,
     current_user: User = Depends(get_current_user),

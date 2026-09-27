@@ -79,9 +79,12 @@ def get_cached_predict_fn(tenant_id: int):
 
 
 async def get_forecast_weather(city: str, date_obj) -> tuple[float, int]:
-    """Helper to simulate temperature and weather conditions for a future date.
-    
-    Reuses simulated weather logic from features.py to align features.
+    """Synthesize a temperature and weather condition for a future date.
+
+    SYNTHETIC PLACEHOLDER — mirrors the deterministic calendar-based logic in
+    features.py so serving-time features align with training. This is NOT a real
+    weather forecast; the values are a pure function of the date and carry no
+    independent signal. Replace alongside features.py when real weather lands.
     """
     try:
         weather_data = await get_current_weather(city)
@@ -129,6 +132,10 @@ async def generate_forecast_report(tenant_id: int, db: AsyncSession, days: int =
     # Fetch historical daily revenues totals for baseline metrics and fallback
     trend_data = await get_daily_sales_trend(db, tenant_id, days=days)
     revenue_values = list(trend_data.values()) if trend_data else []
+
+    # Data-driven confidence from the consistency (R² + variance) of recent
+    # revenue, replacing the previously hardcoded 85/50 scores.
+    conf_level, conf_pct = calculate_confidence_score(revenue_values)
     
     if predict_fn:
         try:
@@ -188,8 +195,12 @@ async def generate_forecast_report(tenant_id: int, db: AsyncSession, days: int =
                         "next_day_1_revenue": round(day_preds[1], 2),
                         "next_day_2_revenue": round(day_preds[2], 2),
                         "next_day_3_revenue": round(day_preds[3], 2),
-                        "confidence_score": 85,
-                        "confidence_reasoning": "The XGBoost model forecasts stable growth based on the last 14 days of item sales history.",
+                        "confidence_score": round(conf_pct),
+                        "confidence_reasoning": (
+                            f"{conf_level} confidence ({conf_pct:.0f}%) from the "
+                            f"consistency of the last {len(revenue_values)} days of "
+                            f"revenue; XGBoost projects item-level demand from that history."
+                        ),
                         "growth_rate_percent": round(growth_rate, 2),
                         "growth_direction": "Growing" if growth_rate > 2.0 else "Declining" if growth_rate < -2.0 else "Stable",
                         "pattern_detected": "XGBoost item-level time-series patterns",
@@ -217,8 +228,12 @@ async def generate_forecast_report(tenant_id: int, db: AsyncSession, days: int =
             "next_day_1_revenue": round(lr_predictions[0], 2),
             "next_day_2_revenue": round(lr_predictions[1], 2),
             "next_day_3_revenue": round(lr_predictions[2], 2),
-            "confidence_score": 50,
-            "confidence_reasoning": "Linear regression projection of recent total restaurant revenues.",
+            "confidence_score": round(conf_pct),
+            "confidence_reasoning": (
+                f"{conf_level} confidence ({conf_pct:.0f}%) from the consistency of "
+                f"the last {len(revenue_values)} days of revenue; linear regression "
+                f"projection of recent totals."
+            ),
             "growth_rate_percent": round(growth_rate, 2),
             "growth_direction": "Growing" if growth_rate > 2.0 else "Declining" if growth_rate < -2.0 else "Stable",
             "pattern_detected": "Recent daily baseline totals",

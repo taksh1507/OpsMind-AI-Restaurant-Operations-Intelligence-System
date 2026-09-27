@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useLogout } from '@/hooks/useAuth'
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -15,7 +15,8 @@ import {
   X,
   LogOut,
   Lock,
-  LineChart
+  LineChart,
+  Users
 } from 'lucide-react'
 
 // Day 25: Role-Based Access Control
@@ -39,7 +40,8 @@ const navItems: NavItem[] = [
   { label: 'Sales', href: '/sales', icon: <TrendingUp size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },
   { label: 'AI Insights', href: '/insights', icon: <Sparkles size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },  // Financial data - hide from STAFF
   { label: 'Model Performance', href: '/model-performance', icon: <LineChart size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },
-  { label: 'Settings', href: '/settings', icon: <Settings size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },  // Admin functions
+  { label: 'Team', href: '/team', icon: <Users size={20} />, requiredRoles: [UserRole.OWNER] },  // Owner-only: staff & access management
+  { label: 'Settings', href: '/settings', icon: <Settings size={20} />, requiredRoles: [UserRole.OWNER] },  // Owner-only: AI & operational preferences
 ]
 
 export function Sidebar() {
@@ -47,7 +49,7 @@ export function Sidebar() {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const { logout } = useLogout()
 
   // Day 25: Extract user role from JWT token on mount
   useEffect(() => {
@@ -101,11 +103,9 @@ export function Sidebar() {
   }
 
   const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('token_type')
-      router.push('/login')
-    }
+    // Delegate to the shared hook: revokes the refresh token server-side and
+    // clears the full local session (access + refresh + token_type).
+    logout()
   }
 
   if (loading) {
@@ -134,12 +134,11 @@ export function Sidebar() {
       <aside
         className={`
           fixed left-0 top-0 h-screen bg-surface border-r border-line
-          transition-all duration-300 z-40 overflow-hidden
+          transition-all duration-300 z-40 overflow-hidden flex-col
           before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px]
           before:bg-[repeating-linear-gradient(to_bottom,var(--accent)_0_6px,transparent_6px_12px)] before:opacity-50
-          ${isExpanded ? 'w-64' : 'w-20'}
-          hidden md:flex md:flex-col
-          ${isMobileOpen ? 'w-64 flex flex-col' : ''}
+          ${isMobileOpen ? 'flex w-64' : 'hidden w-20'}
+          md:flex ${isExpanded ? 'md:w-64' : 'md:w-20'}
         `}
       >
         {/* Header */}

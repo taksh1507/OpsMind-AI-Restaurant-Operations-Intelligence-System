@@ -81,11 +81,13 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
     
-    # Query database to verify user exists and is active
-    from sqlalchemy import select
-    result = await db.execute(
-        select(User).where(User.email == user_email)
-    )
+    # Query database to verify user exists and is active. Scope by the token's
+    # tenant_id as well so a user lookup can never resolve across tenants.
+    result_query = select(User).where(User.email == user_email)
+    token_tenant_id = payload.get("tenant_id")
+    if token_tenant_id is not None:
+        result_query = result_query.where(User.tenant_id == token_tenant_id)
+    result = await db.execute(result_query)
     user: Optional[User] = result.scalar_one_or_none()
     
     if user is None:

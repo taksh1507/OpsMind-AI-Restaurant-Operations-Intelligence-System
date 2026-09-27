@@ -129,8 +129,13 @@ def get_heuristic_sentiment(text: str) -> tuple[str, float]:
 
 
 async def weak_label_review(text: str) -> tuple[str, float]:
-    """Call Gemini to weak-label review, falling back to local heuristic if key is missing or fails."""
-    api_key = os.getenv("GEMINI_API_KEY") or (settings.gemini_api_key if hasattr(settings, "gemini_api_key") else None)
+    """Call Claude to weak-label review, falling back to local heuristic if credentials are missing or fail."""
+    api_key = (
+        os.getenv("ANTHROPIC_AUTH_TOKEN")
+        or os.getenv("ANTHROPIC_API_KEY")
+        or getattr(settings, "anthropic_auth_token", None)
+        or getattr(settings, "anthropic_api_key", None)
+    )
     if api_key:
         try:
             res = await process_review(text)
@@ -139,7 +144,7 @@ async def weak_label_review(text: str) -> tuple[str, float]:
                 score = float(res.get("sentiment_score", 0.0))
                 return label, score
         except Exception as e:
-            print(f"Gemini weak-labeling call failed: {e}. Falling back to heuristic.")
+            print(f"Claude weak-labeling call failed: {e}. Falling back to heuristic.")
             
     # Heuristic fallback
     # TODO: replace heuristic with manual labeling once dataset exceeds 500 rows.

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_manager
 from app.models import User, Category
 from app.models.schemas import CategoryCreate, CategoryResponse, CategoryUpdate
 
@@ -17,7 +17,12 @@ from app.models.schemas import CategoryCreate, CategoryResponse, CategoryUpdate
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
-@router.post("", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=CategoryResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_manager)],
+)
 async def create_category(
     request: CategoryCreate,
     current_user: User = Depends(get_current_user),
@@ -65,33 +70,41 @@ async def create_category(
 
 @router.get("", response_model=list[CategoryResponse])
 async def list_categories(
+    include_inactive: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all menu categories for the authenticated user's restaurant.
-    
+
     Uses tenant_id from get_current_user to ensure data isolation.
     Restaurant A can only see their own categories, not Restaurant B's.
-    
+
+    By default only active categories are returned; the management UI passes
+    include_inactive=True so the owner can see and re-activate archived ones.
+
     Args:
+        include_inactive: When True, also return categories marked inactive
         current_user: Authenticated user with tenant context (injected)
         db: Database session (injected)
-        
+
     Returns:
         List of categories belonging to the user's restaurant
-        
+
     Raises:
         HTTPException 401: If user is not authenticated
     """
     try:
         # Query only categories for this user's tenant
-        result = await db.execute(
+        query = (
             select(Category)
             .where(Category.tenant_id == current_user.tenant_id)
-            .where(Category.is_active == True)
             .order_by(Category.created_at)
         )
-        
+        if not include_inactive:
+            query = query.where(Category.is_active == True)
+
+        result = await db.execute(query)
+
         categories = result.scalars().all()
         return categories
     
@@ -154,7 +167,11 @@ async def get_category(
         )
 
 
-@router.put("/{category_id}", response_model=CategoryResponse)
+@router.put(
+    "/{category_id}",
+    response_model=CategoryResponse,
+    dependencies=[Depends(get_current_manager)],
+)
 async def update_category(
     category_id: int,
     request: CategoryUpdate,
@@ -219,7 +236,11 @@ async def update_category(
         )
 
 
-@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_current_manager)],
+)
 async def delete_category(
     category_id: int,
     current_user: User = Depends(get_current_user),

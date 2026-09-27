@@ -1,11 +1,11 @@
 ﻿/**
  * Format number as Indian Rupee with en-IN locale
  * @param amount - The numeric amount to format (can be null/undefined)
- * @returns Formatted string with â‚¹ symbol (e.g., â‚¹1,00,000)
+ * @returns Formatted string with ₹ symbol (e.g., ₹1,00,000)
  */
 export function formatRupee(amount?: number | null): string {
   if (amount === null || amount === undefined) {
-    return 'â‚¹0';
+    return '₹0';
   }
 
   try {
@@ -17,7 +17,7 @@ export function formatRupee(amount?: number | null): string {
     }).format(amount);
   } catch (error) {
     console.error('Error formatting rupee:', error);
-    return 'â‚¹0';
+    return '₹0';
   }
 }
 

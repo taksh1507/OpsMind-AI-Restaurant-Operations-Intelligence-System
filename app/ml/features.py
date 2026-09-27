@@ -36,8 +36,8 @@ async def build_training_frame(
         - rolling_mean_7, rolling_mean_14 (float)
         - day_of_week (int)
         - month (int)
-        - temp_c (float)
-        - weather_condition (str)
+        - temp_c (float) — SYNTHETIC placeholder (see note in body), not real weather
+        - weather_condition (str) — SYNTHETIC placeholder, not real weather
     """
     # 1. Fetch aggregated daily sales per item
     stmt = (
@@ -99,12 +99,22 @@ async def build_training_frame(
     df["day_of_week"] = df["date"].dt.weekday
     df["month"] = df["date"].dt.month
     
-    # 5. Fetch weather baseline and apply realistic historical variations
+    # 5. Weather features (SYNTHETIC PLACEHOLDER — not real historical weather).
+    # We only have the city's *current* conditions (OpenWeatherMap's free tier
+    # has no historical endpoint), so per-date temp/condition are synthesized
+    # deterministically from the calendar. Because they are a pure function of
+    # the date, they carry no independent signal beyond day_of_week/month and
+    # must not be read as a genuine weather driver. To make these meaningful,
+    # replace with a real historical weather source + persisted per-date records.
     weather_data = await get_current_weather(city)
     current_temp = weather_data.get("temperature", 22.0)
     current_condition = weather_data.get("condition", "Clear")
-    
+
     def simulate_weather(row):
+        """Deterministically synthesize temp/condition from the calendar date.
+
+        Placeholder only (see the note above) — this is NOT observed weather.
+        """
         d = row["date"]
         # Seasonal temperature cycle (peaks in summer)
         month_factor = math.sin(2 * math.pi * (d.month - 2) / 12)

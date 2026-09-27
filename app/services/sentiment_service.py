@@ -119,8 +119,13 @@ async def predict_sentiment(text: str) -> Dict[str, Any]:
         except Exception as e:
             print(f"Prediction failed with local model, falling back: {e}")
             
-    # Fallback 1: Gemini API
-    api_key = os.getenv("GEMINI_API_KEY") or (settings.gemini_api_key if hasattr(settings, "gemini_api_key") else None)
+    # Fallback 1: Claude (Anthropic) via the AI agent
+    api_key = (
+        os.getenv("ANTHROPIC_AUTH_TOKEN")
+        or os.getenv("ANTHROPIC_API_KEY")
+        or getattr(settings, "anthropic_auth_token", None)
+        or getattr(settings, "anthropic_api_key", None)
+    )
     if api_key:
         try:
             from app.services.ai_agent import process_review
@@ -138,10 +143,10 @@ async def predict_sentiment(text: str) -> Dict[str, Any]:
                     "label": label,
                     "confidence": 100.0,
                     "score": score,
-                    "model_used": "gemini_fallback"
+                    "model_used": "claude_fallback"
                 }
         except Exception as e:
-            print(f"Gemini fallback failed: {e}")
+            print(f"Claude fallback failed: {e}")
             
     # Fallback 2: Local keyword heuristic
     label, score = get_heuristic_sentiment(text)

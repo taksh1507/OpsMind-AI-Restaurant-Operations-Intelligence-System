@@ -106,7 +106,7 @@ export default function ComponentsShowcase() {
               {[65, 78, 92, 88, 95, 110, 105].map((height, idx) => (
                 <div
                   key={idx}
-                  className="w-8 bg-accent rounded-t-md transition-all hover:from-electric-400 hover:to-electric-300 hover:"
+                  className="w-8 bg-accent rounded-t-md transition-all hover:bg-accent-dim"
                   style={{ height: `${height * 1.5}px` }}
                 />
               ))}
@@ -160,8 +160,7 @@ export default function ComponentsShowcase() {
               relative overflow-hidden rounded-[3px] p-6
               bg-surface ticket-perf border border-line hover:border-accent
               transition-all duration-300
-              hover:
-              group 
+              group
             `}
           >
             <div className="absolute top-0 right-0 w-40 h-40 bg-accent/10 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />

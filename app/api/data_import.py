@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_manager
 from app.models import User, Sale, SaleItem, MenuItem, Customer, PaymentMethod
 
 router = APIRouter(prefix="/data", tags=["📂 Data Import"])
@@ -44,7 +44,11 @@ def parse_date(date_str: str) -> Optional[datetime]:
     return None
 
 
-@router.post("/upload-sales", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/upload-sales",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_manager)],
+)
 async def upload_sales(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),

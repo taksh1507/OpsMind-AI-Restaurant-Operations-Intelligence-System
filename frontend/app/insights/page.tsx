@@ -13,7 +13,7 @@ export default function InsightsPage() {
           AI Insights
         </h1>
         <p className="text-cream-dim">
-          Visual Intelligence Layer â€¢ Real-time analytics powered by Gemini 1.5 Flash
+          Visual Intelligence Layer • Real-time analytics powered by Gemini 1.5 Flash
         </p>
       </div>
 
@@ -24,9 +24,10 @@ export default function InsightsPage() {
 
       {/* Visual Charts Section */}
       <div className="space-y-6">
-        <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2">
-          ðŸ“Š Visual Intelligence Layer
-        </h2>
+        <div className="flex items-center gap-2.5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Visual Intelligence Layer</h2>
+        </div>
 
         {/* Revenue vs Cost Area Chart */}
         <RevenueChart />
@@ -122,7 +123,7 @@ export default function InsightsPage() {
               </span>
             </div>
             <button className="mt-4 px-4 py-2 rounded-[3px] bg-electric-600/20 border border-line hover:bg-electric-600/30 text-electric-300 hover:text-electric-200 transition-colors text-sm font-display font-semibold tracking-wide">
-              View Details â†’
+              View Details →
             </button>
           </div>
         ))}

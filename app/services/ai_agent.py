@@ -1,6 +1,6 @@
 """AI Agent Service - Autonomous Restaurant Consultant
 
-Uses Google Gemini 1.5 Flash to analyze restaurant performance data
+Uses Anthropic Claude (claude-opus-4-8) to analyze restaurant performance data
 and provide expert consulting recommendations with structured reasoning.
 
 The AI Service implements a "Consultant Mode" that:
@@ -13,7 +13,7 @@ The AI Service implements a "Consultant Mode" that:
 All responses are structured as JSON for frontend integration.
 
 Day 16: Caching & Optimization Layer
-- Reduces API quota usage by caching Gemini responses
+- Reduces API quota usage by caching Claude responses
 - Checks cache before calling expensive AI APIs
 - Supports force-refresh to get fresh insights
 
@@ -25,12 +25,17 @@ Day 24: VIP Insight Agent
 
 import json
 import os
+import asyncio
+import contextlib
+import contextvars
 import hashlib
+import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Dict, Any, Optional
-import google.generativeai as genai
+from typing import Dict, Any, List, Optional
+from anthropic import Anthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.math_utils import calculate_trend_slope, calculate_trend_metrics
@@ -41,25 +46,229 @@ from app.services.weather import (
 from app.core.config import settings
 
 
+logger = logging.getLogger("opsmind.ai_agent")
+
+
+# ---------------------------------------------------------------------------
+# AI usage metering (Phase 4)
+#
+# Every billable call to Claude goes through exactly one place:
+# ``_ClaudeModel.generate_content`` -> ``self._client.messages.create(...)``.
+# We capture the token usage there and stash it in a context-local "sink" so
+# callers can meter usage without every call site having to thread token counts
+# back by hand.
+#
+# The sink is a ``contextvars.ContextVar`` holding a list. ``capture_usage()``
+# installs a fresh list for the duration of a ``with`` block. Because the
+# consultant methods invoke ``generate_content`` via ``asyncio.to_thread`` — which
+# copies the current context into the worker thread — the SAME list object is
+# visible inside the thread, so appends made there are seen back in the async
+# task once the await returns.
+#
+# Only primitives live here (a dataclass + a ContextVar) so that
+# ``app.services.ai_usage_service`` / the models layer can import from ai_agent
+# without creating an import cycle (ai_agent imports models lazily, inside
+# functions).
+# ---------------------------------------------------------------------------
+@dataclass
+class AIUsageEvent:
+    """Token usage reported by Anthropic for a single ``messages.create`` call."""
+
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+
+# Context-local list that, when set, collects an AIUsageEvent per Claude call.
+# Default None means "no one is metering" — capture is then a no-op.
+_usage_sink: contextvars.ContextVar[Optional[List[AIUsageEvent]]] = contextvars.ContextVar(
+    "opsmind_ai_usage_sink", default=None
+)
+
+
+@contextlib.contextmanager
+def capture_usage():
+    """Collect AI token usage for every Claude call made inside the block.
+
+    Yields the list that will be populated with :class:`AIUsageEvent` entries.
+    Nesting is safe: each call installs its own sink and restores the previous
+    one on exit.
+    """
+    sink: List[AIUsageEvent] = []
+    token = _usage_sink.set(sink)
+    try:
+        yield sink
+    finally:
+        _usage_sink.reset(token)
+
+
+def _record_usage_event(model: str, usage: Any) -> None:
+    """Append a usage event to the active sink, if any. Never raises."""
+    sink = _usage_sink.get()
+    if sink is None or usage is None:
+        return
+    try:
+        sink.append(
+            AIUsageEvent(
+                model=model,
+                input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+                output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+            )
+        )
+    except Exception:  # pragma: no cover - metering must never break a call
+        logger.debug("Failed to record AI usage event", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Anthropic (Claude) compatibility layer
+#
+# The AI agent was migrated from Google Gemini to Anthropic Claude. These small
+# adapters preserve the surface the existing call sites already use:
+#   * ClaudeGenerationConfig(...)  replaces genai.types.GenerationConfig(...)
+#   * self.model.generate_content(contents, generation_config=...)
+#   * response.text
+# so no changes were needed at the individual call sites.
+# ---------------------------------------------------------------------------
+def _strip_code_fences(text: str) -> str:
+    """Remove ```json ... ``` fences a model may wrap structured output in."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+        stripped = re.sub(r"\s*```$", "", stripped)
+    return stripped
+
+
+class ClaudeGenerationConfig:
+    """Holds generation parameters, mirroring genai.types.GenerationConfig."""
+
+    def __init__(
+        self,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_output_tokens: Optional[int] = None,
+        response_mime_type: Optional[str] = None,
+        **_ignored: Any,
+    ):
+        self.temperature = temperature
+        self.top_p = top_p
+        self.top_k = top_k
+        self.max_output_tokens = max_output_tokens
+        self.response_mime_type = response_mime_type
+
+
+class _ClaudeResponse:
+    """Wraps a Claude reply exposing a ``.text`` attribute (Gemini-compatible)."""
+
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _ClaudeModel:
+    """Adapter over the Anthropic Messages API with a Gemini-style method."""
+
+    def __init__(self, client: "Anthropic", model: str, default_max_tokens: int = 2048):
+        self._client = client
+        self._model = model
+        self._default_max_tokens = default_max_tokens
+
+    @staticmethod
+    def _flatten(contents: Any) -> str:
+        """Flatten Gemini-style contents into a single user message string."""
+        if isinstance(contents, str):
+            return contents
+        parts: list[str] = []
+        for item in contents:
+            if isinstance(item, dict):
+                parts.extend(str(p) for p in item.get("parts", []))
+            else:
+                parts.append(str(item))
+        return "\n\n".join(parts)
+
+    def generate_content(self, contents, generation_config=None):
+        cfg = generation_config
+        kwargs: Dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": getattr(cfg, "max_output_tokens", None) or self._default_max_tokens,
+            "messages": [{"role": "user", "content": self._flatten(contents)}],
+        }
+        # NOTE: this Anthropic SDK build does not accept the sampling
+        # parameters (temperature/top_p/top_k) as top-level keyword arguments
+        # of messages.create(). They are still valid /v1/messages body fields,
+        # so we pass them through extra_body to preserve the requested sampling
+        # behaviour without tripping the SDK's signature validation.
+        extra_body: Dict[str, Any] = {}
+        if cfg is not None:
+            if cfg.temperature is not None:
+                extra_body["temperature"] = cfg.temperature
+            if cfg.top_p is not None:
+                extra_body["top_p"] = cfg.top_p
+            if cfg.top_k is not None:
+                extra_body["top_k"] = cfg.top_k
+            if cfg.response_mime_type == "application/json":
+                kwargs["system"] = (
+                    "You are an expert restaurant-operations AI. Respond with a "
+                    "single valid JSON value only — no markdown code fences and no "
+                    "prose outside the JSON."
+                )
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        message = self._client.messages.create(**kwargs)
+        # Meter token usage at this single chokepoint. If a caller opened a
+        # capture_usage() sink (directly or via metered_ai_call), the counts are
+        # recorded there; otherwise this is a no-op. Runs inside the worker
+        # thread but writes to the context-copied sink list, so the async caller
+        # sees the appended events after the await.
+        _record_usage_event(self._model, getattr(message, "usage", None))
+        text = "".join(
+            getattr(b, "text", "") for b in message.content
+            if getattr(b, "type", None) == "text"
+        )
+        return _ClaudeResponse(_strip_code_fences(text))
+
+
 class AIConsultant:
     """Agentic AI that analyzes restaurant data and provides strategic advice."""
     
-    def __init__(self):
-        """Initialize Gemini API with the configured API key."""
-        api_key = os.getenv("GEMINI_API_KEY", settings.gemini_api_key)
-        if not api_key:
+    def __init__(self, model: Optional[str] = None):
+        """Initialize the Anthropic (Claude) client.
+
+        The AI agent uses Anthropic Claude (default: claude-opus-4-8). Credentials
+        come from either ANTHROPIC_AUTH_TOKEN (bearer — used by Anthropic-compatible
+        gateway/proxy endpoints) or ANTHROPIC_API_KEY (x-api-key — official API).
+        Set ANTHROPIC_BASE_URL to target a non-default endpoint.
+
+        Args:
+            model: Optional model ID override (e.g. a tenant's chosen model). When
+                omitted, falls back to ANTHROPIC_MODEL / settings.anthropic_model.
+        """
+        auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", settings.anthropic_auth_token)
+        api_key = os.getenv("ANTHROPIC_API_KEY", settings.anthropic_api_key)
+        base_url = os.getenv("ANTHROPIC_BASE_URL", settings.anthropic_base_url)
+        model_name = (
+            model
+            or os.getenv("ANTHROPIC_MODEL", settings.anthropic_model)
+            or "claude-opus-4-8"
+        )
+        if not auth_token and not api_key:
             raise ValueError(
-                "GEMINI_API_KEY environment variable not set. "
-                "Please configure your Google Gemini API key in GitHub Secrets or .env file."
+                "No Anthropic credentials configured. Set ANTHROPIC_AUTH_TOKEN "
+                "(bearer, for gateway/proxy endpoints) or ANTHROPIC_API_KEY "
+                "(official Anthropic API) in your environment or .env file."
             )
         
-        genai.configure(api_key=api_key)
-        # Use gemini-2.0-flash (latest) or gemini-pro as fallback
-        try:
-            self.model = genai.GenerativeModel("gemini-2.0-flash")
-        except:
-            # Fallback to gemini-pro if latest version not available
-            self.model = genai.GenerativeModel("gemini-pro")
+        client_kwargs: Dict[str, Any] = {}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        if auth_token:
+            client_kwargs["auth_token"] = auth_token
+        else:
+            client_kwargs["api_key"] = api_key
+        self.model = _ClaudeModel(Anthropic(**client_kwargs), model_name)
     
     async def get_customer_persona(self, customer: dict, order_history: list) -> dict:
         """
@@ -110,12 +319,12 @@ ANALYSIS TASK:
 3. Suggest ONE specific 'Surprise & Delight' action for the server (e.g., 'offer a sample of our new Paneer Chilly', 'ask about their favorite drink', 'recommend our new Malai Kofta')
 
 OUTPUT FORMAT - MUST BE VALID JSON:
-{
+{{
     "persona": "String - the customer's persona category",
     "reasoning": "String - brief explanation of why you assigned this persona",
     "suggested_action": "String - specific action for the server to take (be actionable and specific)",
     "ltv_assessment": "String - brief assessment of customer lifetime value"
-}
+}}
 
 CRITICAL RULES:
 - ALWAYS output valid JSON only
@@ -124,11 +333,12 @@ CRITICAL RULES:
 - Make suggestions that increase AOV (Average Order Value) or strengthen loyalty"""
         
         try:
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [prompt]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.7,
                     top_p=0.95,
                     max_output_tokens=600,
@@ -210,15 +420,16 @@ Instructions:
 - Identify patterns (e.g., if it rained last Friday and 5kg of Dough was wasted, and today is Friday and it's raining, suggest prepping less).
 - Recommend prep quantities for each key ingredient or menu item.
 - For each recommendation, include a short impact statement (e.g., 'Suggest prepping only 10kg instead of 15kg to save ₹1,200').
-- Output as JSON: {"prep_list": [{"item": ..., "recommended_qty": ..., "impact_statement": ...}], "ai_reasoning": ...}
+- Output as JSON: {{"prep_list": [{{"item": ..., "recommended_qty": ..., "impact_statement": ...}}], "ai_reasoning": ...}}
 """
 
         try:
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [prompt]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.6,
                     top_p=0.95,
                     max_output_tokens=1200,
@@ -277,12 +488,13 @@ Instructions:
         
         try:
             # Call Gemini with structured reasoning
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [system_prompt]},
                     {"role": "user", "parts": [user_message]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.7,
                     top_p=0.95,
                     top_k=40,
@@ -356,12 +568,13 @@ How should staffing be adjusted for this weather?
 What inventory should be prioritized?"""
         
         try:
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [weather_aware_prompt]},
                     {"role": "user", "parts": [enhanced_message]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.7,
                     top_p=0.95,
                     top_k=40,
@@ -371,22 +584,29 @@ What inventory should be prioritized?"""
             )
             
             ai_response = response.text
+            logger.debug("Claude weather-strategy returned %d chars", len(ai_response or ""))
             strategy = self._parse_strategy_response(ai_response, performance_data)
-            
+
             # Add weather context to response
             if isinstance(strategy, dict):
                 strategy["weather_context"] = weather_context
                 strategy["weather_impact"] = weather_impact
-            
+
+            # `period` may be a dict (with end_date) or a plain label string
+            # depending on the caller, so resolve the timestamp defensively.
+            period = performance_data.get("period")
+            period_end = period.get("end_date", "") if isinstance(period, dict) else ""
+
             return {
                 "status": "success",
                 "strategy": strategy,
                 "reasoning": ai_response,
                 "weather_aware": True,
-                "timestamp": performance_data.get("period", {}).get("end_date", "")
+                "timestamp": period_end
             }
         
         except Exception as e:
+            logger.exception("Claude weather-strategy call failed: %s", e)
             return {
                 "status": "error",
                 "message": f"Failed to generate weather-aware strategy: {str(e)}",
@@ -721,12 +941,13 @@ Provide your response as valid JSON."""
         user_message = self._build_forecasting_message(trend_data)
         
         try:
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [system_prompt]},
                     {"role": "user", "parts": [user_message]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.7,
                     top_p=0.95,
                     top_k=40,
@@ -988,12 +1209,13 @@ Respond with ONLY valid JSON."""
         user_message = self._build_margin_analysis_message(menu_items_with_costs)
         
         try:
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [system_prompt]},
                     {"role": "user", "parts": [user_message]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.7,
                     top_p=0.95,
                     top_k=40,
@@ -1328,12 +1550,13 @@ RESPOND WITH VALID JSON ONLY."""
         user_message = self._build_margin_alert_message(danger_items, exchange_rate)
         
         try:
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [system_prompt]},
                     {"role": "user", "parts": [user_message]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.7,
                     top_p=0.95,
                     max_output_tokens=1500,
@@ -1468,12 +1691,13 @@ Provide your response as valid JSON with the following structure:
 }}"""
         
         try:
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [system_prompt]},
                     {"role": "user", "parts": [user_message]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.5,
                     top_p=0.95,
                     top_k=40,
@@ -1652,12 +1876,13 @@ Identify:
 Provide response as valid JSON."""
         
         try:
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 [
                     {"role": "user", "parts": [system_prompt]},
                     {"role": "user", "parts": [user_message]}
                 ],
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.6,
                     top_p=0.95,
                     top_k=40,
@@ -1875,9 +2100,10 @@ OUTPUT FORMAT - MUST BE VALID JSON:"""
             )
             
             # Call Gemini to generate success report
-            response = self.model.generate_content(
+            response = await asyncio.to_thread(
+                self.model.generate_content,
                 verification_prompt,
-                generation_config=genai.types.GenerationConfig(
+                generation_config=ClaudeGenerationConfig(
                     temperature=0.8,
                     top_p=0.95,
                     top_k=40,
@@ -2001,31 +2227,42 @@ Write a natural, enthusiastic, and specific SUCCESS REPORT that:
 CONSTRAINT: Keep response to 3-4 sentences maximum. Be specific with numbers."""
 
 
-# Global instance
-_consultant: Optional[AIConsultant] = None
+# Global instances, cached per resolved model ID so a tenant's chosen model
+# reuses its own client instead of rebuilding one on every call. The key ""
+# (empty string) holds the process-default consultant (model=None).
+_consultants: Dict[str, "AIConsultant"] = {}
 
 
-def get_ai_consultant() -> AIConsultant:
-    """Get or create the AI consultant instance."""
-    global _consultant
-    if _consultant is None:
-        _consultant = AIConsultant()
-    return _consultant
+def get_ai_consultant(model: Optional[str] = None) -> AIConsultant:
+    """Get or create the AI consultant instance for the given model.
+
+    Passing ``model`` (e.g. a tenant's configured model) returns a consultant
+    bound to that model, cached per model ID. ``None`` returns the process
+    default, preserving the original behaviour for callers that don't specify.
+    """
+    key = model or ""
+    consultant = _consultants.get(key)
+    if consultant is None:
+        consultant = AIConsultant(model=model)
+        _consultants[key] = consultant
+    return consultant
 
 
 async def forecast_revenue(
-    trend_data: Dict[str, float]
+    trend_data: Dict[str, float],
+    model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Convenience function to generate revenue forecast using the global consultant."""
-    consultant = get_ai_consultant()
+    consultant = get_ai_consultant(model)
     return await consultant.predict_revenue(trend_data)
 
 
 async def analyze_profit_margins(
-    menu_items_with_costs: list[Dict[str, Any]]
+    menu_items_with_costs: list[Dict[str, Any]],
+    model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Convenience function to analyze profit margins using the global consultant."""
-    consultant = get_ai_consultant()
+    consultant = get_ai_consultant(model)
     return await consultant.check_profit_margins(menu_items_with_costs)
 
 
@@ -2049,15 +2286,17 @@ async def check_margin_health(
     return await consultant.check_margin_health(imported_items, exchange_rate)
 
 
-async def process_review(customer_comment: str) -> Dict[str, Any]:
+async def process_review(customer_comment: str, model: Optional[str] = None) -> Dict[str, Any]:
     """Convenience function to analyze review sentiment using the global consultant."""
-    consultant = get_ai_consultant()
+    consultant = get_ai_consultant(model)
     return await consultant.process_review(customer_comment)
 
 
-async def calculate_labor_efficiency(hourly_data: Dict[str, Any]) -> Dict[str, Any]:
+async def calculate_labor_efficiency(
+    hourly_data: Dict[str, Any], model: Optional[str] = None
+) -> Dict[str, Any]:
     """Convenience function to analyze labor efficiency using the global consultant."""
-    consultant = get_ai_consultant()
+    consultant = get_ai_consultant(model)
     return await consultant.calculate_labor_efficiency(hourly_data)
 
 
@@ -2122,9 +2361,12 @@ async def get_cached_response(
         stmt = select(AICache).where(
             AICache.tenant_id == tenant_id,
             AICache.request_hash == request_hash
-        )
+        ).limit(1)
         result = await db.execute(stmt)
-        cache_entry = result.scalar_one_or_none()
+        # .first() rather than scalar_one_or_none(): legacy databases created
+        # before the unique index may still hold duplicate rows, and a lookup
+        # must not raise MultipleResultsFound on that data.
+        cache_entry = result.scalars().first()
         
         if cache_entry and AICache.is_valid(cache_entry):
             # Update hit count to track cache effectiveness
@@ -2164,18 +2406,33 @@ async def save_to_cache(
         True if saved successfully, False on error
     """
     from app.models import AICache
-    
+
     try:
-        cache_entry = AICache(
-            tenant_id=tenant_id,
-            request_hash=request_hash,
-            response_json=response,
-            expires_at=AICache.is_expired(),
-            request_type=request_type,
-            request_data=request_data,
-            hit_count=0
-        )
-        db.add(cache_entry)
+        # Upsert against the (tenant_id, request_hash) unique key: reuse the
+        # existing row if present so the cache can never accumulate duplicate or
+        # stale entries (which previously grew unbounded and could break lookups).
+        stmt = select(AICache).where(
+            AICache.tenant_id == tenant_id,
+            AICache.request_hash == request_hash
+        ).limit(1)
+        existing = (await db.execute(stmt)).scalars().first()
+
+        if existing is not None:
+            existing.response_json = response
+            existing.expires_at = AICache.default_expiry()
+            existing.request_type = request_type
+            existing.request_data = request_data
+            existing.hit_count = 0
+        else:
+            db.add(AICache(
+                tenant_id=tenant_id,
+                request_hash=request_hash,
+                response_json=response,
+                expires_at=AICache.default_expiry(),
+                request_type=request_type,
+                request_data=request_data,
+                hit_count=0
+            ))
         await db.commit()
         return True
     except Exception as e:

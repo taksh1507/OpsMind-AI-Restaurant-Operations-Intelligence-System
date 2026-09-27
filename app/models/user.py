@@ -52,7 +52,7 @@ class User(BaseModel):
         index=True
     )
     
-    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     
@@ -64,9 +64,17 @@ class User(BaseModel):
     )
     
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    
+
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    
+
+    # True while a staff/manager account still has the one-time temporary password
+    # the owner set for them. They must change it before using the app; cleared on
+    # first successful password change. Owners self-register, so this is never set
+    # for them.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
     # Relationship to tenant
     tenant = relationship("Tenant", back_populates="users")
 

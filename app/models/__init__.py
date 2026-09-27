@@ -15,6 +15,7 @@ SQLAlchemy ORM models for multi-tenant architecture:
 
 from .base import Base, BaseModel
 from .tenant import Tenant, SubscriptionStatus
+from .tenant_settings import TenantSettings
 from .user import User, UserRole
 from .customer import Customer
 from .menu import Category, MenuItem, Ingredient, Recipe
@@ -23,6 +24,7 @@ from .review import Review
 from .staff import Staff, Shift, StaffRole
 from .recommendation import Recommendation, RecommendationCategory, RecommendationStatus
 from .aicache import AICache
+from .ai_usage import AIUsage
 from .refresh_token import RefreshToken
 from .schemas import (
     RegisterRequest,
@@ -39,6 +41,7 @@ __all__ = [
     "BaseModel",
     "Tenant",
     "SubscriptionStatus",
+    "TenantSettings",
     "User",
     "UserRole",
     "Customer",
@@ -58,6 +61,7 @@ __all__ = [
     "RecommendationCategory",
     "RecommendationStatus",
     "AICache",
+    "AIUsage",
     "RefreshToken",
     "RegisterRequest",
     "LoginRequest",

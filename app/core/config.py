@@ -41,6 +41,32 @@ class Settings(BaseSettings):
         default=30, description="Expiration time for refresh tokens in days"
     )
 
+    # ===== REFRESH-TOKEN COOKIE (httpOnly) =====
+    # The refresh token is delivered to the browser only as an httpOnly cookie so
+    # JavaScript (and therefore XSS) can never read it. The short-lived access
+    # token still travels in the JSON body / Authorization header.
+    refresh_cookie_name: str = Field(
+        default="opsmind_refresh_token",
+        description="Name of the httpOnly cookie that stores the refresh token",
+    )
+    cookie_secure: bool = Field(
+        default=False,
+        description="Set the Secure flag on the refresh cookie (MUST be True in production/HTTPS)",
+    )
+    cookie_samesite: str = Field(
+        default="lax",
+        description="SameSite policy for the refresh cookie: 'lax', 'strict', or 'none'. "
+        "'lax' blocks the cookie on cross-site POSTs, which is our CSRF defense.",
+    )
+    cookie_domain: Optional[str] = Field(
+        default=None,
+        description="Domain for the refresh cookie (None = host-only, correct for localhost dev)",
+    )
+    cookie_path: str = Field(
+        default="/api/v1/auth",
+        description="Path scope for the refresh cookie so it is only sent to the auth endpoints",
+    )
+
     # ===== APPLICATION CONFIGURATION =====
     app_name: str = Field(default="OpsMind AI", description="Application name")
     app_version: str = Field(default="1.0.0", description="Application version")
@@ -59,9 +85,41 @@ class Settings(BaseSettings):
     )
 
     # ===== AI/LLM CONFIGURATION (REQUIRED FOR AI FEATURES) =====
+    # Primary LLM is Anthropic Claude (default model: claude-opus-4-8).
+    # Supply credentials as EITHER an auth token (bearer — used by
+    # Anthropic-compatible gateway/proxy endpoints) OR an API key (x-api-key —
+    # used by the official Anthropic API).
+    anthropic_auth_token: Optional[str] = Field(
+        default=None,
+        description="Anthropic bearer auth token (set via ANTHROPIC_AUTH_TOKEN). Used with gateway/proxy endpoints.",
+    )
+    anthropic_api_key: Optional[str] = Field(
+        default=None,
+        description="Anthropic API key for the official API (set via ANTHROPIC_API_KEY).",
+    )
+    anthropic_base_url: Optional[str] = Field(
+        default=None,
+        description="Override base URL for an Anthropic-compatible endpoint (set via ANTHROPIC_BASE_URL). Leave unset for the official Anthropic API.",
+    )
+    anthropic_model: str = Field(
+        default="claude-opus-4-8",
+        description="Anthropic model ID used by the AI agent (set via ANTHROPIC_MODEL).",
+    )
+
+    # Per-tenant monthly AI spend guardrail (Phase 4). Counts input+output tokens
+    # across ALL AI features for a restaurant within the current UTC month. When a
+    # tenant reaches the cap, AI endpoints return HTTP 429 until the month rolls
+    # over. Set to 0 (or a negative value) to disable enforcement entirely.
+    ai_monthly_token_cap: int = Field(
+        default=1_500_000,
+        description="Per-tenant monthly AI token cap (input+output). 0 or negative disables enforcement. Set via AI_MONTHLY_TOKEN_CAP.",
+    )
+
+    # [DEPRECATED] Google Gemini key — no longer used by the AI agent; retained
+    # so existing .env files do not fail validation with extra="ignore".
     gemini_api_key: Optional[str] = Field(
         default=None,
-        description="Google Gemini API key - Required for AI agent features (set via GEMINI_API_KEY env var)",
+        description="[DEPRECATED] Google Gemini API key. No longer used by the AI agent.",
     )
 
     # ===== WEATHER API CONFIGURATION (OPTIONAL) =====
@@ -94,6 +152,11 @@ class Settings(BaseSettings):
     )
 
     # ===== SECURITY & VALIDATION =====
+    @property
+    def anthropic_credentials_present(self) -> bool:
+        """True when a usable Anthropic credential (token or API key) is set."""
+        return bool(self.anthropic_auth_token or self.anthropic_api_key)
+
     @model_validator(mode="after")
     def reject_insecure_defaults(self):
         """Reject default/dev-only secrets in any non-development environment.
@@ -108,9 +171,10 @@ class Settings(BaseSettings):
                     "SECRET_KEY must be overridden outside of development. "
                     "Refusing to start with the default dev secret."
                 )
-            if not self.gemini_api_key and not self.debug:
+            if not self.anthropic_credentials_present and not self.debug:
                 raise ValueError(
-                    "GEMINI_API_KEY must be set in a non-development environment."
+                    "Anthropic credentials must be set in a non-development "
+                    "environment (set ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY)."
                 )
         return self
 
@@ -120,8 +184,8 @@ class Settings(BaseSettings):
             missing_secrets = []
             if self.secret_key == "dev-only-change-in-production":
                 missing_secrets.append("SECRET_KEY")
-            if not self.gemini_api_key:
-                missing_secrets.append("GEMINI_API_KEY")
+            if not self.anthropic_credentials_present:
+                missing_secrets.append("ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY")
 
             if missing_secrets:
                 raise ValueError(

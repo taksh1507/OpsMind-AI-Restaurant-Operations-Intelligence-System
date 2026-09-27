@@ -83,6 +83,14 @@ export function getActiveToasts(): Toast[] {
 }
 
 /**
+ * Manually dismiss a toast by id
+ */
+export function dismissToast(id: string) {
+  toastStore.delete(id);
+  toastCallbacks.forEach(cb => cb());
+}
+
+/**
  * Play a "ding" sound notification
  * Uses Web Audio API to generate a simple beep tone
  */
@@ -195,7 +203,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               
               // Show toast notification
               showToast(
-                `ðŸ’° New Sale: â‚¹${amount.toFixed(2)} (${itemCount} items)`,
+                `💰 New Sale: ₹${amount.toFixed(2)} (${itemCount} items)`,
                 'success'
               );
               
@@ -211,7 +219,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               playDingSound();
               
               showToast(
-                `ðŸ½ï¸ New Order #${orderId} for Table ${tableNumber}`,
+                `🍽️ New Order #${orderId} for Table ${tableNumber}`,
                 'info'
               );
               
@@ -225,7 +233,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               playDingSound();
               
               showToast(
-                `âœ… Table ${tableNumber} is ready!`,
+                `✅ Table ${tableNumber} is ready!`,
                 'info'
               );
               

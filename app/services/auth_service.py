@@ -6,6 +6,7 @@ Business logic for user registration, login, and token validation.
 from typing import Optional, Tuple
 import hashlib
 import re
+import random
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -137,7 +138,7 @@ async def register_user(
     )
     if tenant_exists.scalar_one_or_none() is not None:
         # If slug exists, append a random suffix
-        tenant_id = f"{tenant_id}-{int(func.random() * 10000)}"
+        tenant_id = f"{tenant_id}-{random.randint(1000, 9999)}"
     
     tenant = Tenant(
         tenant_id=tenant_id,

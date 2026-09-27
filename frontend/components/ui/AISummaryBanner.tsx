@@ -80,7 +80,7 @@ export function AISummaryBanner() {
   }
 
   return (
-    <div className="w-full bg-surface ticket-perf border border-line rounded-[3px] p-6  overflow-hidden">
+    <div className="relative w-full bg-surface ticket-perf border border-line rounded-[3px] p-6 overflow-hidden">
       {/* Animated background pulse */}
       <div className="absolute inset-0 -z-10">
         <div
@@ -114,7 +114,7 @@ export function AISummaryBanner() {
           <div className="flex items-center gap-2 mb-2">
             <h3 className="text-lg font-bold text-electric-200">AI Strategic Insight</h3>
             {cacheHit && (
-              <span className="px-2 py-1 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300 font-medium">
+              <span className="px-2 py-1 bg-accent/20 border border-accent/30 rounded text-xs text-accent font-medium">
                 Cached
               </span>
             )}
@@ -138,7 +138,7 @@ export function AISummaryBanner() {
           {/* Call-to-action hint */}
           <div className="mt-4 flex items-center gap-2 text-xs text-electric-300">
             <TrendingUp size={14} />
-            <span>Powered by Gemini 1.5 Flash â€¢ Real-time analysis</span>
+            <span>Powered by Claude • Real-time analysis</span>
           </div>
         </div>
       </div>

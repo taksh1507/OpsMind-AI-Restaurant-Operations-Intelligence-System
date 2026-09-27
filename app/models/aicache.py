@@ -74,13 +74,16 @@ class AICache(BaseModel):
     
     # Indexed for fast lookup
     __table_args__ = (
-        Index('idx_tenant_request_hash', 'tenant_id', 'request_hash'),
+        # Unique so each (tenant, request) maps to exactly one cache row; the
+        # save path upserts against this to avoid duplicate/stale rows that would
+        # otherwise break single-row lookups.
+        Index('idx_tenant_request_hash', 'tenant_id', 'request_hash', unique=True),
         Index('idx_expires_at', 'expires_at'),
     )
-    
+
     @staticmethod
-    def is_expired() -> datetime:
-        """Calculate expiration time (1 hour from now in UTC)."""
+    def default_expiry() -> datetime:
+        """Return the default cache expiration time (1 hour from now, UTC)."""
         return datetime.now(timezone.utc) + timedelta(hours=1)
     
     @staticmethod

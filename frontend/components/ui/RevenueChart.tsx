@@ -10,7 +10,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell,
 } from 'recharts'
 import apiClient from '@/lib/api-client'
 import { formatRupee } from '@/lib/format-utils'
@@ -28,8 +27,8 @@ interface IChartData {
 }
 
 const COLORS = {
-  revenue: '#00D9FF', // Electric Blue
-  cost: '#FF6B6B', // Deep Coral (adjusted for visibility)
+  revenue: '#C77D3F', // Copper (accent)
+  cost: '#C1442E', // Alert red
 }
 
 export function RevenueChart() {
@@ -116,9 +115,10 @@ export function RevenueChart() {
   return (
     <div className="w-full bg-surface/30 border border-accent/20 rounded-[3px] p-6 ">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          ðŸ“Š Revenue vs. Cost Trends
-        </h2>
+        <div className="flex items-center gap-2.5">
+          <span className="w-[3px] h-[18px] bg-accent rounded-[2px]" />
+          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Revenue vs. Cost Trends</h2>
+        </div>
         <p className="text-cream-dim text-sm mt-2">
           Last 14 days of revenue and cost of goods sold
         </p>
@@ -137,22 +137,22 @@ export function RevenueChart() {
                 <stop offset="95%" stopColor={COLORS.cost} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#3A322B" opacity={0.5} />
             <XAxis
               dataKey="date"
-              stroke="#94a3b8"
+              stroke="#B8A88C"
               style={{
                 fontSize: '12px',
               }}
             />
             <YAxis
-              stroke="#94a3b8"
+              stroke="#B8A88C"
               style={{
                 fontSize: '12px',
               }}
               tickFormatter={(value) => {
-                if (value >= 10000) return `â‚¹${(value / 1000).toFixed(0)}K`
-                return `â‚¹${value}`
+                if (value >= 10000) return `₹${(value / 1000).toFixed(0)}K`
+                return `₹${value}`
               }}
             />
             <Tooltip content={<CustomTooltip />} />
@@ -192,15 +192,15 @@ export function RevenueChart() {
             {formatRupee(data.reduce((sum, d) => sum + d.revenue, 0) / data.length)}
           </p>
         </div>
-        <div className="bg-red-500/10 border border-red-500/30 rounded-[3px] p-3">
+        <div className="bg-alert/10 border border-alert/30 rounded-[3px] p-3">
           <p className="text-cream-dim">Avg Daily Cost</p>
-          <p className="text-red-300 font-bold text-lg">
+          <p className="text-alert font-bold text-lg">
             {formatRupee(data.reduce((sum, d) => sum + d.cost, 0) / data.length)}
           </p>
         </div>
-        <div className="bg-green-500/10 border border-green-500/30 rounded-[3px] p-3">
+        <div className="bg-success/10 border border-success/30 rounded-[3px] p-3">
           <p className="text-cream-dim">Avg Daily Profit</p>
-          <p className="text-green-300 font-bold text-lg">
+          <p className="text-success font-bold text-lg">
             {formatRupee(
               data.reduce((sum, d) => sum + (d.revenue - d.cost), 0) / data.length
             )}

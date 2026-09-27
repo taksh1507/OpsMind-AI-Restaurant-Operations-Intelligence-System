@@ -9,7 +9,8 @@ from sqlalchemy import or_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from difflib import SequenceMatcher
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_current_user
+from app.models import User
 from app.models.base import Base
 from app.models.menu import MenuItem, Category
 from app.models.staff import Staff
@@ -44,6 +45,7 @@ def fuzzy_match(query: str, target: str, threshold: float = 0.6) -> float:
 async def global_search(
     q: str = Query(..., min_length=1, max_length=100),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Perform global fuzzy search across menu items, categories, and staff.
 
@@ -58,8 +60,8 @@ async def global_search(
     results = []
 
     try:
-        # Search menu items
-        menu_query = select(MenuItem).limit(50)
+        # Search menu items (scoped to the caller's tenant)
+        menu_query = select(MenuItem).where(MenuItem.tenant_id == current_user.tenant_id).limit(50)
         menu_result = await db.execute(menu_query)
         menu_items = menu_result.scalars().all()
 
@@ -74,8 +76,8 @@ async def global_search(
                     "score": score,
                 })
 
-        # Search categories
-        category_query = select(Category).limit(50)
+        # Search categories (scoped to the caller's tenant)
+        category_query = select(Category).where(Category.tenant_id == current_user.tenant_id).limit(50)
         category_result = await db.execute(category_query)
         categories = category_result.scalars().all()
 
@@ -90,8 +92,8 @@ async def global_search(
                     "score": score,
                 })
 
-        # Search staff
-        staff_query = select(Staff).limit(50)
+        # Search staff (scoped to the caller's tenant)
+        staff_query = select(Staff).where(Staff.tenant_id == current_user.tenant_id).limit(50)
         staff_result = await db.execute(staff_query)
         staff_members = staff_result.scalars().all()
 

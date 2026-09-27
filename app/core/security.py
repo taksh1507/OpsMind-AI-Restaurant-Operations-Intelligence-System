@@ -91,6 +91,10 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
             settings.secret_key,
             algorithms=[settings.algorithm]
         )
+        # Reject refresh tokens presented as access tokens. Refresh tokens carry
+        # {"type": "refresh"} and must only be accepted at the refresh endpoint.
+        if payload.get("type") == "refresh":
+            return None
         return payload
     except JWTError:
         return None

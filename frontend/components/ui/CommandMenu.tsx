@@ -38,7 +38,7 @@ export function CommandMenu() {
         const handleNextKey = (nextEvent: KeyboardEvent) => {
           if (nextEvent.key === 'd') {
             nextEvent.preventDefault()
-            router.push('/dashboard')
+            router.push('/')
             document.removeEventListener('keydown', handleNextKey)
           } else if (nextEvent.key === 'm') {
             nextEvent.preventDefault()
@@ -165,7 +165,7 @@ export function CommandMenu() {
             {/* Navigation Actions */}
             <Command.Group heading="Navigate">
               <Command.Item
-                onSelect={() => handleNavigation('/dashboard')}
+                onSelect={() => handleNavigation('/')}
                 className="cursor-pointer hover:bg-surface-2"
               >
                 <LayoutDashboard className="mr-2 h-4 w-4" />

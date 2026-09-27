@@ -12,7 +12,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { getActiveToasts, onToastChange } from '@/hooks/useWebSocket';
+import { getActiveToasts, onToastChange, dismissToast } from '@/hooks/useWebSocket';
 import { X } from 'lucide-react';
 
 interface Toast {
@@ -42,25 +42,23 @@ export function ToastContainer() {
           key={toast.id}
           className={`
             pointer-events-auto
-            px-4 py-3 rounded-lg shadow-lg
+            px-4 py-3 rounded-[3px] shadow-lg border
             flex items-center gap-3
             animate-in slide-in-from-right-4 fade-in duration-300
             ${
               toast.type === 'success'
-                ? 'bg-green-500 text-white'
+                ? 'bg-success text-white border-success'
                 : toast.type === 'error'
-                  ? 'bg-red-500 text-white'
-                  : 'bg-blue-500 text-white'
+                  ? 'bg-alert text-white border-alert'
+                  : 'bg-surface-2 text-foreground border-accent/40'
             }
           `}
         >
           <span className="flex-1">{toast.message}</span>
           <button
-            onClick={() => {
-              // Toast will auto-dismiss, but allow manual dismiss
-            }}
+            onClick={() => dismissToast(toast.id)}
             className="hover:opacity-80 transition-opacity"
-            aria-label="close"
+            aria-label="Dismiss notification"
           >
             <X size={16} />
           </button>

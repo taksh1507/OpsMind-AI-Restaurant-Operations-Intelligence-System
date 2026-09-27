@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from sqlalchemy.orm import joinedload
-from app.models import Customer, Sale
+from app.models import Customer, Sale, User
 from app.database import get_db
+from app.api.deps import get_current_user
 from app.services.ai_agent import AIConsultant
 from typing import Optional, Dict, Any, List
 
@@ -89,7 +90,8 @@ async def get_customer_order_history(
 @router.get("/{id}/briefing", response_model=dict, summary="Get Customer Table-Side Briefing")
 async def get_customer_briefing(
     id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """
     Get a 3-bullet "cheat sheet" for staff when a VIP customer checks in.
@@ -118,9 +120,20 @@ async def get_customer_briefing(
     ```
     """
     try:
+        tenant_id = current_user.tenant_id
+
+        # Tenant scoping: the Customer table is not tenant-scoped, so a customer
+        # is only visible to a tenant if they have at least one sale recorded for
+        # that tenant. This prevents cross-tenant access to customer PII.
+        belongs = await db.scalar(
+            select(Sale.id)
+            .where(Sale.customer_id == id, Sale.tenant_id == tenant_id)
+            .limit(1)
+        )
+
         # Fetch customer
         customer = await db.scalar(select(Customer).where(Customer.id == id))
-        if not customer:
+        if not customer or belongs is None:
             raise HTTPException(status_code=404, detail="Customer not found")
 
         # Calculate LTV (Lifetime Value)
@@ -141,11 +154,6 @@ async def get_customer_briefing(
             
             if item_counts:
                 most_ordered_item = max(item_counts, key=item_counts.get)
-
-        # Look up customer's tenant_id from their sales, defaulting to 1
-        tenant_id = await db.scalar(select(Sale.tenant_id).where(Sale.customer_id == id).limit(1))
-        if not tenant_id:
-            tenant_id = 1
 
         # Generate K-Means or rule-based persona
         from app.services.persona_engine import get_customer_persona as get_segmented_persona

@@ -23,8 +23,14 @@ from app.api import (
     customers_router,
     data_import,
     training,
+    users,
 )
 from app.api import ws
+# Imported under an alias: the module name `settings` would otherwise shadow the
+# `settings` config object imported above from app.core.
+from app.api import settings as settings_api
+from app.api import ai_usage
+from app.api.deps import get_current_manager, get_current_owner
 
 logger = setup_app_logger("opsmind.main")
 
@@ -39,6 +45,28 @@ async def lifespan(app: FastAPI):
     # Fail fast on insecure configuration in non-development environments
     settings.validate_production_settings()
     await init_db(settings.database_url)
+
+    # Ensure the schema exists. The app ships without Alembic migrations, so on a
+    # fresh database (e.g. a new Postgres volume) the tables would otherwise be
+    # missing and every DB-backed request would fail. Importing app.models
+    # registers every ORM table on Base.metadata; create_all is a no-op for
+    # tables that already exist.
+    import app.models  # noqa: F401  (side effect: register models on metadata)
+    from app.models.base import Base
+    from app import database
+
+    async with database.engine.begin() as conn:
+        # Serialize schema creation across gunicorn workers. Every worker runs
+        # create_all on boot; when a brand-new table is introduced, concurrent
+        # workers otherwise race to create its sequence and one loses with a
+        # "duplicate key ... pg_class" error, failing that worker's startup.
+        # A transaction-scoped advisory lock lets the first worker create the
+        # tables while the rest wait, then find everything already present.
+        # (Postgres-only; the SQLite dev path has a single process, no race.)
+        if database.engine.dialect.name == "postgresql":
+            await conn.exec_driver_sql("SELECT pg_advisory_xact_lock(9130524217)")
+        await conn.run_sync(Base.metadata.create_all)
+
     logger.info("Database initialized")
 
     # Warm the currency exchange rate from the configured/live source (best-effort)
@@ -80,10 +108,10 @@ def create_app() -> FastAPI:
 
     System Architecture:
         User → Authentication (JWT) → Multi-Tenant Isolation → Business Logic
-        → Gemini AI Analysis → Database (PostgreSQL/SQLite)
+        → Claude AI Analysis → Database (PostgreSQL/SQLite)
 
     Core Capabilities:
-        🤖 AI-Powered Analytics: Autonomous restaurant consultant via Gemini 1.5
+        🤖 AI-Powered Analytics: Autonomous restaurant consultant via Anthropic Claude
         📊 Real-Time Insights: Revenue forecasting, staffing optimization, margin analysis
         💰 Profit Intelligence: Cost reduction recommendations, waste detection
         🎯 Agentic Learning Loop: Track, accept/reject, and verify AI recommendation impact
@@ -103,10 +131,10 @@ def create_app() -> FastAPI:
             "**AI-Powered Multi-Tenant SaaS for Restaurant Operations**\n\n"
             "OpsMind AI empowers restaurant owners with autonomous AI consulting, "
             "predictive analytics, and real-time operational intelligence. "
-            "By combining Gemini AI reasoning with multi-tenant data isolation, "
+            "By combining Claude AI reasoning with multi-tenant data isolation, "
             "we deliver context-aware recommendations that measure their real ROI.\n\n"
             "**Key Features:**\n"
-            "- 🤖 **AI Strategy Agent**: Automated business recommendations via Gemini\n"
+            "- 🤖 **AI Strategy Agent**: Automated business recommendations via Anthropic Claude\n"
             "- 📈 **Revenue Forecasting**: Multi-day predictive sales with confidence scores\n"
             "- 💰 **Profit Optimization**: Margin analysis, cost reduction, pricing recommendations\n"
             "- 👥 **Labor Intelligence**: Staffing heatmaps and efficiency analysis\n"
@@ -116,7 +144,7 @@ def create_app() -> FastAPI:
             "- 🔒 **Multi-Tenant Security**: Complete tenant isolation with JWT authentication\n\n"
             "**Tech Stack:**\n"
             "Backend: FastAPI (async) | Database: PostgreSQL/SQLite | ORM: SQLAlchemy 2.0 | "
-            "AI: Google Gemini 2.0 Flash | Auth: JWT + Argon2/bcrypt | Analytics: NumPy/Pandas\n\n"
+            "AI: Anthropic Claude | Auth: JWT + Argon2/bcrypt | Analytics: NumPy/Pandas\n\n"
             "**Live Demo:** Seed the database with `scripts/seed_data.py` to see AI analytics in action."
         ),
         contact={
@@ -147,13 +175,25 @@ def create_app() -> FastAPI:
     app.include_router(
         auth.router, prefix="/api/v1", tags=["🔐 Authentication & Authorization"]
     )
+    app.include_router(
+        users.router, prefix="/api/v1", tags=["👥 Team Management"]
+    )
+    app.include_router(
+        settings_api.router, prefix="/api/v1", tags=["⚙️ Tenant Settings"]
+    )
+    app.include_router(
+        ai_usage.router, prefix="/api/v1", tags=["📟 AI Usage & Limits"]
+    )
     app.include_router(categories.router, prefix="/api/v1", tags=["🏷️ Menu Management"])
     app.include_router(
         menu_items.router, prefix="/api/v1", tags=["🍽️ Menu Items & Recipes"]
     )
     app.include_router(sales.router, prefix="/api/v1", tags=["💳 Sales & Transactions"])
     app.include_router(
-        analytics.router, prefix="/api/v1", tags=["📊 Analytics & AI Insights"]
+        analytics.router,
+        prefix="/api/v1",
+        tags=["📊 Analytics & AI Insights"],
+        dependencies=[Depends(get_current_manager)],
     )
     app.include_router(
         recommendations.router, prefix="/api/v1", tags=["✅ Recommendation Tracking"]
@@ -163,7 +203,12 @@ def create_app() -> FastAPI:
         customers_router, prefix="/api/v1", tags=["👤 Customer Intelligence"]
     )
     app.include_router(data_import.router, prefix="/api/v1", tags=["📂 Data Import"])
-    app.include_router(training.router, prefix="/api/v1", tags=["🏋️ Model Training"])
+    app.include_router(
+        training.router,
+        prefix="/api/v1",
+        tags=["🏋️ Model Training"],
+        dependencies=[Depends(get_current_owner)],
+    )
     app.include_router(ws.router, tags=["🔌 WebSocket Real-Time"])
 
     # Health check endpoint
