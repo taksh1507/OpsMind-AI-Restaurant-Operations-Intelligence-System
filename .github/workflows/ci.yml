@@ -16,11 +16,12 @@ jobs:
 
     env:
       # Keep the config validator in its permissive dev mode (the default secret
-      # key is only rejected outside development). No real secrets are needed for
-      # the hermetic security suites; AI/LLM tests that call Gemini require the
-      # GEMINI_API_KEY repository secret to be set.
+      # key is only rejected outside development). The security, RBAC, auth and
+      # AI-cache suites are hermetic and need no real AI credentials; the
+      # Anthropic key below is passed through only for any future tests that call
+      # the live Anthropic Claude API (leave the repo secret unset otherwise).
       ENVIRONMENT: development
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
     steps:
       - uses: actions/checkout@v4
