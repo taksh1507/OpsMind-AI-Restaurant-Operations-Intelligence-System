@@ -8,7 +8,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   Cell,
 } from 'recharts'
@@ -80,10 +79,8 @@ export function TopItemsChart() {
     )
   }
 
-  // Calculate profit per item (assuming uniform margin for visualization)
   const itemsWithMetrics = items.map((item) => ({
     ...item,
-    profitMargin: 20 + ((item.menu_item_id * 137) % 400) / 10, // Deterministic est. margin 20-60%
     displayName: item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name,
   }))
 
@@ -98,27 +95,6 @@ export function TopItemsChart() {
 
   const maxQuantity = Math.max(...itemsWithMetrics.map((i) => i.quantity_sold))
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const item = payload[0].payload
-      return (
-        <div className="bg-surface/95 border border-line rounded-[3px] p-3 ">
-          <p className="text-cream-dim text-sm font-display font-semibold tracking-wide">{item.name}</p>
-          <p className="text-electric-300 text-sm">
-            Quantity Sold: <span className="font-bold">{item.quantity_sold}</span>
-          </p>
-          <p className="text-success text-sm">
-            Revenue: <span className="font-bold">{formatRupee(item.revenue_generated)}</span>
-          </p>
-          <p className="text-warning text-sm">
-            Est. Margin: <span className="font-bold">{item.profitMargin.toFixed(1)}%</span>
-          </p>
-        </div>
-      )
-    }
-    return null
-  }
-
   return (
     <div className="w-full bg-surface/30 border border-accent/20 rounded-[3px] p-6 ">
       <div className="mb-6">
@@ -127,7 +103,7 @@ export function TopItemsChart() {
           <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Top-Selling Items</h2>
         </div>
         <p className="text-cream-dim text-sm mt-2">
-          Menu items ranked by quantity sold and color intensity shows profit margin
+          Menu items ranked by quantity sold; color shows quantity relative to the top item
         </p>
       </div>
 
@@ -152,7 +128,7 @@ export function TopItemsChart() {
               }}
               label={{ value: 'Quantity Sold', angle: -90, position: 'insideLeft' }}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip />
             <Bar
               dataKey="quantity_sold"
               name="Quantity Sold"

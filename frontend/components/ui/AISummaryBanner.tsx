@@ -45,7 +45,7 @@ export function AISummaryBanner() {
             summaryText = briefing.health_assessment
           } else {
             // Fallback summary
-            summaryText = "Your restaurant is performing well. Focus on optimizing your top-selling items and exploring pricing opportunities."
+            summaryText = ""
           }
           
           setSummary(summaryText)
@@ -138,7 +138,7 @@ export function AISummaryBanner() {
           {/* Call-to-action hint */}
           <div className="mt-4 flex items-center gap-2 text-xs text-electric-300">
             <TrendingUp size={14} />
-            <span>Powered by Claude • Real-time analysis</span>
+            <span>AI-generated analysis</span>
           </div>
         </div>
       </div>

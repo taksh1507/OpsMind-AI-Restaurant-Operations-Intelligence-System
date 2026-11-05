@@ -1,320 +1,136 @@
-﻿/**
- * useWebSocket Hook - Real-time Event Listener
- * 
- * Connects to the backend WebSocket at /ws endpoint for real-time event notifications.
- * Features:
- * - JWT authentication via query params
- * - Multi-tenant isolation (events scoped to user's tenant)
- * - Event type handling (NEW_SALE, NEW_ORDER, TABLE_READY, etc.)
- * - Toast notifications with Rupee amounts
- * - Audio alerts ("ding" sound)
- * - Automatic reconnection on disconnect
- * - Error handling and logging
- */
+'use client'
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react'
+import apiClient from '@/lib/api-client'
 
-interface WebSocketEvent {
-  event: string;
-  data: Record<string, unknown>;
-  timestamp?: string;
+interface Options {
+  enabled?: boolean
+  onNewSale?: (data: Record<string, unknown>) => void
+  onNewOrder?: (data: Record<string, unknown>) => void
+  onTableReady?: (data: Record<string, unknown>) => void
+  onError?: (message: string) => void
+  autoReconnect?: boolean
+  reconnectDelay?: number
 }
-
-interface UseWebSocketOptions {
-  onNewSale?: (data: Record<string, unknown>) => void;
-  onNewOrder?: (data: Record<string, unknown>) => void;
-  onTableReady?: (data: Record<string, unknown>) => void;
-  onError?: (error: string) => void;
-  autoReconnect?: boolean;
-  reconnectDelay?: number;
+interface Toast { id: string; message: string; type: 'success' | 'info' | 'error' }
+const toasts = new Map<string, Toast>()
+const subscribers = new Set<() => void>()
+export function showToast(message: string, type: Toast['type'] = 'info', duration = 3000) {
+  const id = globalThis.crypto?.randomUUID?.() ?? `toast-${Date.now()}-${Math.random()}`
+  toasts.set(id, { id, message, type })
+  subscribers.forEach(callback => callback())
+  if (duration > 0) setTimeout(() => dismissToast(id), duration)
+  return id
 }
+export function onToastChange(callback: () => void) { subscribers.add(callback); return () => { subscribers.delete(callback) } }
+export function getActiveToasts() { return Array.from(toasts.values()) }
+export function dismissToast(id: string) { toasts.delete(id); subscribers.forEach(callback => callback()) }
 
-interface Toast {
-  id: string;
-  message: string;
-  type: 'success' | 'info' | 'error';
-}
+function record(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value) }
 
-// Global toast state (simple in-memory storage)
-const toastStore = new Map<string, Toast>();
-const toastCallbacks = new Set<() => void>();
-
-/**
- * Show a toast notification
- * @param message Toast message to display
- * @param type Toast type (success, info, error)
- * @param duration Auto-dismiss after duration (ms)
- */
-export function showToast(message: string, type: 'success' | 'info' | 'error' = 'info', duration: number = 3000) {
-  const id = `toast-${Date.now()}-${Math.random()}`;
-  const toast: Toast = { id, message, type };
-  
-  toastStore.set(id, toast);
-  
-  // Notify listeners
-  toastCallbacks.forEach(cb => cb());
-  
-  // Auto-remove after duration
-  if (duration > 0) {
-    setTimeout(() => {
-      toastStore.delete(id);
-      toastCallbacks.forEach(cb => cb());
-    }, duration);
-  }
-  
-  return id;
-}
-
-/**
- * Subscribe to toast changes
- */
-export function onToastChange(callback: () => void) {
-  toastCallbacks.add(callback);
-  return () => {
-    toastCallbacks.delete(callback);
-  };
-}
-
-/**
- * Get all active toasts
- */
-export function getActiveToasts(): Toast[] {
-  return Array.from(toastStore.values());
-}
-
-/**
- * Manually dismiss a toast by id
- */
-export function dismissToast(id: string) {
-  toastStore.delete(id);
-  toastCallbacks.forEach(cb => cb());
-}
-
-/**
- * Play a "ding" sound notification
- * Uses Web Audio API to generate a simple beep tone
- */
-function playDingSound() {
+function playDing() {
   try {
-    // Create audio context
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    
-    const audioContext = new AudioContext();
-    const now = audioContext.currentTime;
-    
-    // Create a simple ding: short beep at 800Hz
-    const oscillator = audioContext.createOscillator();
-    const envelope = audioContext.createGain();
-    
-    oscillator.connect(envelope);
-    envelope.connect(audioContext.destination);
-    
-    oscillator.frequency.value = 800; // Hz
-    oscillator.type = 'sine';
-    
-    // Quick attack, quick decay (telegraph-style ding)
-    envelope.gain.setValueAtTime(0.3, now);
-    envelope.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-    
-    oscillator.start(now);
-    oscillator.stop(now + 0.1);
-  } catch (error) {
-    console.debug('Audio notification disabled or not supported');
-  }
+    const audio = new AudioContext()
+    const oscillator = audio.createOscillator()
+    const gain = audio.createGain()
+    oscillator.connect(gain); gain.connect(audio.destination)
+    oscillator.frequency.value = 800
+    gain.gain.setValueAtTime(0.15, audio.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.1)
+    oscillator.onended = () => { void audio.close() }
+    oscillator.start(); oscillator.stop(audio.currentTime + 0.1)
+  } catch { /* Notifications still work when audio is unavailable. */ }
 }
 
-/**
- * Main WebSocket hook for real-time event handling
- */
-export function useWebSocket(options: UseWebSocketOptions = {}) {
-  const {
-    onNewSale,
-    onNewOrder,
-    onTableReady,
-    onError,
-    autoReconnect = true,
-    reconnectDelay = 3000,
-  } = options;
-  
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isConnectingRef = useRef(false);
-  
-  /**
-   * Extract JWT token from localStorage
-   */
-  const getToken = useCallback(() => {
-    try {
-      return localStorage.getItem('access_token') || '';
-    } catch {
-      return '';
-    }
-  }, []);
-  
-  /**
-   * Connect to WebSocket endpoint
-   */
-  const connect = useCallback(() => {
-    if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-    
-    isConnectingRef.current = true;
-    const token = getToken();
-    
-    if (!token) {
-      console.warn('WebSocket: No authentication token available');
-      isConnectingRef.current = false;
-      return;
-    }
-    
-    try {
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const wsUrl = `${protocol}://${window.location.host}/api/v1/ws?token=${encodeURIComponent(token)}`;
-      
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-      
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        isConnectingRef.current = false;
-        
-        // Clear any pending reconnection timeouts
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = null;
-        }
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data) as WebSocketEvent;
-          console.debug('WebSocket message received:', message.event);
-          
-          // Handle different event types
-          switch (message.event) {
-            case 'NEW_SALE': {
-              const amount = message.data.amount as number;
-              const itemCount = message.data.item_count as number;
-              
-              // Play notification sound
-              playDingSound();
-              
-              // Show toast notification
-              showToast(
-                `💰 New Sale: ₹${amount.toFixed(2)} (${itemCount} items)`,
-                'success'
-              );
-              
-              // Call user callback if provided
-              onNewSale?.(message.data);
-              break;
-            }
-            
-            case 'NEW_ORDER': {
-              const orderId = message.data.order_id as string;
-              const tableNumber = message.data.table as string;
-              
-              playDingSound();
-              
-              showToast(
-                `🍽️ New Order #${orderId} for Table ${tableNumber}`,
-                'info'
-              );
-              
-              onNewOrder?.(message.data);
-              break;
-            }
-            
-            case 'TABLE_READY': {
-              const tableNumber = message.data.table as string;
-              
-              playDingSound();
-              
-              showToast(
-                `✅ Table ${tableNumber} is ready!`,
-                'info'
-              );
-              
-              onTableReady?.(message.data);
-              break;
-            }
-            
-            case 'SYSTEM_EVENT': {
-              showToast(
-                message.data.message as string,
-                'info'
-              );
-              break;
-            }
-            
-            default:
-              console.debug(`Unhandled event type: ${message.event}`);
-          }
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        const errorMsg = 'WebSocket connection error';
-        showToast(errorMsg, 'error');
-        onError?.(errorMsg);
-      };
-      
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        isConnectingRef.current = false;
-        
-        // Attempt to reconnect if enabled
-        if (autoReconnect) {
-          console.log(`Attempting reconnection in ${reconnectDelay}ms...`);
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, reconnectDelay);
-        }
-      };
-    } catch (error) {
-      console.error('WebSocket connection failed:', error);
-      isConnectingRef.current = false;
-      
-      if (autoReconnect) {
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, reconnectDelay);
-      }
-    }
-  }, [getToken, autoReconnect, reconnectDelay, onNewSale, onNewOrder, onTableReady, onError]);
-  
-  /**
-   * Disconnect from WebSocket
-   */
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-  }, []);
-  
-  // Connect on mount, cleanup on unmount
+export function useWebSocket(options: Options = {}) {
+  const { enabled = true, autoReconnect = true, reconnectDelay = 1000 } = options
+  const callbacks = useRef(options)
+  useEffect(() => { callbacks.current = options }, [options])
+  const controls = useRef<{ connect: () => void; disconnect: () => void } | null>(null)
+  const [isConnected, setConnected] = useState(false)
+
   useEffect(() => {
-    connect();
-    
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
-  
-  return {
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
-    connect,
-    disconnect,
-  };
+    if (!enabled) return
+    let stopped = false
+    let socket: WebSocket | null = null
+    let retry: ReturnType<typeof setTimeout> | undefined
+    let heartbeat: ReturnType<typeof setInterval> | undefined
+    let attempts = 0
+    let lastPong = 0
+    let connecting = false
+    const clearHeartbeat = () => { clearInterval(heartbeat); heartbeat = undefined }
+
+    function schedule() {
+      if (stopped || !autoReconnect || attempts >= 6) return
+      const delay = Math.min(reconnectDelay * 2 ** attempts++, 30000) + Math.random() * 300
+      clearTimeout(retry)
+      retry = setTimeout(() => { void open() }, delay)
+    }
+
+    async function open() {
+      if (stopped || connecting || (socket && socket.readyState < WebSocket.CLOSING)) return
+      if (!localStorage.getItem('access_token')) return
+      connecting = true
+      try {
+        // Refresh expired credentials through the existing HTTP interceptor.
+        await apiClient.get('/auth/me')
+        const token = localStorage.getItem('access_token')
+        if (stopped || !token) return
+        const base = new URL(apiClient.defaults.baseURL || 'http://localhost:8000/api/v1', window.location.origin)
+        base.pathname = `${base.pathname.replace(/\/$/, '')}/ws`
+        base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:'
+        base.search = ''; base.hash = ''
+        const ws = new WebSocket(base.toString())
+        socket = ws
+        ws.onopen = () => { if (!stopped) ws.send(JSON.stringify({ event: 'AUTH', token })) }
+        ws.onmessage = event => {
+          if (stopped || socket !== ws) return
+          let message: unknown
+          try { message = JSON.parse(event.data) } catch { return }
+          if (!record(message) || !record(message.data) || typeof message.event !== 'string') return
+          const data = message.data
+          if (message.event === 'CONNECTED') {
+            attempts = 0; lastPong = Date.now(); setConnected(true)
+            clearHeartbeat()
+            heartbeat = setInterval(() => {
+              if (Date.now() - lastPong > 45000) { ws.close(); return }
+              if (ws.readyState === WebSocket.OPEN) ws.send('ping')
+            }, 15000)
+          } else if (message.event === 'PONG') lastPong = Date.now()
+          else if (message.event === 'NEW_SALE' && typeof data.amount === 'number' && Number.isFinite(data.amount) &&
+                   typeof data.item_count === 'number' && Number.isInteger(data.item_count)) {
+            showToast(`New Sale: ₹${data.amount.toFixed(2)} (${data.item_count} items)`, 'success')
+            playDing()
+            callbacks.current.onNewSale?.(data)
+          } else if (message.event === 'NEW_ORDER' && typeof data.order_id === 'string' && (typeof data.table === 'string' || typeof data.table === 'number')) {
+            showToast(`New Order #${data.order_id} for Table ${data.table}`)
+            callbacks.current.onNewOrder?.(data)
+          } else if (message.event === 'TABLE_READY' && (typeof data.table === 'string' || typeof data.table === 'number')) {
+            showToast(`Table ${data.table} is ready`)
+            callbacks.current.onTableReady?.(data)
+          } else if (message.event === 'SYSTEM_EVENT' && typeof data.message === 'string') showToast(data.message)
+        }
+        ws.onerror = () => { if (!stopped) callbacks.current.onError?.('Realtime connection unavailable') }
+        ws.onclose = event => {
+          if (stopped || socket !== ws) return
+          socket = null; connecting = false; clearHeartbeat(); setConnected(false)
+          if (event.code !== 1008 && event.code !== 1009) schedule()
+        }
+      } catch {
+        if (!stopped) { callbacks.current.onError?.('Realtime connection unavailable'); schedule() }
+      } finally { connecting = false }
+    }
+
+    function disconnect() {
+      stopped = true; clearTimeout(retry); clearHeartbeat()
+      socket?.close(); socket = null; setConnected(false)
+    }
+    controls.current = { connect: () => { stopped = false; attempts = 0; void open() }, disconnect }
+    void open()
+    return () => { stopped = true; clearTimeout(retry); clearHeartbeat(); socket?.close(); controls.current = null }
+  }, [enabled, autoReconnect, reconnectDelay])
+
+  const connect = useCallback(() => controls.current?.connect(), [])
+  const disconnect = useCallback(() => controls.current?.disconnect(), [])
+  return { isConnected: enabled && isConnected, connect, disconnect }
 }

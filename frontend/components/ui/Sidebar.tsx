@@ -35,6 +35,7 @@ interface NavItem {
 
 // Navigation items with role requirements
 const navItems: NavItem[] = [
+  { label: 'Import sales', href: '/import-sales', icon: <TrendingUp size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },
   { label: 'Dashboard', href: '/', icon: <LayoutDashboard size={20} /> },
   { label: 'Menu', href: '/menu', icon: <UtensilsCrossed size={20} /> },
   { label: 'Sales', href: '/sales', icon: <TrendingUp size={20} />, requiredRoles: [UserRole.OWNER, UserRole.MANAGER] },
