@@ -6,4 +6,3 @@ This module contains all FastAPI route handlers.
 - analytics.py: Analytics and insights endpoints
 - menu.py: Menu management endpoints
 """
-from .customers import router as customers_router

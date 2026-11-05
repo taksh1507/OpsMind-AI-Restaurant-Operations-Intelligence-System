@@ -5,10 +5,12 @@ Each category and menu item belongs to exactly one tenant (restaurant).
 Recipes define the ingredients and quantities needed for each dish.
 """
 
-from typing import Optional, List
+from app.core.time_utils import utc_now
+
+from typing import Optional
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import Enum, DateTime, String, Integer, Float, Boolean, ForeignKey, Table, Column, Text, Numeric, JSON
+from sqlalchemy import Enum, DateTime, String, Float, Boolean, ForeignKey, Text, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel as ORMBaseModel
@@ -39,7 +41,7 @@ class WasteLog(ORMBaseModel):
     quantity_wasted: Mapped[float] = mapped_column(nullable=False)
     reason: Mapped[WasteReason] = mapped_column(Enum(WasteReason), nullable=False)
     cost_lost_inr: Mapped[Decimal] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     ingredient: Mapped["Ingredient"] = relationship("Ingredient")
 

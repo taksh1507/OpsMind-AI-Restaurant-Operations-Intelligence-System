@@ -9,8 +9,8 @@ can enforce a monthly per-tenant token cap. Rows are written by
 Anthropic adapter chokepoint in ``app.services.ai_agent``.
 
 Notes:
-- This is a brand-new table, so it is created automatically by
-  ``Base.metadata.create_all`` on startup (the app ships without Alembic).
+- The ``ai_usage`` table is installed by Alembic. ``ai_usage_budgets`` holds
+  the atomic reservation and committed-token counters used for enforcement.
 - ``created_at`` (from BaseModel) is the meter timestamp; month-to-date usage is
   summed by comparing it against the start of the current UTC month.
 """

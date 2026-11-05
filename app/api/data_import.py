@@ -1,278 +1,316 @@
-"""Data Import Router.
-
-Allows restaurant owners to upload historical sales data in CSV format,
-validates headers and rows, isolates to the authenticated tenant,
-and inserts Sale and SaleItem records.
-"""
+"""Bounded, tenant-scoped and idempotent historical sales imports."""
 
 import csv
+import hashlib
 import io
-from typing import Dict, Any, List, Optional, Tuple
-from decimal import Decimal
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+import json
+from collections import defaultdict
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import select, func, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
+from app.api.deps import get_current_manager, get_current_user
 from app.database import get_db
-from app.api.deps import get_current_user, get_current_manager
-from app.models import User, Sale, SaleItem, MenuItem, Customer, PaymentMethod
+from app.models import Customer, MenuItem, PaymentMethod, Sale, SaleItem, User
+from app.models.imported_order import ImportedOrder
 
-router = APIRouter(prefix="/data", tags=["📂 Data Import"])
+router = APIRouter(prefix="/data", tags=["Data Import"])
+MAX_BYTES = 5 * 1024 * 1024
+MAX_ROWS = 10_000
 
 
-def parse_date(date_str: str) -> Optional[datetime]:
-    """Parse a date string using common formats."""
-    if not date_str:
-        return None
-    date_str = date_str.strip()
-    formats = [
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S.%f",
-        "%d-%m-%Y",
-        "%m/%d/%Y",
-        "%d/%m/%Y",
-        "%Y/%m/%d"
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str, fmt)
-        except ValueError:
-            continue
+def parse_date(value):
+    if value:
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%d-%m-%Y",
+            "%m/%d/%Y",
+            "%d/%m/%Y",
+            "%Y/%m/%d",
+        ):
+            try:
+                return datetime.strptime(value.strip(), fmt).replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                continue
     return None
 
 
+def money(value, allow_zero=False):
+    amount = Decimal(value)
+    if (
+        not amount.is_finite()
+        or amount < 0
+        or (amount == 0 and not allow_zero)
+        or amount > Decimal("99999999.99")
+    ):
+        raise ValueError("Amount outside supported range")
+    if amount != amount.quantize(Decimal("0.01")):
+        raise ValueError("Amounts require at most two decimal places")
+    return amount.quantize(Decimal("0.01"))
+
+
 @router.post(
-    "/upload-sales",
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(get_current_manager)],
+    "/upload-sales", status_code=201, dependencies=[Depends(get_current_manager)]
 )
 async def upload_sales(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """Upload historical sales data from a CSV file.
-    
-    Validates CSV headers and content against sales and sale_items schemas.
-    Groups row items belonging to the same transaction and inserts them.
-    Scopes records strictly to the authenticated tenant.
+    """Each row requires order_id, payment_method, tax_amount and pre-tax total_amount.
+
+    Offset-free dates mean UTC. Reject any order with an invalid row. Exact
+    retries skip existing orders; changed content under an old ID is rejected.
     """
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must be a CSV"
-        )
-
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(400, "Uploaded file must be a CSV")
+    content = await file.read(MAX_BYTES + 1)
+    if len(content) > MAX_BYTES:
+        raise HTTPException(413, "CSV must not exceed 5 MB")
     try:
-        contents = await file.read()
-        decoded_content = contents.decode("utf-8")
-        csv_file = io.StringIO(decoded_content)
-        reader = csv.DictReader(csv_file)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to parse CSV file: {str(e)}"
-        )
-
-    # Validate required headers (case-insensitive)
-    required_cols = {"date", "item_name", "quantity", "unit_price", "total_amount"}
-    fieldnames = reader.fieldnames if reader.fieldnames else []
-    headers_lower = [h.strip().lower() for h in fieldnames]
-    header_mapping = {h.strip().lower(): h for h in fieldnames}
-
-    missing_cols = [col for col in required_cols if col not in headers_lower]
-    if missing_cols:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"CSV is missing required columns: {', '.join(missing_cols)}"
-        )
-
-    # Load active menu items for tenant to validate names (case-insensitive)
-    menu_result = await db.execute(
-        select(MenuItem).where(MenuItem.tenant_id == current_user.tenant_id)
-    )
-    menu_items = menu_result.scalars().all()
-    menu_items_map = {mi.name.lower().strip(): mi.id for mi in menu_items}
-
-    # Load all customers in database to validate customer_id references
-    cust_result = await db.execute(select(Customer.id))
-    customers_set = set(cust_result.scalars().all())
-
-    parsed_rows: List[Dict[str, Any]] = []
-    validation_errors: List[Dict[str, Any]] = []
-
-    # Map validation list
-    for idx, row in enumerate(reader, start=1):
-        row_errors: List[str] = []
-        raw_line = ",".join([str(val) for val in row.values()])
-
-        date_raw = row.get(header_mapping.get("date", ""))
-        item_name_raw = row.get(header_mapping.get("item_name", ""))
-        qty_raw = row.get(header_mapping.get("quantity", ""))
-        price_raw = row.get(header_mapping.get("unit_price", ""))
-        total_amount_raw = row.get(header_mapping.get("total_amount", ""))
-        cust_id_raw = row.get(header_mapping.get("customer_id", "")) if "customer_id" in header_mapping else None
-
-        # 1. Date Validation
-        parsed_dt = None
-        if not date_raw:
-            row_errors.append("date field is required")
-        else:
-            parsed_dt = parse_date(date_raw)
-            if not parsed_dt:
-                row_errors.append(f"Invalid date format or value: '{date_raw}'")
-
-        # 2. Item Name Validation
-        menu_item_id = None
-        if not item_name_raw:
-            row_errors.append("item_name field is required")
-        else:
-            item_name_clean = item_name_raw.strip().lower()
-            if item_name_clean in menu_items_map:
-                menu_item_id = menu_items_map[item_name_clean]
-            else:
-                row_errors.append(f"Unknown menu item: '{item_name_raw}'")
-
-        # 3. Quantity Validation
-        qty = 0
-        if not qty_raw:
-            row_errors.append("quantity field is required")
-        else:
-            try:
-                qty = int(qty_raw)
-                if qty <= 0:
-                    row_errors.append(f"Quantity must be a positive integer, got '{qty_raw}'")
-            except (ValueError, TypeError):
-                row_errors.append(f"Quantity must be an integer, got '{qty_raw}'")
-
-        # 4. Unit Price Validation
-        unit_price = Decimal("0.00")
-        if not price_raw:
-            row_errors.append("unit_price field is required")
-        else:
-            try:
-                unit_price = Decimal(str(price_raw).strip())
-                if unit_price <= 0:
-                    row_errors.append(f"Unit price must be a positive number, got '{price_raw}'")
-            except (ValueError, TypeError):
-                row_errors.append(f"Unit price must be a numeric value, got '{price_raw}'")
-
-        # 5. Total Amount Validation
-        total_amount = Decimal("0.00")
-        if not total_amount_raw:
-            row_errors.append("total_amount field is required")
-        else:
-            try:
-                total_amount = Decimal(str(total_amount_raw).strip())
-                if total_amount <= 0:
-                    row_errors.append(f"Total amount must be a positive number, got '{total_amount_raw}'")
-            except (ValueError, TypeError):
-                row_errors.append(f"Total amount must be a numeric value, got '{total_amount_raw}'")
-
-        # 6. Customer ID Validation
-        parsed_cust_id = None
-        if cust_id_raw is not None and str(cust_id_raw).strip() != "":
-            cust_id_str = str(cust_id_raw).strip()
-            try:
-                parsed_cust_id = int(cust_id_str)
-                if parsed_cust_id not in customers_set:
-                    row_errors.append(f"Customer ID {parsed_cust_id} does not exist in database")
-            except ValueError:
-                row_errors.append(f"Customer ID must be an integer, got '{cust_id_raw}'")
-
-        if row_errors:
-            validation_errors.append({
-                "row": idx,
-                "line": raw_line,
-                "errors": row_errors
-            })
-        else:
-            parsed_rows.append({
-                "row_idx": idx,
-                "raw_line": raw_line,
-                "date": parsed_dt,
-                "menu_item_id": menu_item_id,
-                "quantity": qty,
-                "unit_price": unit_price,
-                "total_amount": total_amount,
-                "customer_id": parsed_cust_id
-            })
-
-    # Group valid items to form unique sales
-    # Key: (date_str, total_amount, customer_id)
-    grouped_sales: Dict[Tuple[str, float, Optional[int]], List[Dict[str, Any]]] = {}
-    row_to_group_key: Dict[int, Tuple[str, float, Optional[int]]] = {}
-
-    for row_data in parsed_rows:
-        key = (
-            row_data["date"].isoformat(),
-            float(row_data["total_amount"]),
-            row_data["customer_id"]
-        )
-        grouped_sales.setdefault(key, []).append(row_data)
-        row_to_group_key[row_data["row_idx"]] = key
-
-    # To maintain transactional consistency:
-    # If any row in a grouped sale was invalid, the entire group must be rejected.
-    # But since we only kept valid rows in parsed_rows, we don't have invalid rows in grouped_sales.
-    # However, what if a row for a group was rejected during fields validation?
-    # We should cross-reference validation_errors and reject the corresponding groups.
-    invalid_keys = set()
-    for err in validation_errors:
-        # Reconstruct group key if headers allow it
-        # Since it had field errors, we might not have a clean parsed date/amount.
-        # So we can't reliably map it to a group key. That's fine, we already separated bad rows.
-        pass
-
-    # Insert valid sales and sale items
-    sales_inserted = 0
-    items_inserted = 0
-
-    try:
-        for key, items in grouped_sales.items():
-            first_item = items[0]
-            
-            # Create Sale
-            sale = Sale(
-                tenant_id=current_user.tenant_id,
-                total_amount=first_item["total_amount"],
-                tax_amount=Decimal("0.00"),
-                payment_method=PaymentMethod.CASH,
-                timestamp=first_item["date"],
-                customer_id=first_item["customer_id"]
+        decoded = content.decode("utf-8-sig")
+        if "\x00" in decoded:
+            raise ValueError("Binary content")
+        reader = csv.DictReader(io.StringIO(decoded), strict=True)
+        headers = [h.strip().lower() for h in (reader.fieldnames or [])]
+        required = {
+            "order_id",
+            "date",
+            "item_name",
+            "quantity",
+            "unit_price",
+            "total_amount",
+            "payment_method",
+            "tax_amount",
+        }
+        if len(set(headers)) != len(headers) or not required.issubset(headers):
+            raise HTTPException(
+                400, "CSV requires unique headers: " + ", ".join(sorted(required))
             )
-            db.add(sale)
-            await db.flush()  # Populates sale.id
-            sales_inserted += 1
+        rows = []
+        for raw in reader:
+            if len(rows) >= MAX_ROWS:
+                raise HTTPException(413, "CSV must not exceed 10,000 rows")
+            if None in raw or any(v is None for v in raw.values()):
+                raise ValueError("Malformed row")
+            rows.append({k.strip().lower(): v.strip() for k, v in raw.items()})
+        if not rows:
+            raise HTTPException(400, "CSV contains no data rows")
+    except (UnicodeError, csv.Error, ValueError):
+        raise HTTPException(400, "Invalid UTF-8 CSV content") from None
 
-            # Create SaleItems
-            for item in items:
-                sale_item = SaleItem(
-                    tenant_id=current_user.tenant_id,
-                    sale_id=sale.id,
-                    menu_item_id=item["menu_item_id"],
-                    quantity=item["quantity"],
-                    unit_price_at_sale=item["unit_price"]
-                )
-                db.add(sale_item)
-                items_inserted += 1
-
-        await db.commit()
-
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database transaction failed: {str(e)}"
+    if db.bind.dialect.name == "sqlite":
+        # Legacy SQLite transaction control does not BEGIN for SELECT. Without
+        # an explicit transaction, releasing the first SAVEPOINT commits it.
+        connection = await db.connection()
+        active = await connection.run_sync(
+            lambda sync: sync.connection.driver_connection.in_transaction
         )
+        if not active:
+            await connection.exec_driver_sql("BEGIN IMMEDIATE")
 
+    names = {row["item_name"].lower() for row in rows}
+    menus = (
+        (
+            await db.execute(
+                select(MenuItem).where(
+                    MenuItem.tenant_id == current_user.tenant_id,
+                    func.lower(MenuItem.name).in_(names),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    menu_map = {item.name.strip().lower(): item.id for item in menus}
+    ids = set()
+    for row in rows:
+        try:
+            customer_id = int(row.get("customer_id", ""))
+            if 0 < customer_id <= 2147483647:
+                ids.add(customer_id)
+        except ValueError:
+            pass
+    customers = set(
+        (
+            await db.execute(
+                select(Customer.id).where(
+                    Customer.tenant_id == current_user.tenant_id, Customer.id.in_(ids)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    groups, rejected, errors = defaultdict(list), set(), []
+
+    def reject(index, order_id, message):
+        rejected.add(order_id)
+        errors.append({"row": index, "errors": [message]})
+
+    for index, row in enumerate(rows, 1):
+        order_id = row["order_id"]
+        try:
+            customer = int(row["customer_id"]) if row.get("customer_id") else None
+            if customer is not None and customer not in customers:
+                reject(index, order_id, "Customer ID is invalid or unavailable")
+                continue
+            date, menu_id, qty = (
+                parse_date(row["date"]),
+                menu_map.get(row["item_name"].lower()),
+                int(row["quantity"]),
+            )
+            if (
+                not order_id
+                or len(order_id) > 128
+                or date is None
+                or menu_id is None
+                or not 1 <= qty <= 1000
+            ):
+                raise ValueError("Invalid order")
+            groups[order_id].append(
+                {
+                    "row": index,
+                    "timestamp": date,
+                    "customer_id": customer,
+                    "menu_item_id": menu_id,
+                    "quantity": qty,
+                    "unit_price": money(row["unit_price"]),
+                    "total_amount": money(row["total_amount"]),
+                    "tax_amount": money(row["tax_amount"], True),
+                    "payment_method": PaymentMethod(row["payment_method"]).value,
+                }
+            )
+        except (ValueError, InvalidOperation, OverflowError):
+            reject(
+                index,
+                order_id,
+                "Invalid order row: check date, menu item, quantity, amounts and payment method",
+            )
+    inserted = matched = skipped = 0
+    try:
+        for order_id, items in groups.items():
+            if order_id in rejected:
+                continue
+            first = items[0]
+            fields = (
+                "timestamp",
+                "customer_id",
+                "total_amount",
+                "tax_amount",
+                "payment_method",
+            )
+            if (
+                len(items) > 100
+                or any(any(i[k] != first[k] for k in fields) for i in items)
+                or sum((i["unit_price"] * i["quantity"] for i in items), Decimal(0))
+                != first["total_amount"]
+                or first["tax_amount"] > first["total_amount"]
+            ):
+                reject(
+                    first["row"],
+                    order_id,
+                    "Inconsistent order totals, metadata or item count",
+                )
+                continue
+            canonical = [
+                json.dumps(
+                    {k: str(v) for k, v in i.items() if k != "row"}, sort_keys=True
+                )
+                for i in items
+            ]
+            digest = hashlib.sha256(json.dumps(sorted(canonical)).encode()).hexdigest()
+            query = select(ImportedOrder).where(
+                ImportedOrder.tenant_id == current_user.tenant_id,
+                ImportedOrder.order_id == order_id,
+            )
+            receipt = (await db.execute(query)).scalar_one_or_none()
+            if receipt:
+                if receipt.content_hash == digest:
+                    skipped += 1
+                else:
+                    reject(
+                        first["row"],
+                        order_id,
+                        "order_id was already imported with different content",
+                    )
+                continue
+            try:
+                async with db.begin_nested():
+                    sale = Sale(
+                        tenant_id=current_user.tenant_id,
+                        **{k: first[k] for k in fields},
+                    )
+                    db.add(sale)
+                    await db.flush()
+                    db.add(
+                        ImportedOrder(
+                            tenant_id=current_user.tenant_id,
+                            order_id=order_id,
+                            content_hash=digest,
+                            sale_id=sale.id,
+                        )
+                    )
+                    for item in items:
+                        db.add(
+                            SaleItem(
+                                tenant_id=current_user.tenant_id,
+                                sale_id=sale.id,
+                                menu_item_id=item["menu_item_id"],
+                                quantity=item["quantity"],
+                                unit_price_at_sale=item["unit_price"],
+                            )
+                        )
+                    if first["customer_id"] is not None:
+                        updated = await db.execute(
+                            update(Customer)
+                            .where(
+                                Customer.id == first["customer_id"],
+                                Customer.tenant_id == current_user.tenant_id,
+                            )
+                            .values(
+                                visit_count=Customer.visit_count + 1,
+                                total_spent_inr=Customer.total_spent_inr
+                                + first["total_amount"]
+                                + first["tax_amount"],
+                            )
+                        )
+                        if updated.rowcount != 1:
+                            raise HTTPException(409, "Customer is no longer available")
+                    await db.flush()
+            except IntegrityError:
+                receipt = (await db.execute(query)).scalar_one_or_none()
+                if receipt is None:
+                    raise
+                if receipt.content_hash == digest:
+                    skipped += 1
+                else:
+                    reject(
+                        first["row"],
+                        order_id,
+                        "order_id was already imported with different content",
+                    )
+                continue
+            inserted += 1
+            matched += len(items)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     return {
         "status": "success",
-        "rows_inserted": sales_inserted,
-        "items_matched": items_inserted,
-        "validation_errors": validation_errors,
-        "message": f"{sales_inserted} sales imported. Retrain your forecast model at POST /ml/retrain to incorporate new data."
+        "rows_inserted": inserted,
+        "items_matched": matched,
+        "orders_skipped": skipped,
+        "validation_errors": errors,
+        "message": f"{inserted} sales imported. Retrain your forecast model to incorporate new data.",
     }

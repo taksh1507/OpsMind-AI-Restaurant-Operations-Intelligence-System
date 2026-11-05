@@ -1,44 +1,23 @@
-"""Global search endpoint for menu items, categories, and staff.
+"""Bounded SQL substring searches, scoped to tenant and role."""
 
-Implements fuzzy search across the database with real-time filtering.
-"""
-
-from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select, func
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from difflib import SequenceMatcher
 
-from app.api.deps import get_db, get_current_user
-from app.models import User
-from app.models.base import Base
-from app.models.menu import MenuItem, Category
+from app.api.deps import get_current_user
+from app.core.errors import safe_error_detail
+from app.database import get_db
+from app.models import User, UserRole
+from app.models.menu import Category, MenuItem
 from app.models.staff import Staff
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 
-def fuzzy_match(query: str, target: str, threshold: float = 0.6) -> float:
-    """Calculate fuzzy match score between query and target string.
-    
-    Args:
-        query: Search query
-        target: Target string to match against
-        threshold: Minimum score to consider a match
-        
-    Returns:
-        Match score between 0 and 1
-    """
-    query_lower = query.lower()
-    target_lower = target.lower()
-
-    # Exact match or substring match gets highest score
-    if query_lower in target_lower:
-        return 0.9 + (len(query_lower) / len(target_lower)) * 0.1
-
-    # Use SequenceMatcher for fuzzy matching
-    ratio = SequenceMatcher(None, query_lower, target_lower).ratio()
-    return ratio
+def contains(column, query):
+    # User wildcards are literal characters, not an instruction to match all.
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return column.ilike(f"%{escaped}%", escape="\\")
 
 
 @router.get("")
@@ -47,109 +26,94 @@ async def global_search(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Perform global fuzzy search across menu items, categories, and staff.
+    """Return at most 20 matches per type; prices use the app's INR currency.
 
-    Args:
-        q: Search query string
-        db: Database session
-
-    Returns:
-        List of search results with category information
+    Staff accounts see available menu items and active categories only.
+    Managers/owners can also search archived menu records and staff names/roles.
+    Staff contact details, wages and notes are never returned.
     """
-    threshold = 0.5
+    query = q.strip()
+    if not query:
+        return {"query": query, "count": 0, "results": []}
+    can_manage = current_user.role in (UserRole.OWNER, UserRole.MANAGER)
     results = []
-
     try:
-        # Search menu items (scoped to the caller's tenant)
-        menu_query = select(MenuItem).where(MenuItem.tenant_id == current_user.tenant_id).limit(50)
-        menu_result = await db.execute(menu_query)
-        menu_items = menu_result.scalars().all()
-
-        for item in menu_items:
-            score = fuzzy_match(q, item.name, threshold)
-            if score >= threshold:
-                results.append({
-                    "id": str(item.id),
-                    "name": item.name,
-                    "category": "menu",
-                    "description": f"${item.price:.2f}" if hasattr(item, 'price') and item.price else "Menu Item",
-                    "score": score,
-                })
-
-        # Search categories (scoped to the caller's tenant)
-        category_query = select(Category).where(Category.tenant_id == current_user.tenant_id).limit(50)
-        category_result = await db.execute(category_query)
-        categories = category_result.scalars().all()
-
-        for category in categories:
-            score = fuzzy_match(q, category.name, threshold)
-            if score >= threshold:
-                results.append({
-                    "id": str(category.id),
-                    "name": category.name,
-                    "category": "category",
-                    "description": f"{category.items_count if hasattr(category, 'items_count') else 0} items",
-                    "score": score,
-                })
-
-        # Search staff (scoped to the caller's tenant)
-        staff_query = select(Staff).where(Staff.tenant_id == current_user.tenant_id).limit(50)
-        staff_result = await db.execute(staff_query)
-        staff_members = staff_result.scalars().all()
-
-        for member in staff_members:
-            # Search by name
-            score = fuzzy_match(q, member.name, threshold)
-            if score >= threshold:
-                results.append({
+        menu = select(MenuItem).where(
+            MenuItem.tenant_id == current_user.tenant_id, contains(MenuItem.name, query)
+        )
+        if not can_manage:
+            menu = menu.join(Category, Category.id == MenuItem.category_id).where(
+                MenuItem.is_available.is_(True),
+                Category.is_active.is_(True),
+                Category.tenant_id == current_user.tenant_id,
+            )
+        items = (
+            (
+                await db.execute(
+                    menu.order_by(func.lower(MenuItem.name), MenuItem.id).limit(20)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        results.extend(
+            {
+                "id": str(item.id),
+                "name": item.name,
+                "category": "menu",
+                "description": f"₹{item.price:,.2f}",
+            }
+            for item in items
+        )
+        categories = select(Category).where(
+            Category.tenant_id == current_user.tenant_id, contains(Category.name, query)
+        )
+        if not can_manage:
+            categories = categories.where(Category.is_active.is_(True))
+        rows = (
+            (
+                await db.execute(
+                    categories.order_by(func.lower(Category.name), Category.id).limit(
+                        20
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        results.extend(
+            {
+                "id": str(category.id),
+                "name": category.name,
+                "category": "category",
+                "description": "Menu category",
+            }
+            for category in rows
+        )
+        if can_manage:
+            # Cast native PostgreSQL enums before ILIKE; SQLite also supports this.
+            roles = cast(Staff.role, String)
+            staff = (
+                select(Staff)
+                .where(
+                    Staff.tenant_id == current_user.tenant_id,
+                    or_(contains(Staff.name, query), contains(roles, query)),
+                )
+                .order_by(func.lower(Staff.name), Staff.id)
+                .limit(20)
+            )
+            rows = (await db.execute(staff)).scalars().all()
+            results.extend(
+                {
                     "id": str(member.id),
                     "name": member.name,
                     "category": "staff",
-                    "description": getattr(member, 'position', 'Staff Member'),
-                    "score": score,
-                })
-
-            # Also search by position/role if available
-            if hasattr(member, 'position') and member.position:
-                score_pos = fuzzy_match(q, member.position, threshold)
-                if score_pos >= threshold:
-                    results.append({
-                        "id": str(member.id),
-                        "name": member.name,
-                        "category": "staff",
-                        "description": getattr(member, 'position', 'Staff Member'),
-                        "score": score_pos,
-                    })
-
-        # Sort by relevance score (descending)
-        results.sort(key=lambda x: x["score"], reverse=True)
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_results = []
-        for result in results:
-            key = (result['category'], result['id'])
-            if key not in seen:
-                seen.add(key)
-                unique_results.append({
-                    "id": result["id"],
-                    "name": result["name"],
-                    "category": result["category"],
-                    "description": result.get("description"),
-                })
-
-        return {
-            "query": q,
-            "count": len(unique_results),
-            "results": unique_results[:20],  # Limit to top 20 results
-        }
-
-    except Exception as e:
-        # Log error but don't expose internal details
-        print(f"Search error: {str(e)}")
-        return {
-            "query": q,
-            "count": 0,
-            "results": [],
-            "error": "Search temporarily unavailable",
-        }
+                    "description": member.role.value.replace("_", " ").title(),
+                }
+                for member in rows
+            )
+        return {"query": query, "count": len(results), "results": results}
+    except Exception:
+        raise HTTPException(
+            500, safe_error_detail("Search temporarily unavailable")
+        ) from None

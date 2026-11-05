@@ -1,223 +1,212 @@
-"""WebSocket Connection Manager for Real-Time Event Notifications
+"""Tenant-isolated broadcasts; Redis shares events and connection leases."""
 
-Day 26: The Real-Time Event Engine
-
-Manages WebSocket connections per tenant for broadcasting real-time events
-(new orders, staff notifications, live updates) across the restaurant.
-
-Key Features:
-- Multi-tenant isolation: Each tenant only receives their own events
-- Connection tracking: Dictionary of active connections per tenant
-- Broadcast capability: Send JSON messages to all connected clients
-- Connection lifecycle: Handle connect/disconnect gracefully
-- State synchronization: Keep backend (database) ↔ WebSocket ↔ frontend in sync
-"""
-
+import asyncio
 import json
-from typing import Dict, List, Callable
-from fastapi import WebSocket, WebSocketDisconnect, status
 import logging
+import time
+from uuid import uuid4
+
+from app.core.config import settings
+from app.core.time_utils import utc_now
 
 logger = logging.getLogger(__name__)
+CHANNEL = "opsmind:ws:events"
+LEASE = """
+local now = tonumber(ARGV[1])
+for _, key in ipairs(KEYS) do redis.call('ZREMRANGEBYSCORE', key, '-inf', now) end
+if ARGV[6] == 'new' or not redis.call('ZSCORE', KEYS[1], ARGV[3]) then
+  if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[4]) or
+     redis.call('ZCARD', KEYS[2]) >= tonumber(ARGV[5]) then return 0 end
+end
+for _, key in ipairs(KEYS) do
+ redis.call('ZADD', key, ARGV[2], ARGV[3]); redis.call('EXPIRE', key, ARGV[7])
+end
+return 1
+"""
 
 
 class ConnectionManager:
-    """Manages WebSocket connections with multi-tenant broadcast capability.
-    
-    Each restaurant (tenant) has its own pool of connections.
-    When an event happens (e.g., new order), broadcast to all connections
-    for that tenant only - ensuring data isolation.
-    
-    Attributes:
-        active_connections: Dict[tenant_id] -> List[WebSocket connections]
-        
-    Thread Safety:
-        WebSocket connections are async, handled by FastAPI's event loop.
-        For production, consider redis pub/sub for distributed setups.
-    """
-    
     def __init__(self):
-        """Initialize the connection manager with empty connection pools."""
-        # Structure: {tenant_id: [websocket1, websocket2, ...]}
-        self.active_connections: Dict[int, List[WebSocket]] = {}
-    
-    async def connect(self, websocket: WebSocket, tenant_id: int):
-        """
-        Accept a WebSocket connection and track it by tenant.
-        
-        Args:
-            websocket: FastAPI WebSocket object
-            tenant_id: Restaurant ID to isolate connections by tenant
-            
-        Raises:
-            HTTPException: If connection cannot be accepted
-        """
-        await websocket.accept()
-        
-        # Initialize tenant connection pool if not exists
-        if tenant_id not in self.active_connections:
-            self.active_connections[tenant_id] = []
-        
-        # Add this connection to the tenant's pool
-        self.active_connections[tenant_id].append(websocket)
-        
-        logger.info(
-            f"✅ WebSocket connected: tenant_id={tenant_id}, "
-            f"total_connections={len(self.active_connections[tenant_id])}"
-        )
-    
-    def disconnect(self, websocket: WebSocket, tenant_id: int):
-        """
-        Remove a WebSocket connection from active tracking.
-        
-        Called when a client disconnects (page refresh, logout, network error).
-        
-        Args:
-            websocket: FastAPI WebSocket object to remove
-            tenant_id: Restaurant ID
-        """
-        if tenant_id in self.active_connections:
-            try:
-                self.active_connections[tenant_id].remove(websocket)
-                logger.info(
-                    f"❌ WebSocket disconnected: tenant_id={tenant_id}, "
-                    f"remaining={len(self.active_connections[tenant_id])}"
-                )
-                
-                # Clean up empty tenant pools
-                if len(self.active_connections[tenant_id]) == 0:
-                    del self.active_connections[tenant_id]
-            except ValueError:
-                logger.warning(f"WebSocket not found in tenant {tenant_id}")
-    
-    async def broadcast(
-        self,
-        tenant_id: int,
-        message: dict,
-        sender_id: int = None
-    ):
-        """
-        Broadcast a JSON message to all connected clients for a specific tenant.
-        
-        This is the core of real-time functionality. When something happens
-        in the database (new order, table status change), use this to notify
-        all connected staff.
-        
-        Args:
-            tenant_id: Restaurant ID - only connections for this tenant receive message
-            message: Dict containing event data (will be JSON encoded)
-                Example: {"event": "NEW_ORDER", "amount": 1200, "table": 5}
-            sender_id: Optional user ID that triggered this event (for acks)
-            
-        Returns:
-            int: Number of successful sends
-            
-        Multi-Tenant Isolation:
-            - Only sends to connections for this specific tenant_id
-            - Two restaurants never see each other's events
-            - Restaurant A can have multiple connections (multiple staff logged in)
-        
-        Real-Time Event Examples:
-            - NEW_ORDER: Staff gets instant notification with order details
-            - TABLE_READY: Chef tells manager when table is ready
-            - ORDER_COMPLETE: Order goes from kitchen to ready-to-serve
-            - PAYMENT_PROCESSED: Cashier confirms payment
-        """
-        if tenant_id not in self.active_connections:
-            logger.debug(f"No active connections for tenant {tenant_id}")
-            return 0
-        
-        # Add timestamp and event metadata
-        enriched_message = {
-            **message,
-            "timestamp": __import__("datetime").datetime.now(
-                __import__("datetime").timezone.utc
-            ).isoformat(),
-            "tenant_id": tenant_id
-        }
-        
-        failed_connections = []
-        successful_sends = 0
-        
-        # Send to all connected clients for this tenant
-        for websocket in self.active_connections[tenant_id]:
-            try:
-                await websocket.send_json(enriched_message)
-                successful_sends += 1
-            except Exception as e:
-                logger.error(
-                    f"Failed to send to websocket: {str(e)}. "
-                    f"Marking for remove."
-                )
-                failed_connections.append(websocket)
-        
-        # Clean up dead connections
-        for websocket in failed_connections:
-            self.disconnect(websocket, tenant_id)
-        
-        logger.debug(
-            f"📢 Broadcast sent: tenant_id={tenant_id}, "
-            f"event={message.get('event')}, "
-            f"recipients={successful_sends}"
-        )
-        
-        return successful_sends
-    
-    async def broadcast_named_event(
-        self,
-        tenant_id: int,
-        event_type: str,
-        data: dict = None,
-        **kwargs
-    ):
-        """
-        Convenience method for broadcasting named events.
-        
-        Usage:
-            await connection_manager.broadcast_named_event(
-                tenant_id=1,
-                event_type="NEW_ORDER",
-                data={"amount": 1200, "table": 5}
+        self.active_connections = {}
+        self.redis = None
+        self.pubsub = None
+        self.listener = None
+        self.available = False
+
+    async def start(self, redis_client=None):
+        if not settings.redis_url and redis_client is None:
+            return
+        if redis_client is None:
+            from redis.asyncio import from_url
+
+            redis_client = from_url(
+                settings.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=3,
+                socket_timeout=3,
             )
-        
-        Args:
-            tenant_id: Restaurant ID
-            event_type: Event name (NEW_ORDER, TABLE_READY, etc.)
-            data: Event-specific data payload
-            **kwargs: Additional fields to include
-        """
+        self.redis = redis_client
+        await self.redis.ping()
+        self.pubsub = self.redis.pubsub()
+        await self.pubsub.subscribe(CHANNEL)
+        self.available = True
+        self.listener = asyncio.create_task(self._listen())
+
+    async def stop(self):
+        self.available = False
+        if self.listener:
+            self.listener.cancel()
+            await asyncio.gather(self.listener, return_exceptions=True)
+            self.listener = None
+        for ws in list(self.active_connections):
+            await self.disconnect(ws)
+            await self._close(ws, 1001)
+        if self.pubsub:
+            await self.pubsub.aclose()
+            self.pubsub = None
+        if self.redis:
+            await self.redis.aclose()
+            self.redis = None
+
+    async def _listen(self):
+        try:
+            async for item in self.pubsub.listen():
+                if item["type"] != "message":
+                    continue
+                try:
+                    message = json.loads(item["data"])
+                    if (
+                        isinstance(message, dict)
+                        and type(message.get("tenant_id")) is int
+                        and isinstance(message.get("data"), dict)
+                    ):
+                        await self._broadcast_local(message["tenant_id"], message)
+                except (ValueError, TypeError, KeyError):
+                    logger.warning("Discarded invalid realtime event")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.available = False
+            logger.exception("Realtime Redis subscription failed")
+            for ws in list(self.active_connections):
+                await self.disconnect(ws)
+                await self._close(ws, 1013)
+
+    @staticmethod
+    async def _close(ws, code):
+        try:
+            await asyncio.wait_for(
+                ws.close(code=code), settings.ws_send_timeout_seconds
+            )
+        except Exception:
+            pass
+
+    def _keys(self, record):
+        tenant, user, lease = record
+        return [f"opsmind:ws:tenant:{tenant}", f"opsmind:ws:user:{tenant}:{user}"]
+
+    async def _lease(self, record, mode):
+        now = time.time()
+        ttl = max(10, int(settings.ws_idle_timeout_seconds * 2))
+        return await self.redis.eval(
+            LEASE,
+            2,
+            *self._keys(record),
+            now,
+            now + ttl,
+            record[2],
+            settings.ws_max_connections_per_tenant,
+            settings.ws_max_connections_per_user,
+            mode,
+            ttl,
+        )
+
+    async def connect(self, websocket, tenant_id, user_id):
+        record = (tenant_id, user_id, uuid4().hex)
+        if self.redis:
+            if not self.available:
+                raise RuntimeError("Realtime Redis subscriber is unavailable")
+            allowed = await self._lease(record, "new")
+        else:
+            if settings.redis_url:
+                raise RuntimeError("Realtime Redis is unavailable")
+            allowed = (
+                sum(r[0] == tenant_id for r in self.active_connections.values())
+                < settings.ws_max_connections_per_tenant
+                and sum(
+                    r[:2] == (tenant_id, user_id)
+                    for r in self.active_connections.values()
+                )
+                < settings.ws_max_connections_per_user
+            )
+        if not allowed:
+            await self._close(websocket, 1013)
+            return False
+        self.active_connections[websocket] = record
+        return True
+
+    async def touch(self, websocket):
+        record = self.active_connections.get(websocket)
+        if not record:
+            return False
+        if record and self.redis:
+            if not await self._lease(record, "touch"):
+                await self.disconnect(websocket)
+                await self._close(websocket, 1013)
+                return False
+        return True
+
+    async def disconnect(self, websocket, tenant_id=None):
+        record = self.active_connections.pop(websocket, None)
+        if record and self.redis:
+            try:
+                async with self.redis.pipeline(transaction=True) as pipe:
+                    for key in self._keys(record):
+                        pipe.zrem(key, record[2])
+                    await pipe.execute()
+            except Exception:
+                logger.exception("Could not release realtime lease; it will expire")
+
+    async def send(self, websocket, message):
+        try:
+            await asyncio.wait_for(
+                websocket.send_json(message), settings.ws_send_timeout_seconds
+            )
+            return True
+        except Exception:
+            await self.disconnect(websocket)
+            await self._close(websocket, 1013)
+            return False
+
+    async def _broadcast_local(self, tenant_id, message):
+        sockets = [
+            ws
+            for ws, record in list(self.active_connections.items())
+            if record[0] == tenant_id
+        ]
+        return sum(await asyncio.gather(*(self.send(ws, message) for ws in sockets)))
+
+    async def broadcast_named_event(self, tenant_id, event_type, data=None, **kwargs):
         message = {
             "event": event_type,
-            **(data or {}),
-            **kwargs
+            "data": {**(data or {}), **kwargs},
+            "tenant_id": tenant_id,
+            "timestamp": utc_now().isoformat(),
         }
-        return await self.broadcast(tenant_id, message)
-    
-    def get_connection_count(self, tenant_id: int = None) -> dict:
-        """
-        Get connection statistics for monitoring/debugging.
-        
-        Args:
-            tenant_id: If specified, return count for just this tenant
-            
-        Returns:
-            Dict with connection counts
-        """
-        if tenant_id is not None:
-            count = len(self.active_connections.get(tenant_id, []))
-            return {"tenant_id": tenant_id, "connections": count}
-        
+        if self.redis:
+            return await self.redis.publish(CHANNEL, json.dumps(message))
+        if settings.redis_url:
+            raise RuntimeError("Realtime Redis is unavailable")
+        return await self._broadcast_local(tenant_id, message)
+
+    def get_connection_count(self, tenant_id):
         return {
-            "total_tenants": len(self.active_connections),
-            "total_connections": sum(
-                len(conns) for conns in self.active_connections.values()
+            "tenant_id": tenant_id,
+            "connections": sum(
+                r[0] == tenant_id for r in self.active_connections.values()
             ),
-            "by_tenant": {
-                tid: len(conns)
-                for tid, conns in self.active_connections.items()
-            }
+            "scope": "this_worker",
         }
 
 
-# Global instance - shared across all WebSocket endpoints
 connection_manager = ConnectionManager()

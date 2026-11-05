@@ -5,10 +5,12 @@ Each sale belongs to exactly one tenant (restaurant).
 Sales are immutable records of historical transactions.
 """
 
+from app.core.time_utils import utc_now
+
 from typing import Optional
 from decimal import Decimal
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Numeric, DateTime, func, Enum
+from sqlalchemy import ForeignKey, Numeric, DateTime, func, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 
@@ -71,7 +73,7 @@ class Sale(BaseModel):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False,
         index=True  # Index for time-based analytics queries
     )

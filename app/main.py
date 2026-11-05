@@ -4,10 +4,11 @@ Initializes the FastAPI application, configures routers, middleware, and lifecyc
 """
 
 from contextlib import asynccontextmanager
+import asyncio
 from datetime import datetime, timezone, timedelta
-from fastapi import FastAPI, Depends
+import sys
+from fastapi import FastAPI, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
 from app.core.logging_config import setup_logging, setup_app_logger, AccessLogMiddleware
@@ -25,7 +26,7 @@ from app.api import (
     training,
     users,
 )
-from app.api import ws
+from app.api import ws, operations
 # Imported under an alias: the module name `settings` would otherwise shadow the
 # `settings` config object imported above from app.core.
 from app.api import settings as settings_api
@@ -46,28 +47,20 @@ async def lifespan(app: FastAPI):
     settings.validate_production_settings()
     await init_db(settings.database_url)
 
-    # Ensure the schema exists. The app ships without Alembic migrations, so on a
-    # fresh database (e.g. a new Postgres volume) the tables would otherwise be
-    # missing and every DB-backed request would fail. Importing app.models
-    # registers every ORM table on Base.metadata; create_all is a no-op for
-    # tables that already exist.
-    import app.models  # noqa: F401  (side effect: register models on metadata)
-    from app.models.base import Base
-    from app import database
-
-    async with database.engine.begin() as conn:
-        # Serialize schema creation across gunicorn workers. Every worker runs
-        # create_all on boot; when a brand-new table is introduced, concurrent
-        # workers otherwise race to create its sequence and one loses with a
-        # "duplicate key ... pg_class" error, failing that worker's startup.
-        # A transaction-scoped advisory lock lets the first worker create the
-        # tables while the rest wait, then find everything already present.
-        # (Postgres-only; the SQLite dev path has a single process, no race.)
-        if database.engine.dialect.name == "postgresql":
-            await conn.exec_driver_sql("SELECT pg_advisory_xact_lock(9130524217)")
-        await conn.run_sync(Base.metadata.create_all)
+    if settings.migrate_on_startup:
+        migration = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "alembic", "upgrade", "head",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        )
+        migration_output, _ = await migration.communicate()
+        if migration.returncode:
+            logger.error("Database migration failed: %s", migration_output.decode(errors="replace"))
+            raise RuntimeError("Database migration failed; see startup logs for details.")
+        logger.info("Database migrations applied: %s", migration_output.decode(errors="replace").strip())
 
     logger.info("Database initialized")
+    from app.api.ws_manager import connection_manager
+    await connection_manager.start()
 
     # Warm the currency exchange rate from the configured/live source (best-effort)
     try:
@@ -77,23 +70,23 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.warning("Currency exchange rate refresh failed; using configured fallback.")
 
-    # Start automated retraining scheduler
-    from app.core.scheduler import start_scheduler
+    # Scheduler is a dedicated single-worker service in Compose. It can also be
+    # enabled explicitly for a single-process local deployment.
+    scheduler_enabled = settings.run_scheduler
+    if scheduler_enabled:
+        from app.core.scheduler import start_scheduler
+        start_scheduler()
 
-    start_scheduler()
-
-    yield
-
-    # Shutdown
-    logger.info("Shutting down...")
-
-    # Shutdown scheduler
-    from app.core.scheduler import shutdown_scheduler
-
-    await shutdown_scheduler()
-
-    await close_db()
-    logger.info("Database closed")
+    try:
+        yield
+    finally:
+        await connection_manager.stop()
+        logger.info("Shutting down...")
+        if scheduler_enabled:
+            from app.core.scheduler import shutdown_scheduler
+            await shutdown_scheduler()
+        await close_db()
+        logger.info("Database closed")
 
 
 def create_app() -> FastAPI:
@@ -124,7 +117,12 @@ def create_app() -> FastAPI:
         ✅ Day 15: Professional documentation and live demo capability
     """
 
+    settings.validate_production_settings()
+    production = settings.environment == "production"
     app = FastAPI(
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
         title="OpsMind AI — Restaurant Operations Intelligence",
         version=settings.app_version,
         description=(
@@ -156,8 +154,14 @@ def create_app() -> FastAPI:
             "url": "https://opensource.org/licenses/MIT",
         },
         lifespan=lifespan,
-        debug=settings.debug,
+        # Starlette's debug traceback bypasses the safe exception handler.
+        debug=False,
     )
+
+    from app.core.errors import unexpected_error_handler, safe_http_error_handler
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    app.add_exception_handler(Exception, unexpected_error_handler)
+    app.add_exception_handler(StarletteHTTPException, safe_http_error_handler)
 
     # CORS Middleware
     app.add_middleware(
@@ -209,7 +213,9 @@ def create_app() -> FastAPI:
         tags=["🏋️ Model Training"],
         dependencies=[Depends(get_current_owner)],
     )
-    app.include_router(ws.router, tags=["🔌 WebSocket Real-Time"])
+    app.include_router(ws.router, prefix="/api/v1", tags=["WebSocket Real-Time"])
+
+    app.include_router(operations.router, prefix="/api/v1")
 
     # Health check endpoint
     @app.get(
@@ -218,7 +224,7 @@ def create_app() -> FastAPI:
         summary="System Health Check",
         description="Returns the current health status of the OpsMind AI system with database connectivity check.",
     )
-    async def health_check(db: AsyncSession = Depends(get_db)):
+    async def health_check(response: Response):
         """System health check endpoint for automated deployment monitoring.
 
         Checks:
@@ -245,12 +251,15 @@ def create_app() -> FastAPI:
             # ✅ Check database connectivity by executing a simple query
             from sqlalchemy import text
 
-            await db.execute(text("SELECT 1"))
+            # Own the short-lived session here so session creation failures also
+            # become a 503, instead of escaping from dependency resolution.
+            async with asynccontextmanager(get_db)() as db:
+                await db.execute(text("SELECT 1"))
             db_status = "connected"
-        except Exception as e:
+        except Exception:
             db_status = "disconnected"
             # Log the error for debugging
-            logger.error("Database health check failed: %s", e)
+            logger.exception("Database health check failed")
 
         # 🕐 Calculate current time in IST (UTC+5:30)
         utc_now = datetime.now(timezone.utc)
@@ -260,6 +269,7 @@ def create_app() -> FastAPI:
         # Determine overall health status
         is_healthy = db_status == "connected"
         status = "healthy" if is_healthy else "degraded"
+        response.status_code = 200 if is_healthy else 503
 
         return {
             "status": status,
@@ -269,7 +279,7 @@ def create_app() -> FastAPI:
             "timestamp_ist": ist_now.isoformat(),
             "database": db_status,
             "uptime_check": True,
-            "environment": "production" if not settings.debug else "development",
+            "environment": settings.environment,
         }
 
     # Root endpoint
@@ -291,8 +301,8 @@ def create_app() -> FastAPI:
         return {
             "message": f"Welcome to {settings.app_name}",
             "version": settings.app_version,
-            "docs": "/docs",
-            "redoc": "/redoc",
+            "docs": app.docs_url,
+            "redoc": app.redoc_url,
             "features": [
                 "🤖 AI-powered strategic recommendations",
                 "📈 Revenue forecasting with confidence scores",
@@ -315,4 +325,6 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=settings.debug)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=settings.debug,
+                proxy_headers=False, ws_max_size=settings.ws_max_message_bytes,
+                ws_max_queue=4, ws_ping_interval=20, ws_ping_timeout=20)

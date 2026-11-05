@@ -7,7 +7,7 @@ Each recommendation can be accepted, rejected, or kept pending.
 from datetime import datetime
 from typing import Optional
 from enum import Enum
-from sqlalchemy import String, ForeignKey, Numeric, func, DateTime, CheckConstraint
+from sqlalchemy import String, ForeignKey, Numeric, DateTime, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
