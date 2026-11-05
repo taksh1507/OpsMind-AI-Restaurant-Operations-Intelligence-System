@@ -21,7 +21,7 @@ from app.api import (
     analytics,
     recommendations,
     search,
-    customers_router,
+    customers,
     data_import,
     training,
     users,
@@ -204,7 +204,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(search.router, prefix="/api/v1", tags=["🔍 Global Search"])
     app.include_router(
-        customers_router, prefix="/api/v1", tags=["👤 Customer Intelligence"]
+        customers.router, prefix="/api/v1", tags=["👤 Customer Intelligence"]
     )
     app.include_router(data_import.router, prefix="/api/v1", tags=["📂 Data Import"])
     app.include_router(
