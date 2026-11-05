@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, EmailStr
+from typing import Dict, Any
 from decimal import Decimal
 
 class CustomerSchema(BaseModel):

@@ -7,6 +7,7 @@ from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional
 from decimal import Decimal
+from .sales import PaymentMethod
 
 
 class TenantSchema(BaseModel):
@@ -99,6 +100,9 @@ class TokenResponse(BaseModel):
     )
 
 
+REGISTRATION_MESSAGE = "Registration request received."
+
+
 class RegisterResponse(BaseModel):
     """Registration response schema."""
 
@@ -107,6 +111,7 @@ class RegisterResponse(BaseModel):
     access_token: str
     refresh_token: Optional[str] = None
     token_type: str = "bearer"
+    message: str = REGISTRATION_MESSAGE
 
 
 # =============== TEAM / STAFF MANAGEMENT SCHEMAS ===============
@@ -305,11 +310,6 @@ class MenuItemCreate(BaseModel):
         description="Whether this item is available to order"
     )
     
-    def validate_price_gt_cost(self) -> "MenuItemCreate":
-        """Validate that price > cost_price."""
-        if self.price <= self.cost_price:
-            raise ValueError("price must be greater than cost_price")
-        return self
 
 
 class MenuItemResponse(BaseModel):
@@ -373,6 +373,7 @@ class SaleItemRequest(BaseModel):
     quantity: int = Field(
         ...,
         gt=0,
+        le=1000,
         description="Quantity must be greater than 0"
     )
 
@@ -384,19 +385,22 @@ class SaleCreateRequest(BaseModel):
     The system will fetch current prices, calculate total, and save the transaction.
     """
     
+    customer_id: Optional[int] = Field(default=None, gt=0)
     items: list[SaleItemRequest] = Field(
         ...,
-        min_items=1,
+        min_length=1,
+        max_length=100,
         description="List of items being purchased (at least 1)"
     )
-    payment_method: str = Field(
-        default="cash",
+    payment_method: PaymentMethod = Field(
+        default=PaymentMethod.CASH,
         description="Payment method: cash, card, digital_wallet, upi, bank_transfer"
     )
     tax_rate: Optional[Decimal] = Field(
         None,
         ge=0,
-        description="Optional tax rate as percentage (e.g., 0.05 for 5%)"
+        le=1,
+        description="Optional tax rate as a fraction from 0 to 1 (0.05 means 5%)"
     )
 
 
@@ -424,6 +428,7 @@ class SaleResponse(BaseModel):
     
     id: int
     tenant_id: int
+    customer_id: Optional[int] = None
     total_amount: Decimal
     tax_amount: Decimal
     payment_method: str

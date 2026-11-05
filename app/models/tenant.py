@@ -4,7 +4,6 @@ Represents a restaurant/business in the OpsMind AI system.
 Each restaurant is isolated at the database level.
 """
 
-from typing import Optional
 from sqlalchemy import String, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum

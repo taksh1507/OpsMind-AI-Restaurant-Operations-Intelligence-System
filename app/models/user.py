@@ -4,9 +4,8 @@ Represents a user (restaurant owner/staff) in the OpsMind AI system.
 Each user belongs to exactly one tenant and has a specific role with permissions.
 """
 
-from typing import Optional
 from enum import Enum
-from sqlalchemy import String, ForeignKey, Boolean, Enum as SQLEnum
+from sqlalchemy import String, ForeignKey, Boolean, Integer, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -34,7 +33,7 @@ class User(BaseModel):
         id: Unique auto-incremented identifier
         tenant_id: Foreign key to parent tenant (restaurant)
         email: User email (unique within tenant)
-        hashed_password: Bcrypt hashed password
+        hashed_password: Argon2id password hash (legacy bcrypt remains verifiable)
         role: UserRole enum - OWNER, MANAGER, or STAFF (Day 25 RBAC)
         is_active: Whether user account is active
         is_admin: Deprecated (kept for backward compatibility, use role instead)
@@ -67,6 +66,10 @@ class User(BaseModel):
 
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+
     # True while a staff/manager account still has the one-time temporary password
     # the owner set for them. They must change it before using the app; cleared on
     # first successful password change. Owners self-register, so this is never set
@@ -84,17 +87,8 @@ class User(BaseModel):
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email}, role={self.role}, tenant_id={self.tenant_id})>"
     
-    def has_role(self, *roles: UserRole) -> bool:
-        """Check if user has any of the specified roles."""
-        return self.role in roles
     
-    def is_owner(self) -> bool:
-        """Check if user is an owner."""
-        return self.role == UserRole.OWNER
     
-    def is_manager(self) -> bool:
-        """Check if user is a manager or owner."""
-        return self.role in (UserRole.MANAGER, UserRole.OWNER)
     
     def can_view_financials(self) -> bool:
         """Check if user can view financial data (profit, margins, costs)."""

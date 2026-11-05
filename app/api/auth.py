@@ -3,11 +3,14 @@
 Handles user authentication endpoints: register, login, logout.
 """
 
+from app.core.errors import safe_error_detail
+
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
 from app.models.schemas import (
@@ -18,6 +21,7 @@ from app.models.schemas import (
     RefreshRequest,
     RevokeRequest,
     ChangePasswordRequest,
+    REGISTRATION_MESSAGE,
 )
 from app.services.auth_service import (
     register_user,
@@ -25,13 +29,13 @@ from app.services.auth_service import (
     issue_token_pair,
     refresh_access_token,
     revoke_refresh_token,
+    revoke_all_sessions,
 )
 from app.services import user_service
-from app.core import create_access_token
 from app.models import User
 from app.api.deps import get_current_user
 from app.core.config import settings
-from app.core.rate_limit import _get_ip, is_rate_limited, record_failed_attempt, clear_failures
+from app.core.rate_limit import limit_request
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -81,6 +85,7 @@ def _extract_refresh_token(raw_request: Request, body_token: str | None) -> str 
 async def register(
     request: RegisterRequest,
     response: Response,
+    raw_request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Register a new restaurant owner and create their tenant.
@@ -98,6 +103,7 @@ async def register(
         HTTPException 400: If email already exists or validation fails
         HTTPException 500: If database error occurs
     """
+    await limit_request(raw_request, "register", request.email)
     try:
         user, tenant, access_token, refresh_token = await register_user(db, request)
 
@@ -110,17 +116,18 @@ async def register(
             access_token=access_token,
         )
 
-    except ValueError as e:
+    except (ValueError, IntegrityError):
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=REGISTRATION_MESSAGE
         )
     except Exception as e:
         # Log the real cause server-side (never leak internals to the client).
         logger.exception("Registration failed for email=%s: %s", request.email, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Registration failed. Please try again."
+            detail=safe_error_detail()
         )
 
 
@@ -133,28 +140,20 @@ async def login(
 ):
     """Login a user and return an access token (refresh token set as httpOnly cookie).
 
-    Rate-limited: max 5 failed attempts per IP per 5-minute window.
+    Rate-limited: max 5 failed/in-flight attempts per IP and account per 5 minutes.
     """
-    # Rate-limit check
-    client_ip = _get_ip(raw_request) if raw_request else "unknown"
-    limited, remaining = is_rate_limited(client_ip)
-    if limited:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many failed login attempts. Try again in {remaining}s."
-        )
+    reservation = await limit_request(raw_request, "login", request.email)
 
     user = await authenticate_user(db, request.email, request.password)
 
     if not user:
-        record_failed_attempt(client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    clear_failures(client_ip)
+    await reservation.release()
     access_token, refresh_token = await issue_token_pair(db, user)
     await db.commit()
 
@@ -197,6 +196,7 @@ async def refresh(
     presented_token = _extract_refresh_token(
         raw_request, request.refresh_token if request else None
     )
+    await limit_request(raw_request, "refresh")
     if not presented_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -205,18 +205,19 @@ async def refresh(
         )
 
     try:
-        _, access_token, refresh_token = await refresh_access_token(db, presented_token)
+        user, access_token, refresh_token = await refresh_access_token(db, presented_token)
         _set_refresh_cookie(response, refresh_token)
         return TokenResponse(
             access_token=access_token,
-            expires_in=settings.access_token_expire_minutes * 60
+            expires_in=settings.access_token_expire_minutes * 60,
+            must_change_password=user.must_change_password,
         )
-    except ValueError as e:
+    except ValueError:
         # On failure the client receives 401 and clears its own session; the stale
         # cookie is already invalid server-side (revoked/expired), so it is inert.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail=safe_error_detail(),
             headers={"WWW-Authenticate": "Bearer"}
         )
 
@@ -256,6 +257,7 @@ async def logout(
 async def change_password(
     request: ChangePasswordRequest,
     response: Response,
+    raw_request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -263,10 +265,11 @@ async def change_password(
 
     Used both for the forced first-login change (temporary password → real one,
     which clears must_change_password) and for ordinary password changes. On
-    success every existing refresh token for the user is revoked and a fresh
+    success every existing access/refresh token is invalidated and a fresh
     token pair is issued, so the caller stays logged in with new credentials
     while any old sessions are invalidated.
     """
+    await limit_request(raw_request, "change-password", current_user.id)
     try:
         await user_service.change_password(
             db,
@@ -274,9 +277,9 @@ async def change_password(
             current_password=request.current_password,
             new_password=request.new_password,
         )
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
 
     # Issue a brand-new pair now that old refresh tokens are revoked.
@@ -289,6 +292,20 @@ async def change_password(
         expires_in=settings.access_token_expire_minutes * 60,
         must_change_password=False,
     )
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_all(
+    response: Response,
+    raw_request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Invalidate all access and refresh tokens, including this session."""
+    await limit_request(raw_request, "logout-all", current_user.id)
+    await revoke_all_sessions(db, current_user)
+    await db.commit()
+    _clear_refresh_cookie(response)
 
 
 @router.get("/me")

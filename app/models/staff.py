@@ -4,9 +4,11 @@ Represents restaurant staff and their work shifts.
 Enables labor cost analysis against sales volume.
 """
 
+from app.core.time_utils import utc_now, as_utc
+
 from typing import Optional
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime
 from sqlalchemy import String, ForeignKey, Numeric, DateTime, func, Enum, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
@@ -84,7 +86,7 @@ class Staff(BaseModel):
     start_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False
     )
     
@@ -178,17 +180,17 @@ class Shift(BaseModel):
     @property
     def is_ongoing(self) -> bool:
         """Check if shift is currently in progress."""
-        now = datetime.utcnow()
-        return self.start_time <= now <= self.end_time
+        now = utc_now()
+        return as_utc(self.start_time) <= now <= as_utc(self.end_time)
     
     @property
     def is_future(self) -> bool:
         """Check if shift is in the future."""
-        now = datetime.utcnow()
-        return self.start_time > now
+        now = utc_now()
+        return as_utc(self.start_time) > now
     
     @property
     def is_past(self) -> bool:
         """Check if shift has ended."""
-        now = datetime.utcnow()
-        return self.end_time < now
+        now = utc_now()
+        return as_utc(self.end_time) < now
