@@ -1,104 +1,63 @@
 # Deployment
 
-How to run OpsMind on your own server or machine. This is for the person
-hosting the system, not day-to-day restaurant users.
+The Compose deployment runs PostgreSQL, Redis, an Alembic migration job, the
+FastAPI API, one model-retraining scheduler process, and the Next.js frontend.
+PostgreSQL and Redis are private to the Compose network; the API and frontend
+ports are published to the host.
 
-## What runs
+## Configure
 
-`docker-compose.yml` orchestrates two services:
+Copy `.env.example` to `.env`, then set a strong `DB_PASSWORD`, update the
+credentials in `DATABASE_URL` (URL-encode reserved characters), a random
+`SECRET_KEY` of at least 32 characters, an Anthropic API key or gateway token,
+and the real frontend origin in `CORS_ORIGINS`. Set `NEXT_PUBLIC_API_URL` to
+the API address a user's browser can reach, including `/api/v1`. For example,
+use `https://api.example.com/api/v1` behind a TLS reverse proxy. Do not use a
+Compose-only hostname such as `http://api:8000` for this browser URL.
 
-- **db** — PostgreSQL 15 (data persists in a named volume `postgres_data`).
-- **api** — the FastAPI backend (serves the REST API on port 8000).
+`ENVIRONMENT` defaults to production and `COOKIE_SECURE` defaults to true.
+Local HTTP development can set `ENVIRONMENT=development` and
+`COOKIE_SECURE=false`. Configure `WEB_CONCURRENCY` for API workers; values
+above one require the Compose Redis service. `DB_POOL_SIZE` and
+`DB_MAX_OVERFLOW` size the PostgreSQL pool per worker.
 
-The **frontend** (Next.js) runs separately — see [`frontend/README.md`](../frontend/README.md).
+## Start and verify
 
-## 1. Prerequisites
-
-- Docker and Docker Compose installed.
-- API keys ready: an **Anthropic** key (or gateway auth token) for AI, and an
-  **OpenWeather** key for weather-aware tips.
-
-## 2. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-Then edit `.env` and set **real** values:
-
-- `DB_PASSWORD` — a strong password (12+ chars). Also update it inside
-  `DATABASE_URL`.
-- `SECRET_KEY` — generate one:
-  ```bash
-  python -c "import secrets; print(secrets.token_urlsafe(32))"
-  ```
-- `ANTHROPIC_API_KEY` — from https://console.anthropic.com/ (or set
-  `ANTHROPIC_AUTH_TOKEN` + `ANTHROPIC_BASE_URL` for an Anthropic-compatible
-  gateway).
-- `OPENWEATHER_API_KEY` — from https://openweathermap.org/.
-- `CORS_ORIGINS` — the URL(s) your frontend is served from.
-
-> **Never commit `.env`.** It is gitignored. See the security checklist at the
-> bottom of `.env.example`.
->
-> **Data privacy note:** if you point `ANTHROPIC_BASE_URL` at a third-party
-> proxy, every prompt (including your sales/cost/customer data) and your auth
-> token go to that endpoint. Only use an endpoint you trust and control.
-
-## 3. Start
-
-```bash
+```sh
 docker compose up -d --build
+docker compose ps
 ```
 
-The database schema is created automatically on first startup (no manual
-migration step for a fresh database).
+Compose waits for PostgreSQL and Redis health, applies Alembic migrations in a
+one-shot job, then starts the API. The API and frontend have Python/Node based
+health checks. The scheduler runs once in its own service and shares the
+`models_data` and `reports_data` volumes with the API. PostgreSQL and Redis
+data use named volumes as well.
 
-## 4. Verify
-
-```bash
-curl http://localhost:8000/health      # should return 200 / {"status":"healthy"}
+```sh
+curl http://localhost:8000/health
 ```
 
-Interactive API docs: open **http://localhost:8000/docs**.
+The production API disables `/docs`, `/redoc`, and `/openapi.json`. To stop the
+services while retaining persistent data, run `docker compose down`.
 
-> **Known cosmetic issue:** `docker ps` may show the api container as
-> "unhealthy" because the container's healthcheck calls `curl`, which isn't
-> installed inside the image. The app still serves fine — confirm with the
-> `curl http://localhost:8000/health` command above from your host.
+## Existing databases
 
-## 5. Frontend
+Alembic's initial revision adopts existing tables and creates missing ones.
+Installations with the old global-customer schema must first complete the
+tenant ownership data migration described in
+[`customer-tenant-migration.md`](customer-tenant-migration.md), with writers
+stopped. The Alembic revision refuses to start against that legacy schema.
 
-```bash
-cd frontend
-npm install
-npm run dev        # development
-# or: npm run build && npm start   # production
+## Operations
+
+```sh
+docker compose logs -f api
+docker compose logs -f scheduler
+docker compose up -d --build api frontend
+docker compose down
 ```
 
-Point the frontend at the API base URL and make sure that origin is listed in
-`CORS_ORIGINS`. See [`frontend/README.md`](../frontend/README.md) for details.
-
-## 6. (Optional) Demo data
-
-To explore with a pre-filled restaurant, run the seed script
-(`scripts/seed_data.py`) against the database. Do **not** run it against a
-production database with real restaurants.
-
-## Common operations
-
-```bash
-docker compose logs -f api     # tail API logs
-docker compose down            # stop (data is preserved in the volume)
-docker compose up -d --build api   # rebuild just the API after code changes
-```
-
-## Production checklist
-
-- Serve everything over **HTTPS** (tokens and cookies must be encrypted in
-  transit).
-- Strong `DB_PASSWORD` and `SECRET_KEY`; rotate periodically.
-- `DEBUG=false`.
-- Restrict `CORS_ORIGINS` to your real frontend domain(s).
-- Back up the `postgres_data` volume.
-- See [security.md](security.md) for the full model.
+Back up the `postgres_data`, `models_data`, and `reports_data` volumes. Serve
+production traffic over HTTPS and restrict `CORS_ORIGINS` to the frontend's
+actual origin.
