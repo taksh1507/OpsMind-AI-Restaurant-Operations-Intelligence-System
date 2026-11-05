@@ -5,16 +5,17 @@ Provides COGS (Cost of Goods Sold) calculations and optimization recommendations
 """
 
 from decimal import Decimal
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 
 from app.models import MenuItem, Recipe, Ingredient
 
 
 async def calculate_menu_item_cost(
     session: AsyncSession,
-    menu_item_id: int
+    menu_item_id: int,
+    tenant_id: int,
 ) -> Decimal:
     """Calculate the total cost of goods sold (COGS) for a single menu item.
     
@@ -36,8 +37,12 @@ async def calculate_menu_item_cost(
                 Ingredient.unit_cost
             ).select_from(Recipe).join(
                 Ingredient, Recipe.ingredient_id == Ingredient.id
+            ).join(
+                MenuItem, Recipe.menu_item_id == MenuItem.id
             ).where(
-                Recipe.menu_item_id == menu_item_id
+                Recipe.menu_item_id == menu_item_id,
+                MenuItem.tenant_id == tenant_id,
+                Ingredient.tenant_id == tenant_id,
             )
         )
         
@@ -87,7 +92,7 @@ async def get_all_menu_items_with_costs(
         menu_items = []
         for item in result.scalars().all():
             # Calculate COGS for this item
-            cogs = await calculate_menu_item_cost(session, item.id)
+            cogs = await calculate_menu_item_cost(session, item.id, tenant_id)
             
             price = float(item.price)
             cogs_float = float(cogs)

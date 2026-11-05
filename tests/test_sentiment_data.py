@@ -4,7 +4,6 @@ Verifies raw data generation, upsampling class balance logic, and end-to-end CSV
 """
 
 import os
-import pytest
 import asyncio
 import pandas as pd
 

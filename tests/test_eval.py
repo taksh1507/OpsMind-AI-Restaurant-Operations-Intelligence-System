@@ -4,7 +4,6 @@ Validates score_model with perfect, exact-offset, and empty inputs, and checks
 compute_naive_baseline extracts features correctly.
 """
 
-import pytest
 import pandas as pd
 import math
 from app.ml.eval import score_model, compute_naive_baseline

@@ -10,7 +10,7 @@ Exchange rate source:
 """
 
 from decimal import Decimal
-from typing import Optional, Dict
+from typing import Optional
 
 from app.core.config import Settings
 
@@ -144,21 +144,6 @@ class CurrencyManager:
         # Normalize to 2 decimal places.
         return value.quantize(Decimal("0.01"))
 
-    @staticmethod
-    def convert_usd_to_inr(
-        usd_amount: Decimal, rate: Optional[Decimal] = None
-    ) -> Decimal:
-        """Convert USD amount to INR using current rate.
-
-        Args:
-            usd_amount: Amount in USD
-            rate: Override exchange rate for testing
-
-        Returns:
-            Amount in INR
-        """
-        rate = CurrencyManager.get_current_usd_to_inr_rate(rate)
-        return (usd_amount * rate).quantize(Decimal("0.01"))
 
     @staticmethod
     def calculate_landed_cost_inr(
@@ -259,63 +244,3 @@ class MarginAnalyzer:
             return cost_price * Decimal("2")  # Default: 2x cost
 
         return (cost_price / margin_ratio).quantize(Decimal("0.01"))
-
-    @staticmethod
-    def analyze_imported_item(
-        selling_price: Decimal,
-        import_cost_usd: Decimal,
-        exchange_rate: Optional[Decimal] = None,
-        target_margin: Decimal = Decimal("30"),
-    ) -> Dict:
-        """Comprehensive analysis for an imported menu item.
-
-        Args:
-            selling_price: Current selling price in INR
-            import_cost_usd: Cost in USD
-            exchange_rate: Override exchange rate
-            target_margin: Target profit margin
-
-        Returns:
-            Dictionary with analysis results
-        """
-        # Calculate landed cost
-        landed_cost_inr = CurrencyManager.calculate_landed_cost_inr(
-            import_cost_usd, rate=exchange_rate
-        )
-
-        # Calculate current margin
-        current_margin = MarginAnalyzer.calculate_margin_percentage(
-            selling_price, landed_cost_inr
-        )
-
-        # Calculate required price
-        required_price = MarginAnalyzer.calculate_required_price(
-            landed_cost_inr, target_margin
-        )
-
-        # Determine status
-        status = MarginAnalyzer.get_margin_status(current_margin)
-
-        # Price adjustment needed
-        price_adjustment = required_price - selling_price
-        adjustment_percentage = (
-            (price_adjustment / selling_price * Decimal("100")).quantize(
-                Decimal("0.01")
-            )
-            if selling_price > 0
-            else Decimal("0")
-        )
-
-        return {
-            "landed_cost_inr": float(landed_cost_inr),
-            "current_margin_percentage": float(current_margin),
-            "margin_status": status,
-            "current_price": float(selling_price),
-            "required_price": float(required_price),
-            "price_adjustment_inr": float(price_adjustment),
-            "price_adjustment_percentage": float(adjustment_percentage),
-            "exchange_rate": float(
-                exchange_rate or CurrencyManager.get_current_usd_to_inr_rate()
-            ),
-            "at_risk": status in ["warning", "danger", "critical"],
-        }

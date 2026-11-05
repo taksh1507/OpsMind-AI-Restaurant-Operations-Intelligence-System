@@ -10,9 +10,10 @@ Features computed:
 - avg_items_per_order: average items per order
 """
 
-import os
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict, Any
+from app.core.time_utils import utc_now
+
+from datetime import datetime, timedelta
+from typing import Optional
 from decimal import Decimal
 import pandas as pd
 from sqlalchemy import select
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.sales import Sale, SaleItem
 from app.models.menu import MenuItem, Category
+from app.models.customer import Customer
 
 
 def _to_naive(dt: Optional[datetime]) -> Optional[datetime]:
@@ -55,7 +57,7 @@ async def build_segmentation_features(
         Only returns rows for customers with 2 or more orders.
     """
     if reference_date is None:
-        reference_date = datetime.utcnow()
+        reference_date = utc_now()
     reference_date = _to_naive(reference_date)
 
     # 1. Query Sales
@@ -64,8 +66,9 @@ async def build_segmentation_features(
         Sale.id.label("sale_id"),
         Sale.total_amount,
         Sale.timestamp
-    ).where(
+    ).join(Customer, Customer.id == Sale.customer_id).where(
         Sale.tenant_id == tenant_id,
+        Customer.tenant_id == tenant_id,
         Sale.customer_id.isnot(None)
     )
     sales_result = await session.execute(sales_stmt)
@@ -85,8 +88,14 @@ async def build_segmentation_features(
         MenuItem, SaleItem.menu_item_id == MenuItem.id
     ).join(
         Category, MenuItem.category_id == Category.id
+    ).join(
+        Customer, Sale.customer_id == Customer.id
     ).where(
         Sale.tenant_id == tenant_id,
+        Customer.tenant_id == tenant_id,
+        SaleItem.tenant_id == tenant_id,
+        MenuItem.tenant_id == tenant_id,
+        Category.tenant_id == tenant_id,
         Sale.customer_id.isnot(None)
     )
     items_result = await session.execute(items_stmt)
@@ -126,7 +135,7 @@ async def build_segmentation_features(
             "category_name": r.category_name
         }
         for r in items_rows
-    ])
+    ], columns=["customer_id", "sale_id", "quantity", "category_name"])
 
     # Calculate features per customer
     features_list = []

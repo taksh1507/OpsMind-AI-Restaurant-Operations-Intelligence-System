@@ -4,9 +4,7 @@ Verifies correct calculation of order frequency, recency, average spend,
 top categories with tie-breaks, and correct filtering of low-frequency customers.
 """
 
-import os
 import asyncio
-import pytest
 import pandas as pd
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -90,11 +88,11 @@ def test_segmentation_features_filtering_and_calculation():
             
             # 4. Seed Customers
             # Customer A: 2 orders (included)
-            cust_a = Customer(id=101, name="Customer A", email="a@test.com", total_spent_inr=0.0, visit_count=0)
+            cust_a = Customer(id=101, tenant_id=1, name="Customer A", email="a@test.com", total_spent_inr=0.0, visit_count=0)
             # Customer B: 3 orders (included)
-            cust_b = Customer(id=102, name="Customer B", email="b@test.com", total_spent_inr=0.0, visit_count=0)
+            cust_b = Customer(id=102, tenant_id=1, name="Customer B", email="b@test.com", total_spent_inr=0.0, visit_count=0)
             # Customer C: 1 order (should be filtered out)
-            cust_c = Customer(id=103, name="Customer C", email="c@test.com", total_spent_inr=0.0, visit_count=0)
+            cust_c = Customer(id=103, tenant_id=1, name="Customer C", email="c@test.com", total_spent_inr=0.0, visit_count=0)
             session.add_all([cust_a, cust_b, cust_c])
             
             await session.commit()
@@ -248,7 +246,7 @@ def test_segmentation_features_tie_breaking():
             session.add_all([item_burger, item_pizza])
             
             # Seed Customer
-            cust = Customer(id=200, name="Customer Tie", email="tie@test.com", total_spent_inr=0.0, visit_count=0)
+            cust = Customer(id=200, tenant_id=1, name="Customer Tie", email="tie@test.com", total_spent_inr=0.0, visit_count=0)
             session.add(cust)
             await session.commit()
             

@@ -4,9 +4,7 @@ Verifies that the serialized model can be successfully loaded and produces corre
 """
 
 import os
-import pytest
 import joblib
-import pandas as pd
 from sklearn.pipeline import Pipeline
 
 from app.ml.train_sentiment import train_sentiment_model

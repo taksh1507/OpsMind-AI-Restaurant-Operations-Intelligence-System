@@ -198,34 +198,3 @@ def forecast_next_values(
         forecast.append(max(0, forecast_value))  # No negative sales
     
     return [round(v, 2) for v in forecast]
-
-
-def generate_trend_description(slope: float, confidence: str) -> str:
-    """
-    Generate human-readable description of trend direction.
-    
-    Args:
-        slope: Trend slope value
-        confidence: Confidence level ("High", "Medium", "Low")
-        
-    Returns:
-        String description of trend
-    """
-    if slope > 100:
-        trend = "rapidly growing"
-    elif slope > 20:
-        trend = "growing"
-    elif slope > 5:
-        trend = "slowly growing"
-    elif slope > -5:
-        trend = "stable"
-    elif slope > -20:
-        trend = "slowly declining"
-    elif slope > -100:
-        trend = "declining"
-    else:
-        trend = "rapidly declining"
-    
-    confidence_word = "very" if confidence == "High" else "somewhat" if confidence == "Medium" else "not very"
-    
-    return f"Revenue is {trend} with {confidence_word} {confidence.lower()} confidence"

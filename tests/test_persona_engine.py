@@ -5,24 +5,20 @@ and dynamic profile inferences.
 """
 
 import os
-import shutil
 import asyncio
-import pytest
-import pandas as pd
 from decimal import Decimal
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
-import joblib
 
 from app.models.base import Base
 from app.models.tenant import Tenant, SubscriptionStatus
 from app.models.customer import Customer
 from app.models.menu import Category, MenuItem
-from app.models.sales import Sale, SaleItem, PaymentMethod
+from app.models.sales import Sale, SaleItem
 from app.ml.segmentation_features import build_segmentation_features
 from app.ml.train_segmentation import train_customer_segmentation
-from app.services.persona_engine import get_customer_persona, get_suggested_action_for_persona
+from app.services.persona_engine import get_customer_persona
 
 
 def test_persona_engine_fallback_rules():
@@ -48,13 +44,13 @@ def test_persona_engine_fallback_rules():
             
             # 2. Seed Customers for various rule triggers
             # VIP Regular: visit_count >= 10, total_spent >= 5000
-            vip_cust = Customer(id=201, name="VIP", email="vip@test.com", total_spent_inr=5500.0, visit_count=12)
+            vip_cust = Customer(id=201, tenant_id=1, name="VIP", email="vip@test.com", total_spent_inr=5500.0, visit_count=12)
             # Big Spender: avg_spend >= 1500 or total_spent >= 8000
-            spender_cust = Customer(id=202, name="Spender", email="spender@test.com", total_spent_inr=1600.0, visit_count=1)
+            spender_cust = Customer(id=202, tenant_id=1, name="Spender", email="spender@test.com", total_spent_inr=1600.0, visit_count=1)
             # New Customer: visit_count <= 1
-            new_cust = Customer(id=203, name="New", email="new@test.com", total_spent_inr=100.0, visit_count=1)
+            new_cust = Customer(id=203, tenant_id=1, name="New", email="new@test.com", total_spent_inr=100.0, visit_count=1)
             # Occasional Visitor: fallback
-            occasional_cust = Customer(id=204, name="Occasional", email="occ@test.com", total_spent_inr=400.0, visit_count=2)
+            occasional_cust = Customer(id=204, tenant_id=1, name="Occasional", email="occ@test.com", total_spent_inr=400.0, visit_count=2)
             
             session.add_all([vip_cust, spender_cust, new_cust, occasional_cust])
             await session.commit()
@@ -116,7 +112,7 @@ def test_persona_engine_model_present_path():
             # 4. Seed 5 Customers (to allow model training)
             customers = []
             for i in range(1, 6):
-                cust = Customer(id=100 + i, name=f"Customer {i}", email=f"cust{i}@test.com", total_spent_inr=2000.0, visit_count=5)
+                cust = Customer(id=100 + i, tenant_id=1, name=f"Customer {i}", email=f"cust{i}@test.com", total_spent_inr=2000.0, visit_count=5)
                 session.add(cust)
                 customers.append(cust)
             await session.commit()
@@ -170,7 +166,9 @@ def test_persona_engine_model_present_path():
                 os.remove(model_subpath)
                 
             try:
-                res = train_customer_segmentation(df_features, tenant_id=1, model_dir=temp_model_dir)
+                train_customer_segmentation(
+                    df_features, tenant_id=1, model_dir=temp_model_dir
+                )
                 assert os.path.exists(model_subpath)
                 
                 # Run persona prediction - should run through the K-Means path

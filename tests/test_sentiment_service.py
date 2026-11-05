@@ -5,7 +5,6 @@ and falls back to Claude or heuristic methods when the model file is missing.
 """
 
 import os
-import pytest
 import asyncio
 import shutil
 
@@ -14,6 +13,9 @@ import app.services.sentiment_service as sentiment_service
 
 def test_sentiment_service_both_paths():
     """Verify that predictions route to local classifier when present, and fall back when absent."""
+    from app.ml.train_sentiment import train_sentiment_model
+
+    train_sentiment_model(csv_path="data/sentiment_train.csv", model_dir="models")
     async def run():
         model_path = os.path.join("models", "sentiment_v1.pkl")
         backup_path = os.path.join("models", "sentiment_v1.pkl.backup")

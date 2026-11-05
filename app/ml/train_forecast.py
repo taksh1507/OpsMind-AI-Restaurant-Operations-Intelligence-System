@@ -5,12 +5,14 @@ evaluates on a 14-day holdout split, prints performance and feature
 importances, and serializes the model using joblib.
 """
 
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 import os
 import asyncio
 import argparse
 import joblib
 import pandas as pd
-import numpy as np
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -58,14 +60,14 @@ async def train_model(
         version: Version number to save the model under (auto-calculated if None)
     """
     if session is not None:
-        print("Running feature engineering pipeline on active DB session...")
+        _module_logger.info(" ".join(str(value) for value in ["Running feature engineering pipeline on active DB session..."]))
         df = await build_training_frame(tenant_id=tenant_id, session=session)
     else:
         if not os.path.exists(csv_path):
-            print(f"Error: CSV file not found at: {csv_path}")
+            _module_logger.info(" ".join(str(value) for value in [f"Error: CSV file not found at: {csv_path}"]))
             return {}
 
-        print("Initializing in-memory database...")
+        _module_logger.info(" ".join(str(value) for value in ["Initializing in-memory database..."]))
         engine = create_async_engine(
             "sqlite+aiosqlite:///:memory:",
             poolclass=StaticPool,
@@ -80,7 +82,7 @@ async def train_model(
         )
         
         async with async_session() as temp_session:
-            print("Seeding database with restaurant sales history...")
+            _module_logger.info(" ".join(str(value) for value in ["Seeding database with restaurant sales history..."]))
             tenant = Tenant(
                 id=tenant_id,
                 tenant_id=f"restaurant-{tenant_id}",
@@ -119,13 +121,13 @@ async def train_model(
                     
             await temp_session.commit()
             
-            print("Running feature engineering pipeline...")
+            _module_logger.info(" ".join(str(value) for value in ["Running feature engineering pipeline..."]))
             df = await build_training_frame(tenant_id=tenant_id, session=temp_session)
             
         await engine.dispose()
     
     if df.empty:
-        print("Error: Feature engineering pipeline returned no data.")
+        _module_logger.info(" ".join(str(value) for value in ["Error: Feature engineering pipeline returned no data."]))
         return {}
 
     # Offload the CPU-bound fit/eval/serialize step to a worker thread so the
@@ -182,13 +184,13 @@ def _fit_and_save_model(
     )
 
     if train_df.empty:
-        print("Error: Not enough data remaining to train after the holdout split.")
+        _module_logger.info(" ".join(str(value) for value in ["Error: Not enough data remaining to train after the holdout split."]))
         return {}
 
     X_train = train_df[feature_cols]
     y_train = train_df["revenue"]
 
-    print(f"Training XGBRegressor on {len(X_train)} samples...")
+    _module_logger.info(" ".join(str(value) for value in [f"Training XGBRegressor on {len(X_train)} samples..."]))
     # Controlling depth and estimators for regularization on a small dataset
     model = XGBRegressor(
         n_estimators=100,
@@ -212,21 +214,21 @@ def _fit_and_save_model(
             y_test.tolist(), compute_naive_baseline(test_df)
         )
     else:
-        print("Warning: no holdout samples available; skipping evaluation.")
+        _module_logger.info(" ".join(str(value) for value in ["Warning: no holdout samples available; skipping evaluation."]))
         mae, rmse = float("nan"), float("nan")
         naive_mae, naive_rmse = float("nan"), float("nan")
 
-    print("\n" + "=" * 55)
-    print("              XGBOOST FORECASTER PERFORMANCE")
-    print("=" * 55)
-    print(f"Model MAE:          {mae:.2f} (Naive baseline {naive_mae:.2f})")
-    print(f"Model RMSE:         {rmse:.2f} (Naive baseline {naive_rmse:.2f})")
-    print("-" * 55)
+    _module_logger.info(" ".join(str(value) for value in ["\n" + "=" * 55]))
+    _module_logger.info(" ".join(str(value) for value in ["              XGBOOST FORECASTER PERFORMANCE"]))
+    _module_logger.info(" ".join(str(value) for value in ["=" * 55]))
+    _module_logger.info(" ".join(str(value) for value in [f"Model MAE:          {mae:.2f} (Naive baseline {naive_mae:.2f})"]))
+    _module_logger.info(" ".join(str(value) for value in [f"Model RMSE:         {rmse:.2f} (Naive baseline {naive_rmse:.2f})"]))
+    _module_logger.info(" ".join(str(value) for value in ["-" * 55]))
 
-    print("Feature Importances:")
+    _module_logger.info(" ".join(str(value) for value in ["Feature Importances:"]))
     importances = model.feature_importances_
     for col, imp in sorted(zip(feature_cols, importances), key=lambda x: x[1], reverse=True):
-        print(f"  {col:<28}: {imp:.4f}")
+        _module_logger.info(" ".join(str(value) for value in [f"  {col:<28}: {imp:.4f}"]))
     # Serialize model using manifest_helper
     from app.ml.manifest_helper import get_next_version, update_manifest
 
@@ -244,9 +246,9 @@ def _fit_and_save_model(
     # Update manifest
     update_manifest(tenant_id, "forecast", filename, reason=reason)
 
-    print("-" * 55)
-    print(f"Successfully saved trained model to: {model_path}")
-    print("=" * 55 + "\n")
+    _module_logger.info(" ".join(str(value) for value in ["-" * 55]))
+    _module_logger.info(" ".join(str(value) for value in [f"Successfully saved trained model to: {model_path}"]))
+    _module_logger.info(" ".join(str(value) for value in ["=" * 55 + "\n"]))
 
     return {
         "status": "success",

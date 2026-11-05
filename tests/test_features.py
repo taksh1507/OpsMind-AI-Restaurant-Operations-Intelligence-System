@@ -7,7 +7,6 @@ features, joins weather context, and drops initial NaN boundary rows.
 
 import os
 import asyncio
-import pytest
 import pandas as pd
 from datetime import datetime
 from decimal import Decimal

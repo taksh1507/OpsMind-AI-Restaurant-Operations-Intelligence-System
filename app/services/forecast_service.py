@@ -4,16 +4,19 @@ Provides serving endpoints for the ML forecasting model (XGBoost) with 1-hour
 caching and fallback to simple linear regression if no model has been trained yet.
 """
 
+from app.core.time_utils import utc_now
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 import os
 import joblib
 import pandas as pd
 import numpy as np
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ml.features import build_training_frame
-from app.ml.train_forecast import encode_weather
 from app.services.weather import get_current_weather
 from app.services.analytics import get_daily_sales_trend
 from app.core.math_utils import forecast_next_values, calculate_confidence_score
@@ -51,7 +54,7 @@ def load_forecast_model(tenant_id: int):
                 
             return predict_fn
         except Exception as e:
-            print(f"Error loading model for tenant {tenant_id}: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"Error loading model for tenant {tenant_id}: {e}"]))
             return None
     return None
 
@@ -65,7 +68,7 @@ def get_cached_predict_fn(tenant_id: int):
     Returns:
         Callable predict function, or None if no model is found
     """
-    now = datetime.utcnow()
+    now = utc_now()
     if tenant_id in _model_cache:
         predict_fn, loaded_at = _model_cache[tenant_id]
         if now - loaded_at < _cache_ttl:
@@ -211,7 +214,7 @@ async def generate_forecast_report(tenant_id: int, db: AsyncSession, days: int =
                     "model_used": "ml_xgb"
                 }
         except Exception as e:
-            print(f"XGBoost prediction failed, falling back: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"XGBoost prediction failed, falling back: {e}"]))
             
     # Fallback to math_utils linear regression
     lr_predictions = forecast_next_values(revenue_values, periods_ahead=3)

@@ -108,6 +108,7 @@ async def test_scheduler_lifecycle_and_retraining():
             customers = []
             for i in range(1, 4):
                 cust = Customer(
+                    tenant_id=test_tenant_id,
                     id=test_tenant_id * 10 + i,
                     name=f"Cust {i}",
                     email=f"cust{i}@test888.com",

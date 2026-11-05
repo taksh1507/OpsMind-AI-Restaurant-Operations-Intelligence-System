@@ -19,7 +19,7 @@ from app.models.base import Base
 from app.models.tenant import Tenant, SubscriptionStatus
 from app.models.customer import Customer
 from app.models.menu import Category, MenuItem
-from app.models.sales import Sale, SaleItem, PaymentMethod
+from app.models.sales import Sale, SaleItem
 from app.ml.segmentation_features import build_segmentation_features
 from app.ml.train_segmentation import train_customer_segmentation
 
@@ -58,7 +58,7 @@ def test_train_customer_segmentation_success():
             # 4. Seed 5 Customers (to allow k-means clustering tests up to k=4)
             customers = []
             for i in range(1, 6):
-                cust = Customer(id=100 + i, name=f"Customer {i}", email=f"cust{i}@test.com", total_spent_inr=0.0, visit_count=0)
+                cust = Customer(id=100 + i, tenant_id=1, name=f"Customer {i}", email=f"cust{i}@test.com", total_spent_inr=0.0, visit_count=0)
                 session.add(cust)
                 customers.append(cust)
             await session.commit()

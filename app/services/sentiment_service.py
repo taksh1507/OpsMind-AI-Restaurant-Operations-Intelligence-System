@@ -5,9 +5,13 @@ Regression classifier, caching loaded models in-memory with a 1-hour TTL,
 and falling back gracefully to Claude or keyword heuristics if model is absent.
 """
 
+from app.core.time_utils import utc_now
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 import os
 import joblib
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from typing import Dict, Any
 
 from app.core.config import settings
@@ -30,14 +34,14 @@ def load_sentiment_model():
             model = joblib.load(model_path)
             return model
         except Exception as e:
-            print(f"Error loading sentiment model pipeline: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"Error loading sentiment model pipeline: {e}"]))
     return None
 
 
 def get_cached_sentiment_model():
     """Retrieve the sentiment pipeline from cache, or load fresh if expired."""
     global _sentiment_model, _model_loaded_at
-    now = datetime.utcnow()
+    now = utc_now()
     
     if _sentiment_model is not None and _model_loaded_at is not None:
         if now - _model_loaded_at < _cache_ttl:
@@ -89,7 +93,7 @@ def get_heuristic_sentiment(text: str) -> tuple[str, float]:
     return label, score
 
 
-async def predict_sentiment(text: str) -> Dict[str, Any]:
+async def predict_sentiment(text: str, *, allow_external: bool = True) -> Dict[str, Any]:
     """Predict review sentiment using the local classifier, with Claude and heuristic fallbacks.
     
     Args:
@@ -117,7 +121,7 @@ async def predict_sentiment(text: str) -> Dict[str, Any]:
                 "model_used": "local_lr"
             }
         except Exception as e:
-            print(f"Prediction failed with local model, falling back: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"Prediction failed with local model, falling back: {e}"]))
             
     # Fallback 1: Claude (Anthropic) via the AI agent
     api_key = (
@@ -126,7 +130,7 @@ async def predict_sentiment(text: str) -> Dict[str, Any]:
         or getattr(settings, "anthropic_auth_token", None)
         or getattr(settings, "anthropic_api_key", None)
     )
-    if api_key:
+    if api_key and allow_external:
         try:
             from app.services.ai_agent import process_review
             res = await process_review(text)
@@ -146,7 +150,7 @@ async def predict_sentiment(text: str) -> Dict[str, Any]:
                     "model_used": "claude_fallback"
                 }
         except Exception as e:
-            print(f"Claude fallback failed: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"Claude fallback failed: {e}"]))
             
     # Fallback 2: Local keyword heuristic
     label, score = get_heuristic_sentiment(text)

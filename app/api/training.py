@@ -3,6 +3,10 @@
 Provides on-demand model retraining endpoints for forecasting and customer segmentation.
 """
 
+from app.core.errors import safe_error_detail
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 from typing import Optional, Dict, Any
 import asyncio
 import math
@@ -80,24 +84,24 @@ async def retrain_models(
                 os.makedirs(report_dir, exist_ok=True)
                 results_df.to_csv(os.path.join(report_dir, "backtest.csv"), index=False)
             except Exception as e_bt:
-                print(f"Failed to generate backtest report during retraining: {e_bt}")
+                _module_logger.info(" ".join(str(value) for value in [f"Failed to generate backtest report during retraining: {e_bt}"]))
             
             response_data["forecast"] = {
                 "version": forecast_res["version"],
                 "mae": _json_safe_float(forecast_res["mae"]),
                 "rmse": _json_safe_float(forecast_res["rmse"])
             }
-        except Exception as e:
+        except Exception:
             if model_type == "forecast":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Forecasting retraining failed: {str(e)}"
+                    detail=safe_error_detail()
                 )
             else:
                 # In 'all' mode, we raise the first failure to be safe
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Forecasting retraining failed: {str(e)}"
+                    detail=safe_error_detail()
                 )
 
     # 2. Retrain Customer Segmentation
@@ -115,16 +119,16 @@ async def retrain_models(
                 "best_k": segmentation_res["best_k"],
                 "silhouette_score": _json_safe_float(segmentation_res["silhouette_score"])
             }
-        except ValueError as e:
+        except ValueError:
             # Expected error when not enough customers exist
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Segmentation retraining failed: {str(e)}"
+                detail=safe_error_detail()
             )
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Segmentation retraining failed: {str(e)}"
+                detail=safe_error_detail()
             )
 
     return response_data

@@ -5,20 +5,22 @@ restaurant database reviews, cached external Yelp/Kaggle dataset reviews,
 and combinatoric synthetic reviews, and weak-labels them.
 """
 
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 import os
 import io
-import csv
 import math
 import random
 import urllib.request
+from pathlib import Path
 import pandas as pd
-from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from app.core.config import settings
 from app.models.review import Review
-from app.services.ai_agent import AIConsultant, process_review
+from app.services.ai_agent import process_review
 
 # Predefined food items, staff descriptions, and sentiment templates for combinatoric generation
 FOODS = [
@@ -144,7 +146,7 @@ async def weak_label_review(text: str) -> tuple[str, float]:
                 score = float(res.get("sentiment_score", 0.0))
                 return label, score
         except Exception as e:
-            print(f"Claude weak-labeling call failed: {e}. Falling back to heuristic.")
+            _module_logger.info(" ".join(str(value) for value in [f"Claude weak-labeling call failed: {e}. Falling back to heuristic."]))
             
     # Heuristic fallback
     # TODO: replace heuristic with manual labeling once dataset exceeds 500 rows.
@@ -155,7 +157,7 @@ def download_public_dataset() -> pd.DataFrame:
     """Download a small restaurant reviews dataset from GitHub."""
     url = "https://raw.githubusercontent.com/sharmaroshan/Restaurant-Reviews-Analysis/master/Restaurant_Reviews.tsv"
     try:
-        print(f"Attempting to download public Yelp/Kaggle restaurant reviews from: {url}")
+        _module_logger.info(" ".join(str(value) for value in [f"Attempting to download public Yelp/Kaggle restaurant reviews from: {url}"]))
         req = urllib.request.Request(
             url,
             headers={'User-Agent': 'Mozilla/5.0'}
@@ -165,7 +167,7 @@ def download_public_dataset() -> pd.DataFrame:
             
         df = pd.read_csv(io.StringIO(tsv_data), sep='\t')
         if 'Review' in df.columns and 'Liked' in df.columns:
-            print(f"Successfully downloaded {len(df)} reviews.")
+            _module_logger.info(" ".join(str(value) for value in [f"Successfully downloaded {len(df)} reviews."]))
             mapped_records = []
             for _, row in df.iterrows():
                 text = str(row['Review']).strip()
@@ -179,7 +181,7 @@ def download_public_dataset() -> pd.DataFrame:
                 })
             return pd.DataFrame(mapped_records)
     except Exception as e:
-        print(f"Network download failed: {e}. Utilizing fallback combinatoric generator.")
+        _module_logger.info(" ".join(str(value) for value in [f"Network download failed: {e}. Utilizing fallback combinatoric generator."]))
     return pd.DataFrame()
 
 
@@ -190,12 +192,12 @@ def get_external_reviews() -> pd.DataFrame:
     
     if os.path.exists(cache_path):
         try:
-            print(f"Loading cached external reviews from: {cache_path}")
+            _module_logger.info(" ".join(str(value) for value in [f"Loading cached external reviews from: {cache_path}"]))
             df = pd.read_csv(cache_path)
             if not df.empty and all(col in df.columns for col in ["review_text", "sentiment_label", "sentiment_score"]):
                 return df
         except Exception as e:
-            print(f"Error reading cached external reviews: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"Error reading cached external reviews: {e}"]))
             
     # Cache miss
     df = download_public_dataset()
@@ -203,43 +205,37 @@ def get_external_reviews() -> pd.DataFrame:
         try:
             os.makedirs(cache_dir, exist_ok=True)
             df.to_csv(cache_path, index=False)
-            print(f"Cached external reviews to: {cache_path}")
+            _module_logger.info(" ".join(str(value) for value in [f"Cached external reviews to: {cache_path}"]))
         except Exception as e:
-            print(f"Failed to cache external reviews: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"Failed to cache external reviews: {e}"]))
     return df
 
 
-async def build_raw_dataset(session: AsyncSession = None) -> pd.DataFrame:
-    """Pull DB reviews, fetch/cache public reviews, and return raw DataFrame with labels."""
+async def build_raw_dataset(session: AsyncSession = None, tenant_id: int | None = None) -> pd.DataFrame:
+    """Build tenant-scoped data, or public/synthetic-only data for a shared model."""
+    if session is not None and tenant_id is None:
+        raise ValueError("tenant_id is required when reading restaurant reviews")
     db_reviews = []
     
     # 1. Pull reviews from provided session or connect to DB
-    if session:
+    if session is not None:
+        result = await session.execute(select(Review).where(Review.tenant_id == tenant_id))
+        db_reviews = result.scalars().all()
+    elif tenant_id is not None:
+        engine = create_async_engine(settings.database_url, future=True)
         try:
-            stmt = select(Review)
-            result = await session.execute(stmt)
-            db_reviews = result.scalars().all()
-        except Exception as e:
-            print(f"Error querying reviews using provided session: {e}")
-    else:
-        try:
-            db_path = settings.database_url.replace("sqlite+aiosqlite:///", "")
-            if "sqlite" in settings.database_url and os.path.exists(db_path):
-                engine = create_async_engine(settings.database_url, future=True)
-                async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-                async with async_session() as new_session:
-                    stmt = select(Review)
-                    result = await new_session.execute(stmt)
-                    db_reviews = result.scalars().all()
-                await engine.dispose()
-        except Exception as e:
-            print(f"Error connecting to local DB file: {e}")
+            async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+            async with async_session() as new_session:
+                result = await new_session.execute(select(Review).where(Review.tenant_id == tenant_id))
+                db_reviews = result.scalars().all()
+        finally:
+            await engine.dispose()
             
     raw_records = []
     
     # 2. Process database reviews
     if db_reviews:
-        print(f"Found {len(db_reviews)} database reviews to weak-label.")
+        _module_logger.info(" ".join(str(value) for value in [f"Found {len(db_reviews)} database reviews to weak-label."]))
         for r in db_reviews:
             label, score = await weak_label_review(r.comment)
             raw_records.append({
@@ -248,7 +244,7 @@ async def build_raw_dataset(session: AsyncSession = None) -> pd.DataFrame:
                 "sentiment_score": score
             })
     else:
-        print("Database reviews table empty or missing. Seeding with synthetic review cases...")
+        _module_logger.info(" ".join(str(value) for value in ["Database reviews table empty or missing. Seeding with synthetic review cases..."]))
         for _ in range(50):
             for label in ["positive", "neutral", "negative"]:
                 comment = generate_single_synthetic_review(label)
@@ -262,7 +258,7 @@ async def build_raw_dataset(session: AsyncSession = None) -> pd.DataFrame:
     # 3. Process external reviews
     ext_df = get_external_reviews()
     if not ext_df.empty:
-        print(f"Merging with {len(ext_df)} external reviews.")
+        _module_logger.info(" ".join(str(value) for value in [f"Merging with {len(ext_df)} external reviews."]))
         for _, row in ext_df.iterrows():
             raw_records.append({
                 "review_text": row["review_text"],
@@ -270,7 +266,7 @@ async def build_raw_dataset(session: AsyncSession = None) -> pd.DataFrame:
                 "sentiment_score": row["sentiment_score"]
             })
     else:
-        print("External reviews not available. Adding supplemental synthetic reviews to meet row counts...")
+        _module_logger.info(" ".join(str(value) for value in ["External reviews not available. Adding supplemental synthetic reviews to meet row counts..."]))
         for _ in range(100):
             for label in ["positive", "neutral", "negative"]:
                 comment = generate_single_synthetic_review(label)
@@ -281,11 +277,18 @@ async def build_raw_dataset(session: AsyncSession = None) -> pd.DataFrame:
                     "sentiment_score": score
                 })
                 
-    return pd.DataFrame(raw_records)
+    dataset = pd.DataFrame(raw_records)
+    dataset.attrs["tenant_id"] = tenant_id
+    return dataset
 
 
 def balance_and_export(df: pd.DataFrame, output_path: str = "data/sentiment_train.csv") -> pd.DataFrame:
     """Enforces class balance and minimum row count, upsamples minority classes, and exports CSV."""
+    tenant_id = df.attrs.get("tenant_id")
+    if tenant_id is not None and not Path(output_path).resolve().is_relative_to(
+        Path("data", str(tenant_id)).resolve()
+    ):
+        raise ValueError("Tenant review datasets must be exported under data/<tenant_id>/")
     if df.empty:
         raise ValueError("Cannot balance and export an empty DataFrame.")
         
@@ -354,26 +357,27 @@ def balance_and_export(df: pd.DataFrame, output_path: str = "data/sentiment_trai
     # Final verification of count and constraints
     counts = df["sentiment_label"].value_counts().to_dict()
     total_rows = len(df)
-    print("\nFinal Dataset Sentiment Distribution:")
+    _module_logger.info(" ".join(str(value) for value in ["\nFinal Dataset Sentiment Distribution:"]))
     for label, count in counts.items():
         ratio = count / total_rows * 100.0
-        print(f"  {label:<10}: {count} ({ratio:.2f}%)")
+        _module_logger.info(" ".join(str(value) for value in [f"  {label:<10}: {count} ({ratio:.2f}%)"]))
         
     # Write to target CSV
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df.to_csv(output_path, index=False)
-    print(f"\nSuccessfully generated balanced dataset at: {output_path} ({len(df)} rows)")
+    df.attrs["tenant_id"] = tenant_id
+    _module_logger.info(" ".join(str(value) for value in [f"\nSuccessfully generated balanced dataset at: {output_path} ({len(df)} rows)"]))
     
     return df
 
 
 async def main():
-    print("==================================================")
-    print("     SENTIMENT DATASET PREPARATION PIPELINE")
-    print("==================================================")
+    _module_logger.info(" ".join(str(value) for value in ["=================================================="]))
+    _module_logger.info(" ".join(str(value) for value in ["     SENTIMENT DATASET PREPARATION PIPELINE"]))
+    _module_logger.info(" ".join(str(value) for value in ["=================================================="]))
     df = await build_raw_dataset()
     balance_and_export(df)
-    print("==================================================\n")
+    _module_logger.info(" ".join(str(value) for value in ["==================================================\n"]))
 
 
 if __name__ == "__main__":
