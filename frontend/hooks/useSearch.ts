@@ -1,4 +1,7 @@
-﻿import { useState } from 'react'
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import apiClient from '@/lib/api-client'
 
 export interface SearchResult {
   id: string
@@ -6,38 +9,43 @@ export interface SearchResult {
   category: 'menu' | 'category' | 'staff'
   description?: string
 }
+interface SearchResponse { query: string; count: number; results: SearchResult[] }
 
 export function useSearch() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const pending = useRef<{ timer?: ReturnType<typeof setTimeout>; controller?: AbortController; generation: number }>({ generation: 0 })
 
-  const search = async (query: string) => {
-    if (!query.trim()) {
-      setResults([])
-      return
-    }
+  const cancel = useCallback(() => {
+    clearTimeout(pending.current.timer)
+    pending.current.controller?.abort()
+    pending.current.generation += 1
+  }, [])
+  const clear = useCallback(() => {
+    cancel(); setResults([]); setLoading(false); setError(null)
+  }, [cancel])
 
+  const search = useCallback((input: string) => {
+    clear()
+    const q = input.trim()
+    if (!q) return
+    const controller = new AbortController()
+    const generation = pending.current.generation
+    pending.current.controller = controller
     setLoading(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
-
-      if (!response.ok) {
-        throw new Error(`Search failed with status ${response.status}`)
+    pending.current.timer = setTimeout(async () => {
+      try {
+        const response = await apiClient.get<SearchResponse>('/search', { params: { q }, signal: controller.signal })
+        if (!controller.signal.aborted && generation === pending.current.generation) setResults(response.data.results)
+      } catch {
+        if (!controller.signal.aborted && generation === pending.current.generation) setError('Search temporarily unavailable. Please try again.')
+      } finally {
+        if (!controller.signal.aborted && generation === pending.current.generation) setLoading(false)
       }
+    }, 250)
+  }, [clear])
 
-      const data = await response.json()
-      setResults(data.results || [])
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
-      setError(errorMessage)
-      console.error('Search error:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return { results, loading, error, search }
+  useEffect(() => cancel, [cancel])
+  return { results, loading, error, search, clear }
 }

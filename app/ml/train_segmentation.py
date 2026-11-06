@@ -7,17 +7,15 @@ and serializes the pipeline to models/{tenant_id}/segments_v1.pkl.
 """
 
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any
 import joblib
 import pandas as pd
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
-from app.ml.segmentation_features import build_segmentation_features
 
 
 def train_customer_segmentation(

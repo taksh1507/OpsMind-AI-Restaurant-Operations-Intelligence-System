@@ -30,7 +30,6 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
-from passlib.context import CryptContext
 
 # Set UTF-8 encoding for console output
 if sys.platform == 'win32':
@@ -40,23 +39,19 @@ if sys.platform == 'win32':
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.core import settings
 from app.models.base import Base
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
-from app.models.menu import Category, MenuItem, Ingredient, Recipe
+from app.models.menu import Category, MenuItem, Recipe
 from app.models.sales import Sale, SaleItem, PaymentMethod
 from app.models.review import Review
 from app.models.staff import Staff, Shift, StaffRole
 
-# Use passlib's argon2 context - more reliable than bcrypt
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+from app.core.security import hash_password
 
 def hash_password_proper(password: str) -> str:
     """Hash password using argon2 (more reliable than bcrypt)."""
-    return pwd_context.hash(password)
+    return hash_password(password)
 
 
 # Demo data templates

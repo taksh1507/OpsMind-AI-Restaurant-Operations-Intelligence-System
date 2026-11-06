@@ -4,7 +4,7 @@ Handles CRUD operations for menu categories.
 Uses get_current_user dependency to ensure tenant isolation.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -60,17 +60,19 @@ async def create_category(
         
         return new_category
     
-    except Exception as e:
+    except Exception:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create category"
+            detail=safe_error_detail()
         )
 
 
 @router.get("", response_model=list[CategoryResponse])
 async def list_categories(
     include_inactive: bool = False,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -103,15 +105,15 @@ async def list_categories(
         if not include_inactive:
             query = query.where(Category.is_active == True)
 
-        result = await db.execute(query)
+        result = await db.execute(query.limit(limit).offset(offset))
 
         categories = result.scalars().all()
         return categories
     
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve categories"
+            detail=safe_error_detail()
         )
 
 
@@ -160,10 +162,10 @@ async def get_category(
     
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve category"
+            detail=safe_error_detail()
         )
 
 
@@ -228,11 +230,11 @@ async def update_category(
     
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update category"
+            detail=safe_error_detail()
         )
 
 
@@ -283,9 +285,11 @@ async def delete_category(
     
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete category"
+            detail=safe_error_detail()
         )
+
+from app.core.errors import safe_error_detail

@@ -4,9 +4,13 @@ Predicts a customer's persona based on K-Means clustering when the model is trai
 and falls back to rule-based logic otherwise.
 """
 
+from app.core.time_utils import utc_now
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 import os
-from typing import Dict, Any, Optional
-from datetime import datetime
+from typing import Dict, Any
+from datetime import timezone
 import joblib
 import pandas as pd
 from sqlalchemy import select, desc
@@ -54,7 +58,9 @@ async def get_customer_persona(
             reasoning: Explanation details
     """
     # 1. Fetch Customer
-    customer = await session.scalar(select(Customer).where(Customer.id == customer_id))
+    customer = await session.scalar(select(Customer).where(
+        Customer.id == customer_id, Customer.tenant_id == tenant_id
+    ))
     if not customer:
         return {
             "status": "error",
@@ -75,7 +81,7 @@ async def get_customer_persona(
         try:
             model_data = joblib.load(model_path)
         except Exception as e:
-            print(f"Error loading segmentation model: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"Error loading segmentation model: {e}"]))
 
     # 3. Load behavioral features for dynamic model inference
     df_features = await build_segmentation_features(session, tenant_id)
@@ -116,21 +122,21 @@ async def get_customer_persona(
                 "reasoning": reasoning
             }
         except Exception as e:
-            print(f"Error predicting persona using model path: {e}")
+            _module_logger.info(" ".join(str(value) for value in [f"Error predicting persona using model path: {e}"]))
 
     # 5. Fallback Path: Rule-Based Logic
     # Fetch last sale to calculate recency
     last_sale = await session.scalar(
         select(Sale)
-        .where(Sale.customer_id == customer_id)
+        .where(Sale.customer_id == customer_id, Sale.tenant_id == tenant_id)
         .order_by(desc(Sale.timestamp))
         .limit(1)
     )
     if last_sale:
         last_ts = last_sale.timestamp
-        if last_ts.tzinfo is not None:
-            last_ts = last_ts.replace(tzinfo=None)
-        recency_days = float((datetime.utcnow() - last_ts).days)
+        if last_ts.tzinfo is None:
+            last_ts = last_ts.replace(tzinfo=timezone.utc)
+        recency_days = float((utc_now() - last_ts).days)
     else:
         recency_days = 999.0
 

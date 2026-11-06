@@ -85,8 +85,9 @@ async def get_current_user(
     # tenant_id as well so a user lookup can never resolve across tenants.
     result_query = select(User).where(User.email == user_email)
     token_tenant_id = payload.get("tenant_id")
-    if token_tenant_id is not None:
-        result_query = result_query.where(User.tenant_id == token_tenant_id)
+    if type(token_tenant_id) is not int:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    result_query = result_query.where(User.tenant_id == token_tenant_id)
     result = await db.execute(result_query)
     user: Optional[User] = result.scalar_one_or_none()
     
@@ -102,6 +103,23 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive"
         )
+
+    version = payload.get("token_version")
+    if (
+        type(version) is not int or version != user.token_version
+        or ("user_id" in payload and payload["user_id"] != user.id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    password_change_routes = {
+        "/api/v1/auth/change-password", "/api/v1/auth/logout", "/api/v1/auth/me",
+    }
+    if user.must_change_password and request.url.path not in password_change_routes:
+        raise HTTPException(status_code=403, detail="password change required")
     
     # Return user with tenant_id for endpoint use
     # This ensures all operations are scoped to the user's tenant

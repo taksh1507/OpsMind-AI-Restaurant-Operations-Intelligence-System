@@ -1,45 +1,39 @@
 # OpsMind AI - Python Dependencies
 
 # Core Framework
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-gunicorn==21.2.0
-httpx==0.25.2  # HTTP client for async requests (weather API, FX, etc.)
+fastapi==0.151.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+gunicorn==26.2.0
+httpx==0.28.1
 
 # Database
-sqlalchemy==2.0.23
-asyncpg==0.29.0  # PostgreSQL async driver
-aiosqlite==0.19.0  # SQLite async driver (for local dev & testing)
+sqlalchemy==2.0.52
+alembic==1.20.1
+asyncpg==0.32.0
+aiosqlite==0.22.1
+redis==8.1.0
 
 # Authentication & Security
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-argon2-cffi==25.1.0  # Argon2 password hashing backend for passlib
-email-validator==2.1.0
+PyJWT==2.15.1
+argon2-cffi==25.1.0
+bcrypt==5.0.0  # Verify existing bcrypt hashes; new passwords use Argon2id
+email-validator==2.3.0
 
 # Configuration
-pydantic[email]==2.5.0
-pydantic-settings==2.1.0
-python-dotenv==1.0.0
+pydantic[email]==2.14.1
+pydantic-settings==2.16.0
+python-dotenv==1.2.4
 
 # AI & Reasoning
-anthropic>=0.39.0  # Anthropic Claude SDK (primary LLM: claude-opus-4-8)
-# google-generativeai==0.8.6  # Deprecated: replaced by Anthropic Claude
+anthropic==1.15.0
 
 # Data Analytics & ML
-pandas==2.1.4
-apscheduler==3.10.4
-joblib==1.3.2
-scikit-learn==1.3.2
-xgboost==2.0.2
-
-# Development
-black==23.12.0
-flake8==6.1.0
-pytest==7.4.3
-pytest-asyncio==0.21.1
-
-# Optional: LangGraph for agents (future)
-# langgraph==0.0.1
-# langchain==0.1.0
+# Explicit numerical versions retain Python 3.11 deployment compatibility.
+numpy==2.4.6
+scipy==1.17.1
+pandas==3.0.6
+apscheduler==3.11.3
+joblib==1.6.0
+scikit-learn==1.9.1
+xgboost==3.2.0

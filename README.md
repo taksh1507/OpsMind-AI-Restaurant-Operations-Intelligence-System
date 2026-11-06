@@ -19,7 +19,7 @@
 OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and operators to harness data-driven intelligence for real-time operational optimization. Using a multi-tenant architecture, advanced analytics, and autonomous AI agents, we empower restaurants to:
 
 - **Tracks Operations in Real-Time** — Monitor sales, inventory, and staffing with zero latency.
-- **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Gemini provides narrative reasoning.
+- **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Claude provides narrative reasoning.
 - **Generate AI Insights** — Intelligent recommendations for pricing, labor, and menu optimization.
 - **Forecast Revenue** — Predictive analytics for 3-day revenue forecasting.
 - **Optimize Pricing** — Simulate price changes and analyze their impact on margins.
@@ -35,7 +35,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 ### Hybrid AI Intelligence
 - **Revenue Forecaster (XGBoost):** Predicts the next 3 days of sales with confidence scores grounded in statistical trend analysis.
 - **Customer Sentiment Engine (scikit-learn):** Processes customer feedback locally using TF-IDF and Logistic Regression.
-- **Strategy Agent (Gemini 2.0 Flash):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
+- **Strategy Agent (Claude):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
 
 ### "The Pass" Design System
 - **Enterprise-Grade Dashboard:** Next.js frontend featuring the custom "The Pass" design aesthetic.
@@ -51,7 +51,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Backend** | FastAPI (Python) | Async, type-safe, auto-generated OpenAPI documentation |
 | **Database** | PostgreSQL / SQLite | SQLAlchemy 2.0 ORM with async connection pooling (`asyncpg`) |
 | **Auth** | JWT | Secure access token + refresh token pattern |
-| **AI Engine** | XGBoost, scikit-learn, Gemini | ML for forecasting/segmentation, Gemini for strategy narrative |
+| **AI Engine** | XGBoost, scikit-learn, Claude | ML for forecasting/segmentation, Claude for strategy narrative |
 | **Frontend** | Next.js 16, React 19 | App Router, Server Components, TypeScript |
 | **Styling** | Tailwind CSS | Utility-first CSS with a custom dynamic theme |
 | **Data Fetching**| Axios + SWR | Authenticated HTTP client with intelligent client-side caching |
@@ -77,7 +77,7 @@ graph TB
     subgraph IntelligenceLayer [Intelligence Layer]
         XGB["XGBoost (Forecasting)"]
         Sklearn["scikit-learn (Sentiment)"]
-        Gemini["Google Gemini 1.5"]
+        Claude["Anthropic Claude"]
     end
     
     User -->|OAuth/Request| Auth
@@ -121,14 +121,14 @@ The system uses a robust 12-table relational schema. **All tables are strictly s
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install development dependencies (includes runtime packages and test tools)
+pip install -r requirements-dev.txt
 
 # Create database tables and seed demo data
 python scripts/seed_data.py
 
 # Start the API server
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --no-proxy-headers
 ```
 *Visit `http://localhost:8000/docs` for the interactive API documentation.*
 
@@ -162,7 +162,7 @@ DEBUG=True
 ENVIRONMENT=development
 
 # AI/ML APIs
-GEMINI_API_KEY=your-gemini-api-key-here
+ANTHROPIC_API_KEY=your-anthropic-api-key-here
 OPENWEATHER_API_KEY=your-openweather-api-key-here
 
 # Application
@@ -202,6 +202,10 @@ cd frontend && npm run lint
 
 ---
 
+Sales CSV format and retry rules: [import guide](docs/sales-import.md).
+Use **Import sales** in the manager/owner sidebar to download a template and
+upload orders. Real-time configuration: [WebSocket guide](docs/realtime.md).
+
 ## License & Contributing
 
 This project is licensed under the **MIT License** — See the [LICENSE](LICENSE) file for details.
@@ -218,3 +222,12 @@ This project is licensed under the **MIT License** — See the [LICENSE](LICENSE
   <p>Built by <a href="https://github.com/taksh1507">Taksh Gandhi</a></p>
   <p>Contact: taskshgandhi4@gmail.com</p>
 </div>
+
+### Claude configuration
+
+For customer, review, recipe, staffing and waste inputs, see the
+[operational data entry guide](docs/operational-data-entry.md).
+
+Set `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` in the backend environment (see `.env.example`). Tenant AI settings may override the model; Insights displays the configured value. AI analysis requires valid Anthropic credentials.
+
+Sales are stored and reported in INR. Dashboard changes compare equal-length periods; growth is unavailable when the previous period is zero. Gross profit uses current menu costs and excludes operating expenses. Missing tenant model reports return an empty-state response rather than shared sample metrics.

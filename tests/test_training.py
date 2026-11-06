@@ -9,12 +9,11 @@ import shutil
 import json
 import pytest
 from httpx import AsyncClient, ASGITransport
-from fastapi import FastAPI, status
-from sqlalchemy import select
+from fastapi import status
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 from decimal import Decimal
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from app.main import create_app
 from app.database import get_db
@@ -25,7 +24,7 @@ from app.models.user import User, UserRole
 from app.models.menu import Category, MenuItem
 from app.models.customer import Customer
 from app.models.sales import Sale, SaleItem, PaymentMethod
-from app.services.forecast_service import get_cached_predict_fn, generate_forecast_report
+from app.services.forecast_service import generate_forecast_report
 from app.services.persona_engine import get_customer_persona
 
 
@@ -98,6 +97,7 @@ async def test_training_and_versioning_endpoints():
             customers = []
             for i in range(1, 6):
                 cust = Customer(
+                    tenant_id=test_tenant_id,
                     id=test_tenant_id * 10 + i,
                     name=f"Customer {i}",
                     email=f"cust{i}@test999.com",

@@ -20,6 +20,7 @@ export function Layout({ children }: LayoutProps) {
 
   // Initialize WebSocket connection for real-time events
   useWebSocket({
+    enabled: !isAuthPage,
     onNewSale: (data) => {
       console.log('New sale received:', data);
       // Sales data is already handled in hook with toast/sound
@@ -67,7 +68,7 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-4">
             {/* Keyboard Shortcut Hint */}
             <button
-              onClick={() => {}}
+              onClick={() => document.dispatchEvent(new Event('opsmind:open-search'))}
               className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-[3px] bg-surface-2 hover:bg-surface border border-line text-xs text-cream-dim transition-colors"
               aria-label="Open command menu with Ctrl+K"
               title="Press Ctrl+K or Cmd+K to open the command menu"

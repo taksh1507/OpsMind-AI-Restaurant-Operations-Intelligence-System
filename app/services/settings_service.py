@@ -20,26 +20,11 @@ from app.core.config import settings
 from app.models import Tenant, TenantSettings
 
 
-# Curated set of models an owner may select. Labels/descriptions are shown in
-# the Settings dropdown. The configured default model is always merged in (see
-# available_models) so the known-working model is never missing from the list.
-_CURATED_MODELS: list[dict] = [
-    {
-        "id": "claude-opus-4-8",
-        "label": "Claude Opus 4.8",
-        "description": "Most capable — deepest operational analysis (default).",
-    },
-    {
-        "id": "claude-sonnet-5",
-        "label": "Claude Sonnet 5",
-        "description": "Balanced speed and capability for everyday insights.",
-    },
-    {
-        "id": "claude-haiku-4-5-20251001",
-        "label": "Claude Haiku 4.5",
-        "description": "Fastest and most economical for high-volume use.",
-    },
-]
+_MODEL_DESCRIPTIONS = {
+    "claude-opus-4-8": ("Claude Opus 4.8", "Most capable model for deep operational analysis."),
+    "claude-sonnet-5": ("Claude Sonnet 5", "Balanced speed and capability for everyday insights."),
+    "claude-haiku-4-5-20251001": ("Claude Haiku 4.5", "Fast, economical model for high-volume use."),
+}
 
 
 def _default_model() -> str:
@@ -50,12 +35,16 @@ def _default_model() -> str:
 def available_models() -> list[dict]:
     """Return the selectable models, guaranteeing the configured default is present.
 
-    The deployed Anthropic-compatible endpoint may only serve a subset of these;
-    the configured default is known-working, so it is always offered (and moved
-    to the front) even if it isn't in the curated list.
+    ANTHROPIC_AVAILABLE_MODELS controls the selectable list. The configured
+    process default is included and moved to the front if it is absent.
     """
     default_id = _default_model()
-    models = [dict(m) for m in _CURATED_MODELS]
+    models = []
+    for model_id in settings.anthropic_available_models:
+        label, description = _MODEL_DESCRIPTIONS.get(
+            model_id, (model_id, "Configured Anthropic model.")
+        )
+        models.append({"id": model_id, "label": label, "description": description})
     if not any(m["id"] == default_id for m in models):
         models.insert(
             0,

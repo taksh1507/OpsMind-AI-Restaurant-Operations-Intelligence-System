@@ -8,7 +8,7 @@ Day 16: Caching & Optimization Layer
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from sqlalchemy import String, JSON, DateTime, Integer, func, Index
+from sqlalchemy import String, JSON, DateTime, Integer, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import BaseModel
 

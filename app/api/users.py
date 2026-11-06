@@ -11,7 +11,9 @@ Mutations are OWNER-only to keep account creation and permission changes in the
 owner's hands (the product's "owner creates staff and their access" model).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from app.core.errors import safe_error_detail
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -30,11 +32,13 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("", response_model=list[TeamMemberResponse])
 async def list_team(
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """List everyone on the current tenant's team (owner + managers can view)."""
-    return await user_service.list_team_members(db, current_user.tenant_id)
+    return await user_service.list_team_members(db, current_user.tenant_id, limit=limit, offset=offset)
 
 
 @router.post(
@@ -60,9 +64,9 @@ async def create_team_member(
             role=request.role,
             temp_password=request.temp_password,
         )
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
     return CreateTeamMemberResponse(
         member=TeamMemberResponse.model_validate(member),
@@ -86,9 +90,9 @@ async def update_team_member(
             role=request.role,
             is_active=request.is_active,
         )
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
 
 
@@ -101,7 +105,7 @@ async def delete_team_member(
     """Remove a teammate from the tenant (owner only)."""
     try:
         await user_service.delete_team_member(db, current_user, user_id)
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )

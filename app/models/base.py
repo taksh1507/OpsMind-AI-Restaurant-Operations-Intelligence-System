@@ -3,10 +3,10 @@
 Provides the declarative base for all ORM models with async support.
 """
 
+from app.core.time_utils import utc_now
+
 from datetime import datetime
-from typing import Optional
 from sqlalchemy import DateTime, func
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
 
 # Declarative base for all models
@@ -21,13 +21,13 @@ class BaseModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False
     )

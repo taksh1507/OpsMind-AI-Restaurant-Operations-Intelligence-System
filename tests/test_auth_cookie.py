@@ -8,7 +8,6 @@ A minimal app (auth router only) is used so the real app's lifespan — which
 starts the scheduler and hits external services — is never triggered.
 """
 
-import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
 
@@ -61,7 +60,6 @@ async def test_refresh_reads_cookie_and_rotates(db_session):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         reg = await client.post("/api/v1/auth/register", json=_register_payload())
         assert reg.status_code == 201
-        first_access = reg.json()["access_token"]
         # The client cookie jar now holds the refresh cookie set by register.
         assert settings.refresh_cookie_name in client.cookies
 

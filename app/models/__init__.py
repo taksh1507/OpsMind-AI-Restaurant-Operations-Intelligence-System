@@ -25,6 +25,7 @@ from .staff import Staff, Shift, StaffRole
 from .recommendation import Recommendation, RecommendationCategory, RecommendationStatus
 from .aicache import AICache
 from .ai_usage import AIUsage
+from .ai_usage_budget import AIUsageBudget
 from .refresh_token import RefreshToken
 from .schemas import (
     RegisterRequest,
@@ -37,6 +38,7 @@ from .schemas import (
 from .customer_schema import CustomerSchema
 
 __all__ = [
+    "ImportedOrder",
     "Base",
     "BaseModel",
     "Tenant",
@@ -62,6 +64,7 @@ __all__ = [
     "RecommendationStatus",
     "AICache",
     "AIUsage",
+    "AIUsageBudget",
     "RefreshToken",
     "RegisterRequest",
     "LoginRequest",
@@ -70,3 +73,4 @@ __all__ = [
     "TokenResponse",
     "RegisterResponse",
 ]
+from .imported_order import ImportedOrder

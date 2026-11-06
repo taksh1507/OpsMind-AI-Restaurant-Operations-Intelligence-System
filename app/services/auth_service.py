@@ -9,11 +9,29 @@ import re
 import random
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, update
 
 from app.models import Tenant, User, RefreshToken, SubscriptionStatus, UserRole
 from app.core import hash_password, verify_password, create_access_token, create_refresh_token
 from app.models.schemas import RegisterRequest
+from app.core.security import decode_refresh_token
+
+
+# One real Argon2 verification is performed even for an unknown account.
+_DUMMY_PASSWORD_HASH = hash_password("dummy-password-never-used-for-authentication")
+
+
+async def revoke_all_sessions(session: AsyncSession, user: User) -> None:
+    """Invalidate access and refresh tokens atomically with the caller's change."""
+    await session.execute(
+        update(User).where(User.id == user.id, User.tenant_id == user.tenant_id)
+        .values(token_version=User.token_version + 1)
+        .execution_options(synchronize_session="fetch")
+    )
+    await session.execute(
+        update(RefreshToken).where(RefreshToken.user_id == user.id)
+        .values(revoked=True, revoked_at=datetime.now(timezone.utc))
+    )
 
 
 def _slugify(text: str) -> str:
@@ -87,6 +105,7 @@ async def issue_token_pair(
             "user_id": user.id,
             "tenant_id": user.tenant_id,
             "role": user.role.value,
+            "token_version": user.token_version,
         }
     )
 
@@ -96,6 +115,7 @@ async def issue_token_pair(
             "user_id": user.id,
             "tenant_id": user.tenant_id,
             "role": user.role.value,
+            "token_version": user.token_version,
         }
     )
 
@@ -207,10 +227,10 @@ async def authenticate_user(
     """
     user = await get_user_by_email(session, email)
     
-    if user is None or not user.is_active:
-        return None
-    
-    if not verify_password(password, user.hashed_password):
+    valid_password = verify_password(
+        password, user.hashed_password if user is not None else _DUMMY_PASSWORD_HASH
+    )
+    if user is None or not user.is_active or not valid_password:
         return None
     
     return user
@@ -240,6 +260,9 @@ async def refresh_access_token(
     Raises:
         ValueError: If the token is invalid, revoked, expired, or user inactive
     """
+    claims = decode_refresh_token(raw_refresh_token)
+    if claims is None:
+        raise ValueError("Invalid refresh token")
     token_row = (
         await session.execute(
             select(RefreshToken).where(
@@ -264,14 +287,34 @@ async def refresh_access_token(
         raise ValueError("Refresh token has expired")
 
     user = (
-        await session.execute(select(User).where(User.id == token_row.user_id))
+        await session.execute(
+            select(User).where(User.id == token_row.user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        )
     ).scalar_one_or_none()
 
     if user is None or not user.is_active:
         raise ValueError("User account is inactive or missing")
 
+    version = claims.get("token_version")
+    if (
+        type(version) is not int or version != user.token_version
+        or claims.get("tenant_id") != user.tenant_id
+        or claims.get("user_id") != user.id
+    ):
+        raise ValueError("Invalid refresh token")
+
     # Rotate: revoke the used token and issue a fresh pair
-    await revoke_refresh_token(session, raw_refresh_token)
+    # Conditional update prevents two concurrent refreshes from both rotating
+    # the same token. Keep the user lock until the new pair commits.
+    revoked = await session.execute(
+        update(RefreshToken).where(
+            RefreshToken.id == token_row.id, RefreshToken.revoked.is_(False)
+        ).values(revoked=True, revoked_at=now)
+        .execution_options(synchronize_session="fetch")
+    )
+    if revoked.rowcount != 1:
+        raise ValueError("Invalid refresh token")
 
     access_token, new_refresh_token = await issue_token_pair(session, user)
     await session.commit()

@@ -1,199 +1,126 @@
-"""WebSocket Endpoints for Real-Time Event Notifications
+"""Authenticate in the first frame, never in a URL; release the DB immediately."""
 
-Day 26: The Real-Time Event Engine
-
-Provides WebSocket endpoints for real-time communication with restaurants.
-Handles authentication, connection pooling, and message broadcasting.
-"""
-
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-import logging
+import asyncio
 import json
+import logging
+import time
 
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+
+from app.api.deps import get_current_manager
+from app.api.ws_manager import connection_manager
+from app.core.config import settings
+from app.core.security import decode_access_token
 from app.database import get_db
 from app.models import User
-from app.api.ws_manager import connection_manager
-from app.core.security import decode_access_token
 
 logger = logging.getLogger(__name__)
-
-router = APIRouter(prefix="/ws", tags=["🔌 WebSocket Real-Time"])
-
-
-async def get_current_user_from_ws(websocket: WebSocket) -> User:
-    """
-    Extract and validate JWT token from WebSocket connection.
-    
-    WebSocket connections include query parameter: ?token=<jwt>
-    
-    Args:
-        websocket: WebSocket connection
-        
-    Returns:
-        User object if valid
-        
-    Raises:
-        Exception: If token invalid or user not found
-    """
-    token = websocket.query_params.get("token")
-    
-    if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="No token provided")
-        raise Exception("No token provided")
-    
-    # Decode JWT
-    payload = decode_access_token(token)
-    if not payload:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
-        raise Exception("Invalid token")
-    
-    user_email = payload.get("sub")
-    if not user_email:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
-        raise Exception("Invalid token")
-    
-    return user_email
+router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 
-@router.websocket("/ws")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Main WebSocket endpoint for real-time event notifications.
-    
-    Connection Flow:
-    1. Client connects with JWT token in query params: ws://localhost:8000/ws?token=<jwt>
-    2. Server validates token and extracts user
-    3. Server looks up user and gets tenant_id
-    4. Server adds connection to tenant's connection pool
-    5. Server sends confirmation message
-    6. Client receives real-time events for its tenant
-    7. On disconnect or error, connection is removed from pool
-    
-    Real-Time Events Broadcast:
-    - NEW_ORDER: New order created
-    - NEW_SALE: Payment processed
-    - TABLE_STATUS: Table status changed
-    - STAFF_ALERT: General staff notification
-    - SYSTEM_EVENT: System-level events
-    
-    Multi-Tenant Isolation:
-    - Each WebSocket is associated with a tenant_id
-    - Only events for that tenant are sent
-    - No cross-restaurant data leakage
-    
-    Usage (Frontend):
-    ```typescript
-    const ws = new WebSocket(`ws://localhost:8000/ws?token=${jwtToken}`);
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.event === 'NEW_ORDER') {
-            showToastNotification(`New order: ₹${data.amount}`);
-            playSound('ding.mp3');
-        }
-    };
-    ```
-    """
-    
-    user_email = None
-    tenant_id = None
-    
+async def authenticate(token):
+    claims = decode_access_token(token)
+    if (
+        not claims
+        or type(claims.get("token_version")) is not int
+        or type(claims.get("tenant_id")) is not int
+    ):
+        return None
+    sessions = get_db()
     try:
-        # Step 1: Authenticate user from token
-        user_email = await get_current_user_from_ws(websocket)
-        logger.info(f"WebSocket auth user: {user_email}")
-        
-        # Step 2: Look up user in database to get tenant_id
-        from sqlalchemy import select
-        result = await db.execute(
-            select(User).where(User.email == user_email)
+        db = await anext(sessions)
+        user = await db.scalar(
+            select(User).where(
+                User.email == claims.get("sub"), User.tenant_id == claims["tenant_id"]
+            )
         )
-        user = result.scalar_one_or_none()
-        
-        if not user:
-            await websocket.close(
-                code=status.WS_1008_POLICY_VIOLATION,
-                reason="User not found"
-            )
-            return
-        
-        if not user.is_active:
-            await websocket.close(
-                code=status.WS_1008_POLICY_VIOLATION,
-                reason="User account inactive"
-            )
-            return
-        
-        tenant_id = user.tenant_id
-        
-        # Step 3: Register connection with ConnectionManager
-        await connection_manager.connect(websocket, tenant_id)
-        
-        # Step 4: Send welcome message
-        await websocket.send_json({
-            "event": "CONNECTED",
-            "message": f"Connected to real-time notifications for tenant {tenant_id}",
-            "tenant_id": tenant_id,
-            "user": user_email
-        })
-        
-        logger.info(f"✅ WebSocket connected: {user_email} (tenant {tenant_id})")
-        
-        # Step 5: Keep connection open and listen for messages
-        # (Most real-time use cases are server → client only, but we can accept
-        # client messages for ping/pong or client-side events if needed)
-        while True:
-            try:
-                data = await websocket.receive_text()
-                
-                # Handle client-side pings or other events
-                if data == "ping":
-                    await websocket.send_json({"event": "pong"})
-                    logger.debug(f"Ping from {user_email}")
-                else:
-                    # Could implement client-initiated events here
-                    logger.debug(f"Received from {user_email}: {data}")
-            
-            except WebSocketDisconnect:
-                break
-    
-    except WebSocketDisconnect:
-        logger.info(f"Client disconnected: {user_email}")
-    
-    except Exception as e:
-        logger.error(f"WebSocket error: {str(e)}")
-    
+        if (
+            not user
+            or not user.is_active
+            or user.must_change_password
+            or user.token_version != claims["token_version"]
+        ):
+            return None
+        return (user.tenant_id, user.id, claims["exp"])
     finally:
-        # Step 6: Clean up connection
-        if tenant_id is not None:
-            connection_manager.disconnect(websocket, tenant_id)
-            logger.info(f"❌ WebSocket cleanup: {user_email} (tenant {tenant_id})")
-            logger.debug(f"Connection stats: {connection_manager.get_connection_count()}")
+        await sessions.aclose()
 
 
-@router.get("/ws/stats")
-async def get_websocket_stats(
-    user: User = Depends(__import__("app.api.deps", fromlist=["get_current_user"]).get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get WebSocket connection statistics (admin only).
-    
-    Returns connection counts per tenant for monitoring.
-    Useful for debugging or showing live user counts.
-    """
-    stats = connection_manager.get_connection_count()
-    
-    # If not admin, only return stats for user's tenant
-    if user.role != "owner":  # Assuming 'owner' is admin role
-        tenant_stats = connection_manager.get_connection_count(user.tenant_id)
-        return {
-            "your_connections": tenant_stats["connections"],
-            "total_system": f"Contact support for system stats"
-        }
-    
-    return stats
+async def receive(websocket, timeout):
+    message = await asyncio.wait_for(websocket.receive(), timeout)
+    if message["type"] == "websocket.disconnect":
+        raise WebSocketDisconnect(message.get("code", 1000))
+    text = message.get("text")
+    if text is None or len(text.encode("utf-8")) > settings.ws_max_message_bytes:
+        await websocket.close(code=1009)
+        raise WebSocketDisconnect(1009)
+    return text
+
+
+@router.websocket("")
+async def websocket_endpoint(websocket: WebSocket):
+    if (
+        websocket.headers.get("origin") not in settings.cors_origins
+        or websocket.query_params
+    ):
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+    try:
+        frame = json.loads(await receive(websocket, settings.ws_auth_timeout_seconds))
+        if (
+            not isinstance(frame, dict)
+            or frame.get("event") != "AUTH"
+            or not isinstance(frame.get("token"), str)
+        ):
+            await websocket.close(code=1008)
+            return
+        identity = await authenticate(frame["token"])
+        if identity is None:
+            await websocket.close(code=1008)
+            return
+        tenant_id, user_id, expires = identity
+        if not await connection_manager.connect(websocket, tenant_id, user_id):
+            return
+        if not await connection_manager.send(
+            websocket, {"event": "CONNECTED", "data": {"tenant_id": tenant_id}}
+        ):
+            return
+        while True:
+            remaining = expires - time.time()
+            if remaining <= 0:
+                await websocket.close(code=4001)
+                return
+            try:
+                text = await receive(
+                    websocket, min(settings.ws_idle_timeout_seconds, remaining)
+                )
+            except TimeoutError:
+                await websocket.close(code=4001 if time.time() >= expires else 1008)
+                return
+            if text != "ping":
+                await websocket.close(code=1008)
+                return
+            if not await connection_manager.touch(websocket):
+                return
+            if not await connection_manager.send(
+                websocket, {"event": "PONG", "data": {}}
+            ):
+                return
+    except (ValueError, TypeError):
+        await websocket.close(code=1008)
+    except TimeoutError:
+        await websocket.close(code=1008)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.exception("Realtime connection failed")
+        await connection_manager._close(websocket, 1013)
+    finally:
+        await connection_manager.disconnect(websocket)
+
+
+@router.get("/stats")
+async def get_websocket_stats(user: User = Depends(get_current_manager)):
+    return connection_manager.get_connection_count(user.tenant_id)

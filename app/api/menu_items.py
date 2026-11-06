@@ -4,10 +4,9 @@ Handles CRUD operations for menu items with cross-tenant security validation.
 Uses get_current_user dependency to ensure tenant isolation.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from decimal import Decimal
 
 from app.database import get_db
 from app.api.deps import get_current_user, get_current_manager
@@ -99,11 +98,7 @@ async def create_menu_item(
     
     # CRITICAL: Verify category belongs to user's tenant
     # This prevents Restaurant A from adding items to Restaurant B's categories
-    category = await verify_category_ownership(
-        request.category_id,
-        current_user,
-        db
-    )
+    await verify_category_ownership(request.category_id, current_user, db)
     
     try:
         # Create new menu item scoped to user's tenant
@@ -123,11 +118,11 @@ async def create_menu_item(
         
         return new_item
     
-    except Exception as e:
+    except Exception:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create menu item"
+            detail=safe_error_detail()
         )
 
 
@@ -135,6 +130,8 @@ async def create_menu_item(
 async def list_menu_items(
     category_id: int | None = None,
     include_unavailable: bool = False,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -179,17 +176,17 @@ async def list_menu_items(
         
         query = query.order_by(MenuItem.created_at)
         
-        result = await db.execute(query)
+        result = await db.execute(query.limit(limit).offset(offset))
         items = result.scalars().all()
         
         return items
     
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve menu items"
+            detail=safe_error_detail()
         )
 
 
@@ -238,10 +235,10 @@ async def get_menu_item(
     
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve menu item"
+            detail=safe_error_detail()
         )
 
 
@@ -324,11 +321,11 @@ async def update_menu_item(
     
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update menu item"
+            detail=safe_error_detail()
         )
 
 
@@ -379,9 +376,11 @@ async def delete_menu_item(
     
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete menu item"
+            detail=safe_error_detail()
         )
+
+from app.core.errors import safe_error_detail

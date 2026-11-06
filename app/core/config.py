@@ -6,10 +6,10 @@ Use a .env file for local development.
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field, ConfigDict, model_validator
-from typing import Optional
+from pydantic import Field, ConfigDict, field_validator, model_validator
+from typing import Literal, Optional
 from decimal import Decimal
-import os
+from ipaddress import ip_network
 
 
 class Settings(BaseSettings):
@@ -34,12 +34,42 @@ class Settings(BaseSettings):
         default="HS256", description="Algorithm for JWT token encoding"
     )
     access_token_expire_minutes: int = Field(
-        default=1440,  # 24 hours
+        default=15,
         description="Expiration time for access tokens in minutes",
     )
     refresh_token_expire_days: int = Field(
         default=30, description="Expiration time for refresh tokens in days"
     )
+    trusted_proxies: list[str] = Field(default_factory=list)
+    redis_url: Optional[str] = None
+    rate_limit_max_keys: int = Field(default=10000, ge=10)
+    web_concurrency: int = Field(default=1, ge=1)
+    run_scheduler: bool = False
+    migrate_on_startup: bool = True
+    db_pool_size: int = Field(default=10, ge=1)
+    db_max_overflow: int = Field(default=20, ge=0)
+    db_pool_timeout: int = Field(default=30, ge=1)
+    ws_max_connections_per_tenant: int = Field(default=100, ge=1, le=10000)
+    ws_max_connections_per_user: int = Field(default=5, ge=1, le=100)
+    ws_max_message_bytes: int = Field(default=4096, ge=256, le=65536)
+    ws_idle_timeout_seconds: float = Field(default=60, ge=1)
+    ws_auth_timeout_seconds: float = Field(default=5, ge=1)
+    ws_send_timeout_seconds: float = Field(default=3, gt=0)
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def validate_trusted_proxies(cls, values):
+        for value in values:
+            ip_network(value, strict=False)
+        return values
+
+    @field_validator("anthropic_available_models")
+    @classmethod
+    def validate_available_models(cls, values):
+        models = [value.strip() for value in values if value.strip()]
+        if len(models) != len(values) or len(set(models)) != len(models):
+            raise ValueError("ANTHROPIC_AVAILABLE_MODELS must contain unique, non-empty model IDs.")
+        return models
 
     # ===== REFRESH-TOKEN COOKIE (httpOnly) =====
     # The refresh token is delivered to the browser only as an httpOnly cookie so
@@ -73,7 +103,7 @@ class Settings(BaseSettings):
     debug: bool = Field(
         default=False, description="Debug mode - set to False in production"
     )
-    environment: str = Field(
+    environment: Literal["development", "staging", "production"] = Field(
         default="development",
         description="Environment: development, staging, production",
     )
@@ -105,6 +135,19 @@ class Settings(BaseSettings):
         default="claude-opus-4-8",
         description="Anthropic model ID used by the AI agent (set via ANTHROPIC_MODEL).",
     )
+    anthropic_timeout_seconds: float = Field(default=40, gt=0, le=100)
+    anthropic_max_retries: int = Field(default=1, ge=0, le=5)
+    anthropic_available_models: list[str] = Field(
+        default_factory=lambda: [
+            "claude-opus-4-8",
+            "claude-sonnet-5",
+            "claude-haiku-4-5-20251001",
+        ]
+    )
+    ai_request_token_reservation: int = Field(default=24576, ge=1)
+    ai_max_input_characters: int = Field(default=48000, ge=1000, le=200000)
+    ai_untrusted_text_max_characters: int = Field(default=5000, ge=100, le=50000)
+    ai_max_output_tokens: int = Field(default=2048, ge=64, le=8192)
 
     # Per-tenant monthly AI spend guardrail (Phase 4). Counts input+output tokens
     # across ALL AI features for a restaurant within the current UTC month. When a
@@ -164,32 +207,46 @@ class Settings(BaseSettings):
         Runs automatically on Settings instantiation (i.e. on import), so a
         forgotten SECRET_KEY can never silently reach staging or production.
         """
-        env = self.environment or "development"
-        if env != "development":
-            if self.secret_key == "dev-only-change-in-production":
+        self.validate_production_settings()
+        return self
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def normalize_environment(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+    def validate_production_settings(self):
+        """Fail at configuration loading and startup when defaults are unsafe."""
+        if self.web_concurrency > 1 and not self.redis_url:
+            raise ValueError("REDIS_URL is required when WEB_CONCURRENCY is greater than 1.")
+        if self.run_scheduler and self.web_concurrency != 1:
+            raise ValueError("RUN_SCHEDULER=true requires WEB_CONCURRENCY=1; run one dedicated scheduler process.")
+        if self.environment != "development":
+            secret = self.secret_key.strip()
+            if secret == "dev-only-change-in-production" or len(secret) < 32:
                 raise ValueError(
-                    "SECRET_KEY must be overridden outside of development. "
-                    "Refusing to start with the default dev secret."
+                    "SECRET_KEY must be non-empty, at least 32 characters, "
+                    "and different from the development default outside development."
                 )
-            if not self.anthropic_credentials_present and not self.debug:
+        if self.environment == "production":
+            if not self.cookie_secure:
+                raise ValueError("COOKIE_SECURE must be true in production (HTTPS required).")
+            if (
+                "cors_origins" not in self.model_fields_set
+                or not self.cors_origins
+                or any(not origin.strip() or "*" in origin for origin in self.cors_origins)
+            ):
+                raise ValueError(
+                    "CORS_ORIGINS must be explicitly configured with non-empty, "
+                    "non-wildcard origins in production."
+                )
+        if self.environment != "development":
+            if not self.anthropic_credentials_present and (
+                self.environment == "production" or not self.debug
+            ):
                 raise ValueError(
                     "Anthropic credentials must be set in a non-development "
                     "environment (set ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY)."
-                )
-        return self
-
-    def validate_production_settings(self):
-        """Validate that all critical secrets are set in production."""
-        if self.environment == "production":
-            missing_secrets = []
-            if self.secret_key == "dev-only-change-in-production":
-                missing_secrets.append("SECRET_KEY")
-            if not self.anthropic_credentials_present:
-                missing_secrets.append("ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY")
-
-            if missing_secrets:
-                raise ValueError(
-                    f"Production environment requires these secrets to be set: {', '.join(missing_secrets)}"
                 )
 
     model_config = ConfigDict(
@@ -202,7 +259,3 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
-
-# Validate production settings on app startup
-if os.getenv("ENVIRONMENT", "development") == "production":
-    settings.validate_production_settings()

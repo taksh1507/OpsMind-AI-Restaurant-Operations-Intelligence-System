@@ -13,7 +13,7 @@ import asyncio
 from app.ml.train_forecast import train_model
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def trained_model_path():
     model_path = os.path.join("models", "1", "forecast_v1.pkl")
     csv_path = os.path.join("tests", "data", "kaggle_restaurant_sales.csv")

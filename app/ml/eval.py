@@ -4,6 +4,9 @@ Provides standalone evaluation of forecasting methods against date-based holdout
 splits. Defines score_model, compute_naive_baseline, and an evaluation runner.
 """
 
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 import os
 import asyncio
 import argparse
@@ -62,10 +65,10 @@ async def evaluate_baselines(csv_path: str):
         csv_path: Path to the Kaggle sales CSV dataset
     """
     if not os.path.exists(csv_path):
-        print(f"Error: CSV file not found at: {csv_path}")
+        _module_logger.info(" ".join(str(value) for value in [f"Error: CSV file not found at: {csv_path}"]))
         return
 
-    print("Initializing in-memory database...")
+    _module_logger.info(" ".join(str(value) for value in ["Initializing in-memory database..."]))
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         poolclass=StaticPool,
@@ -80,7 +83,7 @@ async def evaluate_baselines(csv_path: str):
     )
     
     async with async_session() as session:
-        print("Seeding database with restaurant sales history...")
+        _module_logger.info(" ".join(str(value) for value in ["Seeding database with restaurant sales history..."]))
         # 1. Create Tenant
         tenant = Tenant(
             id=1,
@@ -121,13 +124,13 @@ async def evaluate_baselines(csv_path: str):
                 
         await session.commit()
         
-        print("Running feature engineering pipeline...")
+        _module_logger.info(" ".join(str(value) for value in ["Running feature engineering pipeline..."]))
         df = await build_training_frame(tenant_id=1, session=session)
         
     await engine.dispose()
     
     if df.empty:
-        print("Error: Feature engineering pipeline returned no data.")
+        _module_logger.info(" ".join(str(value) for value in ["Error: Feature engineering pipeline returned no data."]))
         return
 
     # Perform evaluation grouping by menu item
@@ -136,13 +139,13 @@ async def evaluate_baselines(csv_path: str):
     all_lr_preds = []
     
     items = sorted(df["item_id"].unique())
-    print(f"Evaluating across {len(items)} menu items over the last 14 days...")
+    _module_logger.info(" ".join(str(value) for value in [f"Evaluating across {len(items)} menu items over the last 14 days..."]))
     
     for item_id in items:
         item_df = df[df["item_id"] == item_id].sort_values("date").reset_index(drop=True)
         
         if len(item_df) <= 14:
-            print(f"Warning: Item {item_id} has only {len(item_df)} rows. Skipping.")
+            _module_logger.info(" ".join(str(value) for value in [f"Warning: Item {item_id} has only {len(item_df)} rows. Skipping."]))
             continue
             
         train_size = len(item_df) - 14
@@ -170,18 +173,18 @@ async def evaluate_baselines(csv_path: str):
     lr_mae, lr_rmse = score_model(all_y_true, all_lr_preds)
     
     # Print comparison table
-    print("\n" + "=" * 55)
-    print("              FORECASTER BASELINE EVALUATION")
-    print("=" * 55)
-    print(f"Dataset Source:     {csv_path}")
-    print(f"Holdout Split:      Last 14 days per item")
-    print(f"Total Test Samples: {len(all_y_true)} rows")
-    print("-" * 55)
-    print(f"{'Evaluation Method':<25} | {'MAE':<12} | {'RMSE':<12}")
-    print("-" * 55)
-    print(f"{'Naive (Lag 7)':<25} | {naive_mae:<12.2f} | {naive_rmse:<12.2f}")
-    print(f"{'Linear Regression':<25} | {lr_mae:<12.2f} | {lr_rmse:<12.2f}")
-    print("=" * 55 + "\n")
+    _module_logger.info(" ".join(str(value) for value in ["\n" + "=" * 55]))
+    _module_logger.info(" ".join(str(value) for value in ["              FORECASTER BASELINE EVALUATION"]))
+    _module_logger.info(" ".join(str(value) for value in ["=" * 55]))
+    _module_logger.info(" ".join(str(value) for value in [f"Dataset Source:     {csv_path}"]))
+    _module_logger.info(" ".join(str(value) for value in ["Holdout Split:      Last 14 days per item"]))
+    _module_logger.info(" ".join(str(value) for value in [f"Total Test Samples: {len(all_y_true)} rows"]))
+    _module_logger.info(" ".join(str(value) for value in ["-" * 55]))
+    _module_logger.info(" ".join(str(value) for value in [f"{'Evaluation Method':<25} | {'MAE':<12} | {'RMSE':<12}"]))
+    _module_logger.info(" ".join(str(value) for value in ["-" * 55]))
+    _module_logger.info(" ".join(str(value) for value in [f"{'Naive (Lag 7)':<25} | {naive_mae:<12.2f} | {naive_rmse:<12.2f}"]))
+    _module_logger.info(" ".join(str(value) for value in [f"{'Linear Regression':<25} | {lr_mae:<12.2f} | {lr_rmse:<12.2f}"]))
+    _module_logger.info(" ".join(str(value) for value in ["=" * 55 + "\n"]))
 
 
 if __name__ == "__main__":

@@ -5,6 +5,9 @@ to ensure stability and prevent performance degradation over time.
 Writes final report to reports/backtest.csv.
 """
 
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 import os
 import asyncio
 import argparse
@@ -43,13 +46,13 @@ async def run_backtest(
         tuple of (results_df, mean_mae, std_mae, passed_stability)
     """
     if session is not None:
-        print("Extracting full feature set from active DB session...")
+        _module_logger.info(" ".join(str(value) for value in ["Extracting full feature set from active DB session..."]))
         df = await build_training_frame(tenant_id=tenant_id, session=session)
     else:
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"CSV file not found at: {csv_path}")
 
-        print("Initializing backtest database...")
+        _module_logger.info(" ".join(str(value) for value in ["Initializing backtest database..."]))
         engine = create_async_engine(
             "sqlite+aiosqlite:///:memory:",
             poolclass=StaticPool,
@@ -64,7 +67,7 @@ async def run_backtest(
         )
         
         async with async_session() as temp_session:
-            print("Seeding database...")
+            _module_logger.info(" ".join(str(value) for value in ["Seeding database..."]))
             tenant = Tenant(
                 id=tenant_id,
                 tenant_id=f"restaurant-{tenant_id}",
@@ -103,7 +106,7 @@ async def run_backtest(
                     
             await temp_session.commit()
             
-            print("Extracting full feature set...")
+            _module_logger.info(" ".join(str(value) for value in ["Extracting full feature set..."]))
             df = await build_training_frame(tenant_id=tenant_id, session=temp_session)
             
         await engine.dispose()
@@ -127,7 +130,7 @@ async def run_backtest(
     
     backtest_records = []
     
-    print(f"Starting rolling-window backtest for the last {num_weeks} weeks...")
+    _module_logger.info(" ".join(str(value) for value in [f"Starting rolling-window backtest for the last {num_weeks} weeks..."]))
     # Loop over each week (counting backwards: 1 is the most recent week, up to num_weeks)
     for i in range(num_weeks, 0, -1):
         # Define train/test split boundary
@@ -138,7 +141,7 @@ async def run_backtest(
         test_df = df[(df["date"] > start_test_date) & (df["date"] <= end_test_date)]
         
         if train_df.empty or test_df.empty:
-            print(f"Warning: Week {i} has empty train or test split. Skipping.")
+            _module_logger.info(" ".join(str(value) for value in [f"Warning: Week {i} has empty train or test split. Skipping."]))
             continue
             
         # Target variables
@@ -227,31 +230,31 @@ def main():
     )
     
     # Print week-by-week comparison table
-    print("\n" + "=" * 90)
-    print("                     ROLLING-WINDOW BACKTEST REPORT")
-    print("=" * 90)
-    print(f"{'Week':<4} | {'Start Date':<10} | {'End Date':<10} | "
+    _module_logger.info(" ".join(str(value) for value in ["\n" + "=" * 90]))
+    _module_logger.info(" ".join(str(value) for value in ["                     ROLLING-WINDOW BACKTEST REPORT"]))
+    _module_logger.info(" ".join(str(value) for value in ["=" * 90]))
+    _module_logger.info(" ".join(str(value) for value in [f"{'Week':<4} | {'Start Date':<10} | {'End Date':<10} | "
           f"{'Naive MAE':<10} | {'LR MAE':<10} | {'XGB MAE':<10} | "
-          f"{'XGB RMSE':<10}")
-    print("-" * 90)
+          f"{'XGB RMSE':<10}"]))
+    _module_logger.info(" ".join(str(value) for value in ["-" * 90]))
     for _, row in results_df.iterrows():
-        print(f"{int(row['week_idx']):<4} | {row['start_date']:<10} | {row['end_date']:<10} | "
+        _module_logger.info(" ".join(str(value) for value in [f"{int(row['week_idx']):<4} | {row['start_date']:<10} | {row['end_date']:<10} | "
               f"{row['naive_mae']:<10.2f} | {row['lr_mae']:<10.2f} | {row['xgb_mae']:<10.2f} | "
-              f"{row['xgb_rmse']:<10.2f}")
-    print("-" * 90)
-    print(f"XGB MAE Mean:     {mean_mae:.2f}")
-    print(f"XGB MAE Std Dev:  {std_mae:.2f}")
+              f"{row['xgb_rmse']:<10.2f}"]))
+    _module_logger.info(" ".join(str(value) for value in ["-" * 90]))
+    _module_logger.info(" ".join(str(value) for value in [f"XGB MAE Mean:     {mean_mae:.2f}"]))
+    _module_logger.info(" ".join(str(value) for value in [f"XGB MAE Std Dev:  {std_mae:.2f}"]))
     ratio = std_mae / mean_mae
-    print(f"Stability Ratio:  {ratio:.4f} (Threshold < 0.2000)")
+    _module_logger.info(" ".join(str(value) for value in [f"Stability Ratio:  {ratio:.4f} (Threshold < 0.2000)"]))
     status = "PASSED" if passed_stability else "FAILED"
-    print(f"Stability Check:  {status}")
-    print("=" * 90)
+    _module_logger.info(" ".join(str(value) for value in [f"Stability Check:  {status}"]))
+    _module_logger.info(" ".join(str(value) for value in ["=" * 90]))
     
     # Save output to reports/backtest.csv
     os.makedirs("reports", exist_ok=True)
     report_path = os.path.join("reports", "backtest.csv")
     results_df.to_csv(report_path, index=False)
-    print(f"Saved rolling-window backtest report to: {report_path}\n")
+    _module_logger.info(" ".join(str(value) for value in [f"Saved rolling-window backtest report to: {report_path}\n"]))
 
 
 if __name__ == "__main__":

@@ -16,7 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import hash_password, verify_password
-from app.models import User, UserRole, RefreshToken
+from app.models import User, UserRole
+from app.services.auth_service import revoke_all_sessions
 
 # Ambiguity-free alphabet (no O/0, I/l/1) so temp passwords are easy to read out.
 _TEMP_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
@@ -41,13 +42,14 @@ async def _get_tenant_user(
 
 
 async def list_team_members(
-    session: AsyncSession, tenant_id: int
+    session: AsyncSession, tenant_id: int, *, limit: int = 100, offset: int = 0
 ) -> Sequence[User]:
     """Return every user in the tenant, oldest first (owner appears too)."""
     result = await session.execute(
         select(User)
         .where(User.tenant_id == tenant_id)
         .order_by(User.created_at)
+        .limit(limit).offset(offset)
     )
     return result.scalars().all()
 
@@ -110,12 +112,19 @@ async def update_team_member(
     if member.role == UserRole.OWNER:
         raise ValueError("Owner accounts cannot be modified here")
 
+    changed = False
     if role is not None:
         if role not in _ASSIGNABLE:
             raise ValueError("Role must be 'manager' or 'staff'")
+        changed = member.role != UserRole(role)
         member.role = UserRole(role)
     if is_active is not None:
+        changed = changed or member.is_active != is_active
         member.is_active = is_active
+
+    if changed:
+        await session.flush()
+        await revoke_all_sessions(session, member)
 
     await session.commit()
     await session.refresh(member)
@@ -147,7 +156,7 @@ async def change_password(
     """Change the user's own password and clear the must-change flag.
 
     Verifies the current (or temporary) password, then rotates it and revokes
-    all of the user's outstanding refresh tokens so sessions minted with the old
+    all of the user's outstanding tokens so sessions minted with the old
     credentials cannot outlive the change. Does not commit token issuance — the
     caller reissues a fresh pair after this returns.
 
@@ -161,12 +170,5 @@ async def change_password(
     user.hashed_password = hash_password(new_password)
     user.must_change_password = False
 
-    tokens = await session.execute(
-        select(RefreshToken).where(
-            (RefreshToken.user_id == user.id) & (RefreshToken.revoked == False)
-        )
-    )
-    for token in tokens.scalars().all():
-        token.revoked = True
-
-    await session.commit()
+    await session.flush()
+    await revoke_all_sessions(session, user)

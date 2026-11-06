@@ -14,10 +14,9 @@ Usage:
 import json
 import logging
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from starlette.requests import Request
-from starlette.responses import Response
 
 from app.core.config import settings
 

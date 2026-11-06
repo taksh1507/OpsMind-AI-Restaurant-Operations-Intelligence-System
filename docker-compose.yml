@@ -1,138 +1,171 @@
-# Docker Compose configuration for OpsMind AI multi-service orchestration
-# Usage: docker-compose up -d
-# To stop: docker-compose down
-# To view logs: docker-compose logs -f api
+name: opsmind
+
+x-app-environment: &app-environment
+  APP_NAME: "OpsMind AI"
+  APP_VERSION: "1.0.0"
+  DEBUG: "false"
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL with URL-encoded credentials}
+  SECRET_KEY: ${SECRET_KEY:?Set a strong SECRET_KEY in .env}
+  ALGORITHM: HS256
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+  REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+  COOKIE_SECURE: ${COOKIE_SECURE:-true}
+  CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS in .env}
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-[]}
+  REDIS_URL: redis://redis:6379/0
+  RATE_LIMIT_MAX_KEYS: ${RATE_LIMIT_MAX_KEYS:-10000}
+  WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+  DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+  DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+  RUN_SCHEDULER: "false"
+  MIGRATE_ON_STARTUP: "false"
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:-}
+  ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-8}
+  ANTHROPIC_TIMEOUT_SECONDS: ${ANTHROPIC_TIMEOUT_SECONDS:-40}
+  ANTHROPIC_MAX_RETRIES: ${ANTHROPIC_MAX_RETRIES:-1}
+  ANTHROPIC_AVAILABLE_MODELS: '${ANTHROPIC_AVAILABLE_MODELS:-["claude-opus-4-8","claude-sonnet-5","claude-haiku-4-5-20251001"]}'
+  AI_REQUEST_TOKEN_RESERVATION: ${AI_REQUEST_TOKEN_RESERVATION:-24576}
+  AI_MAX_INPUT_CHARACTERS: ${AI_MAX_INPUT_CHARACTERS:-48000}
+  AI_UNTRUSTED_TEXT_MAX_CHARACTERS: ${AI_UNTRUSTED_TEXT_MAX_CHARACTERS:-5000}
+  AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-2048}
+  AI_MONTHLY_TOKEN_CAP: ${AI_MONTHLY_TOKEN_CAP:-1500000}
+  OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+  HOST: 0.0.0.0
+  PORT: "8000"
+  WS_MAX_CONNECTIONS_PER_TENANT: ${WS_MAX_CONNECTIONS_PER_TENANT:-100}
+  WS_MAX_CONNECTIONS_PER_USER: ${WS_MAX_CONNECTIONS_PER_USER:-5}
+  WS_MAX_MESSAGE_BYTES: ${WS_MAX_MESSAGE_BYTES:-4096}
+  WS_AUTH_TIMEOUT_SECONDS: ${WS_AUTH_TIMEOUT_SECONDS:-5}
+  WS_IDLE_TIMEOUT_SECONDS: ${WS_IDLE_TIMEOUT_SECONDS:-60}
+  WS_SEND_TIMEOUT_SECONDS: ${WS_SEND_TIMEOUT_SECONDS:-3}
 
 services:
-  # PostgreSQL Database Service
   db:
     image: postgres:15-alpine
-    container_name: opsmind-db
     environment:
-      # Database credentials from .env file (REQUIRED)
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      # Data directory for persistence
+      POSTGRES_DB: ${DB_NAME:?Set DB_NAME}
+      POSTGRES_USER: ${DB_USER:?Set DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
-    
-    ports:
-      # Expose PostgreSQL port for development/debugging
-      - "${DB_PORT:-5432}:5432"
-    
     volumes:
-      # Persist database data across container restarts
-      # Critical for restaurants: data must NOT disappear on restart
       - postgres_data:/var/lib/postgresql/data
-      # Optional: Mount initialization scripts (SQL files in db/init/)
-      # - ./db/init/:/docker-entrypoint-initdb.d
-    
-    networks:
-      - opsmind-network
-    
+    networks: [opsmind-network]
     healthcheck:
-      # Check database connectivity every 10 seconds
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin} -d ${DB_NAME:-opsmind_ai}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis_data:/data
+    networks: [opsmind-network]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
 
-  # FastAPI Backend Service
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment: *app-environment
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [opsmind-network]
+    restart: "no"
+
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: opsmind-api
-    
-    environment:
-      # Database Configuration (from .env)
-      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
-      
-      # Application Configuration
-      APP_NAME: "OpsMind AI"
-      APP_VERSION: "1.0.0"
-      DEBUG: "false"
-      
-      # Security (from .env - REQUIRED)
-      SECRET_KEY: ${SECRET_KEY}
-      ALGORITHM: "HS256"
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      
-      # AI Configuration (from .env - REQUIRED)
-      # Primary LLM: Anthropic Claude. Provide an API key (official API) OR an
-      # auth token + base URL (Anthropic-compatible gateway/proxy).
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:-}
-      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-8}
-      # Per-tenant monthly AI token cap (Phase 4). 0/negative disables enforcement.
-      AI_MONTHLY_TOKEN_CAP: ${AI_MONTHLY_TOKEN_CAP:-1500000}
-      
-      # Server Configuration
-      HOST: "0.0.0.0"
-      PORT: "8000"
-    
+    environment: *app-environment
     ports:
-      # Expose API port for external access
       - "${API_PORT:-8000}:8000"
-    
-    networks:
-      - opsmind-network
-    
-    # Depends on database service being healthy
+    volumes:
+      - models_data:/app/models
+      - reports_data:/app/reports
+    networks: [opsmind-network]
     depends_on:
       db:
         condition: service_healthy
-    
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
-      # Check API health endpoint every 30 seconds
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
-    
+      start_period: 15s
     restart: unless-stopped
-    
-    # Forward logs to stdout for docker-compose logs
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "10m"
+        max-size: 10m
         max-file: "3"
 
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "app.core.scheduler_service"]
+    environment:
+      <<: *app-environment
+      RUN_SCHEDULER: "true"
+      WEB_CONCURRENCY: "1"
+      MIGRATE_ON_STARTUP: "false"
+    volumes:
+      - models_data:/app/models
+      - reports_data:/app/reports
+    networks: [opsmind-network]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
-  # Optional: Redis Service for Caching (Future addition)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: opsmind-redis
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis_data:/data
-  #   networks:
-  #     - opsmind-network
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 3
-  #   restart: unless-stopped
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+      NODE_ENV: production
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks: [opsmind-network]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
 
-
-# Named volumes for persistent data
 volumes:
   postgres_data:
-    driver: local
-  # redis_data:
-  #   driver: local
+  redis_data:
+  models_data:
+  reports_data:
 
-
-# Custom network for inter-service communication
 networks:
   opsmind-network:
     driver: bridge

@@ -7,12 +7,18 @@ Provides deep operational insights for restaurant owners:
 - Actionable recommendations for cost reduction
 """
 
-from fastapi import APIRouter, Depends
+from app.core.errors import safe_error_detail
+from app.services.staffing import hourly_staffing
+import logging
+
+logger = logging.getLogger(__name__)
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, extract
+from app.core.sql_dates import utc_date
+from sqlalchemy import select
 from datetime import datetime, timezone
 from typing import Optional
-from decimal import Decimal
 
 from app.database import get_db
 from app.api.deps import get_current_user
@@ -27,8 +33,8 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 async def get_sustainability_metrics(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    month: Optional[int] = None,
-    year: Optional[int] = None
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None, ge=2000, le=2100),
 ):
     """
     Returns sustainability metrics for the dashboard:
@@ -38,41 +44,60 @@ async def get_sustainability_metrics(
     - CO2 Impact estimate based on food saved
     """
     from sqlalchemy import extract
-    import math
+    from sqlalchemy.orm import selectinload
+
     now = datetime.now(timezone.utc)
     month = month or now.month
     year = year or now.year
 
     # Get all waste logs for this tenant for the current and previous month
-    waste_stmt = select(WasteLog).where(
-        WasteLog.ingredient.has(tenant_id=current_user.tenant_id),
-        extract('month', WasteLog.timestamp) == month,
-        extract('year', WasteLog.timestamp) == year
+    waste_stmt = (
+        select(WasteLog)
+        .options(selectinload(WasteLog.ingredient))
+        .where(
+            WasteLog.ingredient.has(tenant_id=current_user.tenant_id),
+            extract("month", utc_date(WasteLog.timestamp)) == month,
+            extract("year", utc_date(WasteLog.timestamp)) == year,
+        )
     )
     waste_result = await db.execute(waste_stmt)
     waste_logs = waste_result.scalars().all()
 
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
-    prev_waste_stmt = select(WasteLog).where(
-        WasteLog.ingredient.has(tenant_id=current_user.tenant_id),
-        extract('month', WasteLog.timestamp) == prev_month,
-        extract('year', WasteLog.timestamp) == prev_year
+    prev_waste_stmt = (
+        select(WasteLog)
+        .options(selectinload(WasteLog.ingredient))
+        .where(
+            WasteLog.ingredient.has(tenant_id=current_user.tenant_id),
+            extract("month", utc_date(WasteLog.timestamp)) == prev_month,
+            extract("year", utc_date(WasteLog.timestamp)) == prev_year,
+        )
     )
     prev_waste_result = await db.execute(prev_waste_stmt)
     prev_waste_logs = prev_waste_result.scalars().all()
 
     # Calculate totals
     total_cost_lost = sum(float(w.cost_lost_inr) for w in waste_logs)
-    total_qty_wasted = sum(float(w.quantity_wasted) for w in waste_logs)
+    # Only weight units can be compared or used for the illustrative CO2 estimate.
+    factors = {"kg": 1.0, "g": 0.001}
+
+    def weight(logs):
+        return sum(
+            float(w.quantity_wasted) * factors.get(w.ingredient.unit.lower(), 0)
+            for w in logs
+        )
+
+    total_qty_wasted = weight(waste_logs)
     prev_total_cost_lost = sum(float(w.cost_lost_inr) for w in prev_waste_logs)
-    prev_total_qty_wasted = sum(float(w.quantity_wasted) for w in prev_waste_logs)
+    prev_total_qty_wasted = weight(prev_waste_logs)
 
     # Money saved = reduction in waste cost
     money_saved = max(0, prev_total_cost_lost - total_cost_lost)
     waste_reduction_pct = (
         ((prev_total_qty_wasted - total_qty_wasted) / prev_total_qty_wasted) * 100
-        if prev_total_qty_wasted > 0 else 0
+        if prev_total_qty_wasted > 0
+        else 0
     )
 
     # Eco-Badge logic
@@ -85,8 +110,12 @@ async def get_sustainability_metrics(
     else:
         eco_badge = "None"
 
-    # CO2 Impact estimate: Assume 1kg food waste = 2.5kg CO2 eq (FAO estimate)
-    co2_impact_kg = round((prev_total_qty_wasted - total_qty_wasted) * 2.5, 2) if prev_total_qty_wasted > 0 else 0
+    # Illustrative conversion assumption, not measured emissions.
+    co2_impact_kg = (
+        round((prev_total_qty_wasted - total_qty_wasted) * 2.5, 2)
+        if prev_total_qty_wasted > 0
+        else 0
+    )
 
     return {
         "status": "success",
@@ -96,11 +125,23 @@ async def get_sustainability_metrics(
         "waste_reduction_pct": round(waste_reduction_pct, 2),
         "eco_badge": eco_badge,
         "co2_impact_kg": co2_impact_kg,
+        "weight_basis": "kg and g only; other units excluded from weight and CO2 estimates",
+        "co2_assumed_kg_per_kg": 2.5,
+        "current_weight_wasted_kg": round(total_qty_wasted, 4),
+        "previous_weight_wasted_kg": round(prev_total_qty_wasted, 4),
+        "current_cost_lost_inr": round(total_cost_lost, 2),
+        "previous_cost_lost_inr": round(prev_total_cost_lost, 2),
+        "excluded_non_weight_logs": sum(
+            w.ingredient.unit.lower() not in factors
+            for w in waste_logs + prev_waste_logs
+        ),
         "details": {
             "current_month_waste_logs": len(waste_logs),
-            "previous_month_waste_logs": len(prev_waste_logs)
-        }
+            "previous_month_waste_logs": len(prev_waste_logs),
+        },
     }
+
+
 """Analytics API Router
 
 Exposes restaurant performance insights via secure endpoints.
@@ -111,36 +152,35 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from decimal import Decimal
 
 from app.database import get_db
 from app.api.deps import get_current_user
-from app.models import User, Review, Shift, Staff, Sale
+from app.models import User, Review, Sale
 from app.services.analytics import (
     calculate_revenue_and_profit,
     calculate_profit_margin,
     get_top_selling_items,
     get_daily_sales_trend,
     get_daily_revenue_and_cost,
-    USD_TO_INR
 )
-from app.services.ai_agent import forecast_revenue, analyze_profit_margins, process_review, calculate_labor_efficiency, AIConsultant, get_ai_consultant
+from app.services.ai_agent import (
+    forecast_revenue,
+    analyze_profit_margins,
+    calculate_labor_efficiency,
+    get_ai_consultant,
+)
 from app.services import settings_service
 from app.services import ai_usage_service
 from app.services.margin_analysis import (
     get_all_menu_items_with_costs,
-    get_margin_report_summary
+    get_margin_report_summary,
 )
 from app.services.weather import (
     get_current_weather,
     correlate_weather_with_sales,
-    get_weather_context_string
 )
 from app.core.math_utils import calculate_confidence_score
 from sqlalchemy import select, func, desc, and_
-
-
-router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 @router.get("/summary")
@@ -148,132 +188,128 @@ async def get_restaurant_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
 ):
     """Get restaurant performance summary.
-    
+
     Returns a comprehensive overview of the restaurant's performance including:
     - Total revenue and profit for the period
     - Profit margin percentage
     - Top 5 best-selling menu items
-    
+
     The data is strictly scoped to the authenticated user's restaurant.
     This is the bridge between raw database rows and high-level insights.
-    
+
     Args:
         current_user: Authenticated user with tenant context (injected)
         db: Database session (injected)
         start_date: Start date for analysis (YYYY-MM-DD format). Optional.
         end_date: End date for analysis (YYYY-MM-DD format). Optional.
-        
+
     Returns:
         JSON summary with revenue, profit, margin, and top items
-        
+
     Raises:
         HTTPException 400: If date format is invalid
         HTTPException 401: If user is not authenticated
         HTTPException 500: If analytics calculation fails
     """
-    
+
+    from app.services.sales_reporting import period_totals, percent_change
+    from app.core.finance import CurrencyManager
+
     try:
-        # Parse dates if provided
-        parsed_start_date = None
-        parsed_end_date = None
-        
-        if start_date:
-            try:
-                parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc
-                )
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid start_date format. Use YYYY-MM-DD"
-                )
-        
-        if end_date:
-            try:
-                parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc,
-                    hour=23,
-                    minute=59,
-                    second=59
-                )
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid end_date format. Use YYYY-MM-DD"
-                )
-        
-        # Calculate revenue and profit
-        metrics = await calculate_revenue_and_profit(
-            db,
-            current_user.tenant_id,
-            parsed_start_date,
-            parsed_end_date
+        end = (
+            datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            + timedelta(days=1)
+            if end_date
+            else datetime.now(timezone.utc)
         )
-        
-        # Calculate profit margin
-        margin = await calculate_profit_margin(
-            db,
-            current_user.tenant_id,
-            parsed_start_date,
-            parsed_end_date
+        start = (
+            datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            if start_date
+            else end - timedelta(days=30)
         )
-        
-        # Get top 5 selling items
-        top_items = await get_top_selling_items(
-            db,
-            current_user.tenant_id,
-            limit=5,
-            start_date=parsed_start_date,
-            end_date=parsed_end_date
+    except ValueError:
+        raise HTTPException(400, "Dates must use YYYY-MM-DD") from None
+    if start >= end:
+        raise HTTPException(400, "start_date must precede the end of end_date")
+    totals = await period_totals(db, current_user.tenant_id, start, end)
+    previous_start = start - (end - start)
+    previous = await period_totals(db, current_user.tenant_id, previous_start, start)
+    rate = CurrencyManager.get_current_usd_to_inr_rate()
+    top = await get_top_selling_items(
+        db,
+        current_user.tenant_id,
+        limit=5,
+        start_date=start,
+        end_date=end - timedelta(microseconds=1),
+    )
+    return {
+        "status": "success",
+        "tenant_id": current_user.tenant_id,
+        "currency": "INR",
+        "period": {
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "end_exclusive": True,
+        },
+        "previous_period": {
+            "start_date": previous_start.isoformat(),
+            "end_date": start.isoformat(),
+        },
+        "metrics": {
+            "total_revenue_inr": float(totals["revenue"]),
+            "total_revenue_usd": float(totals["revenue"] / rate),
+            "total_profit_inr": float(totals["profit"]),
+            "total_profit_usd": float(totals["profit"] / rate),
+            "cost_of_goods_sold_inr": float(totals["cost"]),
+            "cost_of_goods_sold_usd": float(totals["cost"] / rate),
+            "profit_margin_percent": totals["profit_margin_percent"],
+            "transaction_count": totals["transaction_count"],
+            "total_items_sold": totals["total_items_sold"],
+            "revenue_change": percent_change(totals["revenue"], previous["revenue"]),
+            "profit_change": percent_change(totals["profit"], previous["profit"]),
+        },
+        "top_selling_items": [
+            {
+                "menu_item_id": item["menu_item_id"],
+                "name": item["name"],
+                "quantity_sold": item["quantity_sold"],
+                "revenue_generated_inr": float(item["revenue"]),
+                "revenue_generated_usd": float(item["revenue"] / rate),
+            }
+            for item in top
+        ],
+        "message": "Recorded INR sales; gross profit uses current menu costs, not net profit.",
+    }
+
+
+@router.get("/hourly-sales")
+async def get_hourly_sales(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    analysis_date: Optional[str] = None,
+):
+    from app.services.sales_reporting import hourly_sales
+
+    try:
+        start = (
+            datetime.strptime(analysis_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            if analysis_date
+            else datetime.now(timezone.utc).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
         )
-        
-        # Format response
-        return {
-            "status": "success",
-            "tenant_id": current_user.tenant_id,
-            "period": {
-                "start_date": metrics["start_date"].isoformat(),
-                "end_date": metrics["end_date"].isoformat()
-            },
-            "metrics": {
-                "total_revenue_usd": float(metrics["revenue"]),
-                "total_revenue_inr": float(metrics["revenue"]) * USD_TO_INR,
-                "total_profit_usd": float(metrics["profit"]),
-                "total_profit_inr": float(metrics["profit"]) * USD_TO_INR,
-                "profit_margin_percent": float(margin),
-                "cost_of_goods_sold_usd": float(metrics["cost_of_goods"]),
-                "cost_of_goods_sold_inr": float(metrics["cost_of_goods"]) * USD_TO_INR,
-                "transaction_count": metrics["transaction_count"],
-                "total_items_sold": metrics["item_count"]
-            },
-            "top_selling_items": [
-                {
-                    "menu_item_id": item["menu_item_id"],
-                    "name": item["name"],
-                    "quantity_sold": item["quantity_sold"],
-                    "revenue_generated_usd": float(item["revenue"]),
-                    "revenue_generated_inr": float(item["revenue"]) * USD_TO_INR
-                }
-                for item in top_items
-            ],
-            "message": "Restaurant performance summary for the selected period"
-        }
-    
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to calculate analytics summary. Please try again."
-        )
+    except ValueError:
+        raise HTTPException(400, "analysis_date must use YYYY-MM-DD") from None
+    hours = await hourly_sales(db, current_user.tenant_id, start)
+    return {
+        "date": start.date().isoformat(),
+        "timezone": "UTC",
+        "currency": "INR",
+        "hours": hours,
+    }
 
 
 @router.get("/metrics/revenue")
@@ -281,60 +317,51 @@ async def get_revenue_metrics(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
 ):
     """Get detailed revenue metrics.
-    
+
     Returns comprehensive revenue and profit analysis for the restaurant.
-    
+
     Args:
         current_user: Authenticated user (injected)
         db: Database session (injected)
         start_date: Start date (YYYY-MM-DD format)
         end_date: End date (YYYY-MM-DD format)
-        
+
     Returns:
         Detailed revenue breakdown
     """
-    
+
     try:
         # Parse dates
         parsed_start_date = None
         parsed_end_date = None
-        
+
         if start_date:
             parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").replace(
                 tzinfo=timezone.utc
             )
-        
+
         if end_date:
             parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").replace(
-                tzinfo=timezone.utc,
-                hour=23,
-                minute=59,
-                second=59
+                tzinfo=timezone.utc, hour=23, minute=59, second=59
             )
-        
+
         # Get metrics
         metrics = await calculate_revenue_and_profit(
-            db,
-            current_user.tenant_id,
-            parsed_start_date,
-            parsed_end_date
+            db, current_user.tenant_id, parsed_start_date, parsed_end_date
         )
-        
+
         margin = await calculate_profit_margin(
-            db,
-            current_user.tenant_id,
-            parsed_start_date,
-            parsed_end_date
+            db, current_user.tenant_id, parsed_start_date, parsed_end_date
         )
-        
+
         return {
             "status": "success",
             "period": {
                 "start_date": metrics["start_date"].isoformat(),
-                "end_date": metrics["end_date"].isoformat()
+                "end_date": metrics["end_date"].isoformat(),
             },
             "revenue": float(metrics["revenue"]),
             "cost_of_goods_sold": float(metrics["cost_of_goods"]),
@@ -346,18 +373,17 @@ async def get_revenue_metrics(
                 metrics["revenue"] / metrics["transaction_count"]
                 if metrics["transaction_count"] > 0
                 else 0
-            )
+            ),
         }
-    
-    except ValueError as e:
+
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve revenue metrics"
+            detail=safe_error_detail(),
         )
 
 
@@ -365,33 +391,29 @@ async def get_revenue_metrics(
 async def get_daily_trends(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    days: int = 14
+    days: int = 14,
 ):
     """Get daily revenue and cost trends for the last N days.
-    
+
     Returns revenue and cost of goods sold broken down by day.
     Perfect for area charts showing profit trends over time.
-    
+
     Args:
         current_user: Authenticated user (injected)
         db: Database session (injected)
         days: Number of historical days to retrieve (default 14, max 90)
-        
+
     Returns:
         List of daily revenue and cost data
     """
-    
+
     try:
         # Validate days parameter
         days = min(max(days, 1), 90)  # Between 1 and 90
-        
+
         # Get daily trends
-        trends = await get_daily_revenue_and_cost(
-            db,
-            current_user.tenant_id,
-            days=days
-        )
-        
+        trends = await get_daily_revenue_and_cost(db, current_user.tenant_id, days=days)
+
         return {
             "status": "success",
             "days_requested": days,
@@ -399,19 +421,20 @@ async def get_daily_trends(
             "daily_trends": trends,
             "period": {
                 "end_date": datetime.now(timezone.utc).date().isoformat(),
-                "start_date": (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
-            }
+                "start_date": (datetime.now(timezone.utc) - timedelta(days=days))
+                .date()
+                .isoformat(),
+            },
         }
-    
-    except ValueError as e:
+
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve daily trends"
+            detail=safe_error_detail(),
         )
 
 
@@ -419,83 +442,85 @@ async def get_daily_trends(
 async def get_top_items(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    limit: int = 5,
+    limit: int = Query(5, ge=1, le=200),
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
 ):
     """Get top-selling menu items.
-    
+
     Returns the best-performing dishes by quantity sold.
-    
+
     Args:
         current_user: Authenticated user (injected)
         db: Database session (injected)
         limit: Maximum items to return (default 5, max 50)
         start_date: Start date (YYYY-MM-DD format)
         end_date: End date (YYYY-MM-DD format)
-        
+
     Returns:
         List of top-selling items
     """
-    
+
     try:
         # Validate limit
         limit = min(max(limit, 1), 50)  # Between 1 and 50
-        
+
         # Parse dates
         parsed_start_date = None
         parsed_end_date = None
-        
+
         if start_date:
             parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").replace(
                 tzinfo=timezone.utc
             )
-        
+
         if end_date:
             parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").replace(
-                tzinfo=timezone.utc,
-                hour=23,
-                minute=59,
-                second=59
+                tzinfo=timezone.utc, hour=23, minute=59, second=59
             )
-        
+
         # Get top items
         items = await get_top_selling_items(
             db,
             current_user.tenant_id,
             limit=limit,
             start_date=parsed_start_date,
-            end_date=parsed_end_date
+            end_date=parsed_end_date,
         )
-        
+
         return {
             "status": "success",
             "limit_requested": limit,
             "items_returned": len(items),
             "period": {
-                "start_date": parsed_start_date.isoformat() if parsed_start_date else "from_beginning",
-                "end_date": parsed_end_date.isoformat() if parsed_end_date else "to_now"
+                "start_date": (
+                    parsed_start_date.isoformat()
+                    if parsed_start_date
+                    else "from_beginning"
+                ),
+                "end_date": (
+                    parsed_end_date.isoformat() if parsed_end_date else "to_now"
+                ),
             },
             "top_items": [
                 {
                     "menu_item_id": item["menu_item_id"],
                     "name": item["name"],
                     "quantity_sold": item["quantity_sold"],
-                    "revenue_generated": float(item["revenue"])
+                    "revenue_generated": float(item["revenue"]),
                 }
                 for item in items
-            ]
+            ],
         }
-    
-    except ValueError as e:
+
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve top items"
+            detail=safe_error_detail(),
         )
 
 
@@ -505,42 +530,42 @@ async def get_ai_briefing(
     db: AsyncSession = Depends(get_db),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    refresh: bool = False
+    refresh: bool = False,
 ):
     """Get AI-powered strategic briefing for the restaurant.
-    
+
     This endpoint leverages Anthropic Claude to analyze restaurant performance
     and provide expert recommendations. It's the "consultant" that tells
     the owner exactly what to do to improve their business.
-    
+
     Day 16: Caching & Optimization Layer
     - By default, returns cached response if available (< 1 hour old)
     - Set refresh=True to force fresh AI analysis
     - Saves ~70% API quota by serving cached insights
-    
+
     The AI analyzes:
     - Total revenue and profit
     - Top-selling and underperforming items
     - Profit margins and cost structure
     - Market opportunities
-    
+
     Returns strategic recommendations for:
     - Star dish identification
     - Pricing optimization
     - Inventory cost savings
     - Overall health assessment
-    
+
     Args:
         current_user: Authenticated restaurant owner (injected)
         db: Database session (injected)
         start_date: Start date for analysis (YYYY-MM-DD format). Optional.
         end_date: End date for analysis (YYYY-MM-DD format). Optional.
         refresh: Set to true to force fresh AI analysis, bypass cache. Default: false
-        
+
     Returns:
         JSON response with AI-generated strategic advice
         Includes 'cache_hit' field indicating if response came from cache
-        
+
     Raises:
         HTTPException 401: If user is not authenticated
         HTTPException 400: If date format is invalid
@@ -549,11 +574,11 @@ async def get_ai_briefing(
     try:
         # Import here to avoid circular imports and handle missing API key gracefully
         from app.services.ai_agent import generate_restaurant_strategy
-        
+
         # Get the restaurant summary (same data as /summary endpoint)
         parsed_start_date = None
         parsed_end_date = None
-        
+
         if start_date:
             try:
                 parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").replace(
@@ -562,54 +587,45 @@ async def get_ai_briefing(
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid start_date format. Use YYYY-MM-DD"
+                    detail="Invalid start_date format. Use YYYY-MM-DD",
                 )
-        
+
         if end_date:
             try:
                 parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc,
-                    hour=23,
-                    minute=59,
-                    second=59
+                    tzinfo=timezone.utc, hour=23, minute=59, second=59
                 )
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid end_date format. Use YYYY-MM-DD"
+                    detail="Invalid end_date format. Use YYYY-MM-DD",
                 )
-        
+
         # Calculate revenue and profit
         metrics = await calculate_revenue_and_profit(
-            db,
-            current_user.tenant_id,
-            parsed_start_date,
-            parsed_end_date
+            db, current_user.tenant_id, parsed_start_date, parsed_end_date
         )
-        
+
         # Calculate profit margin
         margin = await calculate_profit_margin(
-            db,
-            current_user.tenant_id,
-            parsed_start_date,
-            parsed_end_date
+            db, current_user.tenant_id, parsed_start_date, parsed_end_date
         )
-        
+
         # Get top 5 selling items
         top_items = await get_top_selling_items(
             db,
             current_user.tenant_id,
             limit=5,
             start_date=parsed_start_date,
-            end_date=parsed_end_date
+            end_date=parsed_end_date,
         )
-        
+
         # Build performance data for AI analysis
         performance_data = {
             "tenant_id": current_user.tenant_id,
             "period": {
                 "start_date": metrics["start_date"].isoformat(),
-                "end_date": metrics["end_date"].isoformat()
+                "end_date": metrics["end_date"].isoformat(),
             },
             "total_revenue": float(metrics["revenue"]),
             "total_profit": float(metrics["profit"]),
@@ -622,12 +638,12 @@ async def get_ai_briefing(
                     "menu_item_id": item["menu_item_id"],
                     "name": item["name"],
                     "quantity_sold": item["quantity_sold"],
-                    "revenue_generated": float(item["revenue"])
+                    "revenue_generated": float(item["revenue"]),
                 }
                 for item in top_items
-            ]
+            ],
         }
-        
+
         # Generate strategy using AI (with caching support)
         # Pass db session and refresh flag to enable intelligent caching.
         # Metered: enforces the tenant's monthly AI cap and records token usage.
@@ -642,13 +658,13 @@ async def get_ai_briefing(
                 refresh=refresh,
             ),
         )
-        
+
         if ai_result.get("status") == "error":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=ai_result.get("message", "AI service temporarily unavailable")
+                detail=ai_result.get("message", "AI service temporarily unavailable"),
             )
-        
+
         return {
             "status": "success",
             "tenant_id": current_user.tenant_id,
@@ -656,20 +672,19 @@ async def get_ai_briefing(
             "data_period": performance_data.get("period", {}),
             "timestamp": ai_result.get("timestamp", ""),
             "cache_hit": ai_result.get("cache_hit", False),
-            "message": "AI-powered strategic briefing leveraging intelligent caching to optimize API usage."
+            "message": "AI-powered strategic briefing leveraging intelligent caching to optimize API usage.",
         }
-    
+
     except HTTPException:
         raise
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate AI briefing: {str(e)}"
+            detail=safe_error_detail(),
         )
 
 
@@ -677,27 +692,27 @@ async def get_ai_briefing(
 async def get_revenue_forecast(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    days: int = 14
+    days: int = 14,
 ):
     """Get AI-powered revenue forecast for the next 3 days with mathematical confidence scoring.
-    
+
     Uses historical trends from the past N days to predict future revenue.
     The AI forecaster analyzes patterns (weekday vs weekend, growth trends, etc.)
     and combines mathematical confidence with AI insights.
-    
+
     MATHEMATICAL GROUNDING:
     - Calculates Linear Regression slope to objectively measure revenue trends
     - Computes confidence score based on data variance and R-squared fit quality
     - Provides "Trust Factor" showing how reliable the prediction is
-    
-    This endpoint gives restaurant owners a "Crystal Ball" view of their 
+
+    This endpoint gives restaurant owners a "Crystal Ball" view of their
     expected revenue, enabling better resource planning and marketing timing.
-    
+
     Args:
         current_user: Authenticated user (injected)
         db: Database session (injected)
         days: Number of historical days to analyze (default 14)
-        
+
     Returns:
         Forecast with predictions for next 3 days:
         - next_day_1_revenue: Predicted revenue for tomorrow
@@ -707,159 +722,168 @@ async def get_revenue_forecast(
         - mathematical_confidence: High/Medium/Low based on data variance
         - growth_rate_percent: Daily trend as percentage
         - business_impact: Actionable insight for owner
-        
+
     Raises:
         HTTPException 401: If user is not authenticated
         HTTPException 404: If no historical data found
         HTTPException 500: If forecast generation fails
     """
-    
+
     try:
         # Get historical trend data
-        trend_data = await get_daily_sales_trend(
-            db,
-            current_user.tenant_id,
-            days=days
-        )
-        
+        trend_data = await get_daily_sales_trend(db, current_user.tenant_id, days=days)
+
         if not trend_data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No sales data found for the past {days} days. A forecast requires at least 3 days of historical data."
+                detail=f"No sales data found for the past {days} days. A forecast requires at least 3 days of historical data.",
             )
-        
+
         if len(trend_data) < 3:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Insufficient historical data for accurate forecasting. Need at least 3 days of sales data."
+                detail="Insufficient historical data for accurate forecasting. Need at least 3 days of sales data.",
             )
-        
+
         # Convert trend data to list for statistical analysis
         revenue_values = list(trend_data.values())
-        
+
         # Calculate mathematical confidence score
-        mathematical_confidence_level, mathematical_confidence_percentage = calculate_confidence_score(revenue_values)
-        
+        mathematical_confidence_level, mathematical_confidence_percentage = (
+            calculate_confidence_score(revenue_values)
+        )
+
         # Generate forecast using new forecast service
         from app.services.forecast_service import generate_forecast_report
-        forecast_result = await generate_forecast_report(current_user.tenant_id, db, days=days)
-        
+
+        forecast_result = await generate_forecast_report(
+            current_user.tenant_id, db, days=days
+        )
+
         if forecast_result.get("status") == "error":
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=forecast_result.get("message", "Failed to generate forecast")
+                detail=forecast_result.get("message", "Failed to generate forecast"),
             )
-        
+
         # Format the response with mathematical confidence
         forecast = forecast_result.get("forecast", {})
-        
+
         # Combine AI confidence with mathematical confidence
         ai_confidence = forecast.get("confidence_score", 50)
-        combined_confidence = round((ai_confidence * 0.5 + mathematical_confidence_percentage * 0.5), 1)
-        
+        combined_confidence = round(
+            (ai_confidence * 0.5 + mathematical_confidence_percentage * 0.5), 1
+        )
+
         return {
             "status": "success",
             "tenant_id": current_user.tenant_id,
             "forecast_period": {
                 "historical_days": days,
                 "data_points": len(trend_data),
-                "generated_at": datetime.now(timezone.utc).isoformat()
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             },
             "predictions": {
                 "next_day_1_revenue": forecast.get("next_day_1_revenue", 0),
                 "next_day_2_revenue": forecast.get("next_day_2_revenue", 0),
-                "next_day_3_revenue": forecast.get("next_day_3_revenue", 0)
+                "next_day_3_revenue": forecast.get("next_day_3_revenue", 0),
             },
             "confidence": {
                 "ai_score": ai_confidence,
                 "mathematical_score": mathematical_confidence_percentage,
                 "combined_score": combined_confidence,
-                "confidence_level": "High" if combined_confidence >= 75 else "Medium" if combined_confidence >= 50 else "Low",
+                "confidence_level": (
+                    "High"
+                    if combined_confidence >= 75
+                    else "Medium" if combined_confidence >= 50 else "Low"
+                ),
                 "confidence_reasoning": forecast.get("confidence_reasoning", ""),
                 "mathematical_basis": f"Data variance analysis shows {mathematical_confidence_level} confidence. {mathematical_confidence_percentage:.1f}% trust factor.",
                 "growth_rate_percent": forecast.get("growth_rate_percent", 0),
-                "growth_direction": forecast.get("growth_direction", "Stable")
+                "growth_direction": forecast.get("growth_direction", "Stable"),
             },
             "mathematical_analysis": {
                 "confidence_level": mathematical_confidence_level,
                 "trust_factor": f"{mathematical_confidence_percentage:.1f}%",
-                "data_consistency": "High" if mathematical_confidence_percentage >= 75 else "Medium" if mathematical_confidence_percentage >= 50 else "Low",
-                "interpretation": f"Based on {len(revenue_values)} days of sales data. {mathematical_confidence_level} confidence indicates {'stable and predictable revenue' if mathematical_confidence_level == 'High' else 'moderate volatility in revenue' if mathematical_confidence_level == 'Medium' else 'high volatility, predictions less reliable'}"
+                "data_consistency": (
+                    "High"
+                    if mathematical_confidence_percentage >= 75
+                    else "Medium" if mathematical_confidence_percentage >= 50 else "Low"
+                ),
+                "interpretation": f"Based on {len(revenue_values)} days of sales data. {mathematical_confidence_level} confidence indicates {'stable and predictable revenue' if mathematical_confidence_level == 'High' else 'moderate volatility in revenue' if mathematical_confidence_level == 'Medium' else 'high volatility, predictions less reliable'}",
             },
             "pattern": {
                 "detected": forecast.get("pattern_detected", "No pattern detected"),
-                "risk_factors": forecast.get("risk_factors", [])
+                "risk_factors": forecast.get("risk_factors", []),
             },
             "business_impact": forecast.get("business_impact", ""),
             "mathematical_reasoning": forecast.get("mathematical_reasoning", ""),
             "message": "Revenue forecast grounded in mathematical trend analysis and AI insights",
-            "recommendation": "Use this forecast to plan staffing, inventory, and marketing campaigns. Higher confidence scores indicate more reliable predictions."
+            "recommendation": "Use this forecast to plan staffing, inventory, and marketing campaigns. Higher confidence scores indicate more reliable predictions.",
         }
-    
+
     except HTTPException:
         raise
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate revenue forecast: {str(e)}"
+            detail=safe_error_detail(),
         )
 
 
 @router.get("/margin-report")
 async def get_margin_report(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Get AI-powered margin optimization and waste report.
-    
+
     Analyzes all menu items' profitability based on ingredient costs.
     Identifies items priced below healthy margins (< 3x cost) and provides
     specific recommendations for price adjustments or cost reductions.
-    
+
     This endpoint calculates:
     - Cost of Goods Sold (COGS) for each menu item based on recipes
     - Profit margins with ingredient accuracy
     - Price-to-cost ratios (healthy = >3x)
     - Items in danger zones (losing money after overhead)
     - AI-generated optimization plan with specific actions
-    
+
     The AI recommends:
     - Which items to price increase (with exact new prices)
     - Which ingredients to substitute or source differently
     - Product discontinuation if necessary
     - Estimated profit improvement from each action
-    
+
     Args:
         current_user: Authenticated user (injected)
         db: Database session (injected)
-        
+
     Returns:
         Comprehensive margin report with risk analysis and AI optimization plan
-        
+
     Raises:
         HTTPException 401: If user is not authenticated
         HTTPException 404: If no menu items exist
         HTTPException 500: If analysis fails
     """
-    
+
     try:
         # Get all menu items with calculated COGS
         menu_items = await get_all_menu_items_with_costs(db, current_user.tenant_id)
-        
+
         if not menu_items:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="No menu items found for this restaurant. Add menu items and recipes first."
+                detail="No menu items found for this restaurant. Add menu items and recipes first.",
             )
-        
+
         # Get summary metrics
         summary = await get_margin_report_summary(db, current_user.tenant_id)
-        
+
         # Use AI to generate optimization plan (with this tenant's chosen model).
         # Metered: enforces the monthly cap and records token usage.
         ai_model = await settings_service.resolve_ai_model(db, current_user.tenant_id)
@@ -869,15 +893,15 @@ async def get_margin_report(
             "margin_analysis",
             lambda: analyze_profit_margins(menu_items, model=ai_model),
         )
-        
+
         if ai_result.get("status") == "error":
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=ai_result.get("message", "Failed to generate margin analysis")
+                detail=ai_result.get("message", "Failed to generate margin analysis"),
             )
-        
+
         margin_analysis = ai_result.get("analysis", {})
-        
+
         # Format the response
         return {
             "status": "success",
@@ -889,35 +913,38 @@ async def get_margin_report(
                 "items_in_danger_zone": summary["items_at_risk"],
                 "average_margin_percent": summary["average_margin_percent"],
                 "total_revenue_from_risky_items": summary["total_revenue_at_risk"],
-                "potential_monthly_improvement": summary["potential_improvement"]
+                "potential_monthly_improvement": summary["potential_improvement"],
             },
             "menu_items": menu_items,
             "margin_analysis": margin_analysis,
             "ai_reasoning": ai_result.get("reasoning", ""),
             "recommendations": {
-                "immediate_actions": margin_analysis.get("optimization_plan", {}).get("top_3_actions", []),
-                "executive_summary": margin_analysis.get("optimization_plan", {}).get("executive_summary", ""),
-                "cost_strategies": margin_analysis.get("cost_strategies", [])
+                "immediate_actions": margin_analysis.get("optimization_plan", {}).get(
+                    "top_3_actions", []
+                ),
+                "executive_summary": margin_analysis.get("optimization_plan", {}).get(
+                    "executive_summary", ""
+                ),
+                "cost_strategies": margin_analysis.get("cost_strategies", []),
             },
             "message": "AI-powered margin analysis and waste optimization report",
             "action_items": [
                 f"Review {summary['items_at_risk']} menu items with margin concerns",
                 f"Potential to improve margins by ${summary['potential_improvement']}/month",
-                "Implement suggested price changes and ingredient cost reductions"
-            ]
+                "Implement suggested price changes and ingredient cost reductions",
+            ],
         }
-    
+
     except HTTPException:
         raise
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate margin report: {str(e)}"
+            detail=safe_error_detail(),
         )
 
 
@@ -925,70 +952,78 @@ async def get_margin_report(
 async def get_reputation_analytics(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    days: int = 30
+    days: int = 30,
 ):
     """Get AI-powered customer reputation and sentiment analysis.
-    
+
     Analyzes customer reviews to provide a "Mood Map" of the restaurant.
     This is the "Ears" of the operation - what customers actually think.
-    
+
     The endpoint returns:
     - Average rating from all reviews (1-5 stars)
     - Overall sentiment trend for the last N days
     - Top 5 compliments (positive reviews and keywords)
     - Top 5 complaints (negative reviews and keywords)
     - AI-generated response draft for the latest negative review
-    
+
     This enables the restaurant owner to:
     1. Monitor customer satisfaction trends
     2. Identify common issues before they escalate
     3. Celebrate wins and replicate successful experiences
     4. Respond thoughtfully to customer feedback
-    
+
     The AI identifies:
     - Recurring complaint patterns (e.g., "cold food" mentioned 3x)
     - Service quality trends
     - Food quality issues
     - Specific action items for improvement
-    
+
     Args:
         current_user: Authenticated user (injected)
         db: Database session (injected)
         days: Number of days to analyze (default 30, max 365)
-        
+
     Returns:
         Comprehensive reputation dashboard with AI-powered insights
-        
+
     Raises:
         HTTPException 401: If user is not authenticated
         HTTPException 400: If days parameter is invalid
         HTTPException 404: If no reviews exist
         HTTPException 500: If analysis fails
     """
-    
+
     try:
         # Validate days parameter
         days = min(max(days, 1), 365)  # Between 1 and 365
-        
+
         # Calculate the date range
         end_date_dt = datetime.now(timezone.utc)
-        start_date_dt = end_date_dt.replace(day=1) if days >= 30 else \
-                        datetime.now(timezone.utc) - \
-                        __import__('datetime').timedelta(days=days)
-        
+        start_date_dt = (
+            end_date_dt.replace(day=1)
+            if days >= 30
+            else datetime.now(timezone.utc)
+            - __import__("datetime").timedelta(days=days)
+        )
+
         from datetime import timedelta
+
         start_date_dt = datetime.now(timezone.utc) - timedelta(days=days)
-        
+
         # Query reviews for the tenant
-        stmt = select(Review).where(
-            (Review.tenant_id == current_user.tenant_id) &
-            (Review.created_at >= start_date_dt) &
-            (Review.created_at <= end_date_dt)
-        ).order_by(desc(Review.created_at))
-        
+        stmt = (
+            select(Review)
+            .where(
+                (Review.tenant_id == current_user.tenant_id)
+                & (Review.created_at >= start_date_dt)
+                & (Review.created_at <= end_date_dt)
+            )
+            .order_by(desc(Review.created_at))
+        )
+
         result = await db.execute(stmt)
         reviews = result.scalars().all()
-        
+
         if not reviews:
             return {
                 "status": "success",
@@ -997,100 +1032,120 @@ async def get_reputation_analytics(
                 "metrics": {
                     "total_reviews": 0,
                     "average_rating": 0.0,
-                    "sentiment_trend": "No data"
+                    "sentiment_trend": "No data",
                 },
                 "compliments": [],
                 "complaints": [],
-                "response_draft": None
+                "response_draft": None,
             }
-        
+
         # Calculate metrics using dynamic local sentiment model predictions
         from app.services.sentiment_service import predict_sentiment
-        
+
         scored_reviews = []
         for r in reviews:
             pred = await predict_sentiment(r.comment)
             scored_reviews.append((r, pred))
-            
+
         total_reviews = len(scored_reviews)
         ratings_sum = sum(r.rating for r, _ in scored_reviews if r.rating)
         average_rating = ratings_sum / total_reviews if total_reviews > 0 else 0
-        
+
         # Separate positive, negative, and neutral reviews based on prediction labels
-        positive_reviews = [(r, p) for r, p in scored_reviews if p["label"] == "positive"]
-        negative_reviews = [(r, p) for r, p in scored_reviews if p["label"] == "negative"]
+        positive_reviews = [
+            (r, p) for r, p in scored_reviews if p["label"] == "positive"
+        ]
+        negative_reviews = [
+            (r, p) for r, p in scored_reviews if p["label"] == "negative"
+        ]
         neutral_reviews = [(r, p) for r, p in scored_reviews if p["label"] == "neutral"]
-        
+
         positive_count = len(positive_reviews)
         negative_count = len(negative_reviews)
         neutral_count = len(neutral_reviews)
-        
+
         # Calculate sentiment trend
         if positive_count > negative_count:
             sentiment_trend = "Positive"
-            trend_strength = min(100, int((positive_count / total_reviews) * 100)) if total_reviews > 0 else 0
+            trend_strength = (
+                min(100, int((positive_count / total_reviews) * 100))
+                if total_reviews > 0
+                else 0
+            )
         elif negative_count > positive_count:
             sentiment_trend = "Negative"
-            trend_strength = min(100, int((negative_count / total_reviews) * 100)) if total_reviews > 0 else 0
+            trend_strength = (
+                min(100, int((negative_count / total_reviews) * 100))
+                if total_reviews > 0
+                else 0
+            )
         else:
             sentiment_trend = "Neutral"
             trend_strength = 50
-            
+
         # Extract top compliments (from positive reviews)
         compliments = []
         compliment_keywords = {}
-        
+
         for r, p in positive_reviews[:10]:
             if r.keywords:
-                for keyword in r.keywords.split(','):
+                for keyword in r.keywords.split(","):
                     keyword = keyword.strip()
                     if keyword:
-                        compliment_keywords[keyword] = compliment_keywords.get(keyword, 0) + 1
-                        
+                        compliment_keywords[keyword] = (
+                            compliment_keywords.get(keyword, 0) + 1
+                        )
+
         for r, p in positive_reviews[:5]:
-            compliments.append({
-                "customer_name": r.customer_name,
-                "rating": r.rating,
-                "comment": r.comment,
-                "keywords": r.keywords.split(',') if r.keywords else [],
-                "ai_summary": r.ai_summary or "Great feedback received",
-                "created_at": r.created_at.isoformat(),
-                "sentiment_label": p["label"],
-                "sentiment_score": p["score"],
-                "sentiment_confidence": p["confidence"],
-                "label": p["label"],
-                "score": p["score"],
-                "confidence": p["confidence"]
-            })
-            
+            compliments.append(
+                {
+                    "customer_name": r.customer_name,
+                    "rating": r.rating,
+                    "comment": r.comment,
+                    "keywords": r.keywords.split(",") if r.keywords else [],
+                    "ai_summary": r.ai_summary or "Great feedback received",
+                    "created_at": r.created_at.isoformat(),
+                    "sentiment_label": p["label"],
+                    "sentiment_score": p["score"],
+                    "sentiment_confidence": p["confidence"],
+                    "label": p["label"],
+                    "score": p["score"],
+                    "confidence": p["confidence"],
+                }
+            )
+
         # Extract top complaints (from negative reviews)
         complaints = []
         complaint_keywords = {}
-        
+
         for r, p in negative_reviews[:10]:
             if r.keywords:
-                for keyword in r.keywords.split(','):
+                for keyword in r.keywords.split(","):
                     keyword = keyword.strip()
                     if keyword:
-                        complaint_keywords[keyword] = complaint_keywords.get(keyword, 0) + 1
-                        
+                        complaint_keywords[keyword] = (
+                            complaint_keywords.get(keyword, 0) + 1
+                        )
+
         for r, p in negative_reviews[:5]:
-            complaints.append({
-                "customer_name": r.customer_name,
-                "rating": r.rating,
-                "comment": r.comment,
-                "keywords": r.keywords.split(',') if r.keywords else [],
-                "ai_summary": r.ai_summary or "Issue reported",
-                "action_item": r.action_item or "Requires investigation",
-                "created_at": r.created_at.isoformat(),
-                "sentiment_label": p["label"],
-                "sentiment_score": p["score"],
-                "sentiment_confidence": p["confidence"],
-                "label": p["label"],
-                "score": p["score"],
-                "confidence": p["confidence"]
-            })
-            
+            complaints.append(
+                {
+                    "customer_name": r.customer_name,
+                    "rating": r.rating,
+                    "comment": r.comment,
+                    "keywords": r.keywords.split(",") if r.keywords else [],
+                    "ai_summary": r.ai_summary or "Issue reported",
+                    "action_item": r.action_item or "Requires investigation",
+                    "created_at": r.created_at.isoformat(),
+                    "sentiment_label": p["label"],
+                    "sentiment_score": p["score"],
+                    "sentiment_confidence": p["confidence"],
+                    "label": p["label"],
+                    "score": p["score"],
+                    "confidence": p["confidence"],
+                }
+            )
+
         # Generate AI response draft for the latest negative review using Claude
         response_draft = None
         if negative_reviews:
@@ -1099,7 +1154,10 @@ async def get_reputation_analytics(
             # If not already processed, process it now (Claude drafts the response)
             if not latest_negative.action_item or not latest_negative.ai_summary:
                 from app.services.ai_agent import process_review
-                ai_model = await settings_service.resolve_ai_model(db, current_user.tenant_id)
+
+                ai_model = await settings_service.resolve_ai_model(
+                    db, current_user.tenant_id
+                )
                 analysis = await ai_usage_service.metered_ai_call(
                     db,
                     current_user.tenant_id,
@@ -1113,10 +1171,10 @@ async def get_reputation_analytics(
                         "summary": analysis.get("ai_summary", ""),
                         "action_item": analysis.get("action_item", ""),
                         "response_template": f"Thank you for your feedback, {latest_negative.customer_name}. "
-                                            f"We're sorry to hear about your experience with {analysis.get('ai_summary', 'the food/service')}. "
-                                            f"We've identified this issue and will {analysis.get('action_item', 'take immediate action')}. "
-                                            f"Please visit us again soon so we can show you our improvements.",
-                        "created_at": datetime.now(timezone.utc).isoformat()
+                        f"We're sorry to hear about your experience with {analysis.get('ai_summary', 'the food/service')}. "
+                        f"We've identified this issue and will {analysis.get('action_item', 'take immediate action')}. "
+                        f"Please visit us again soon so we can show you our improvements.",
+                        "created_at": datetime.now(timezone.utc).isoformat(),
                     }
             else:
                 response_draft = {
@@ -1125,88 +1183,99 @@ async def get_reputation_analytics(
                     "summary": latest_negative.ai_summary or "",
                     "action_item": latest_negative.action_item or "",
                     "response_template": f"Thank you for your feedback, {latest_negative.customer_name}. "
-                                        f"We're sorry to hear about your experience. "
-                                        f"We've identified this issue and will take immediate action. "
-                                        f"Please visit us again soon so we can show you our improvements.",
-                    "created_at": datetime.now(timezone.utc).isoformat()
+                    f"We're sorry to hear about your experience. "
+                    f"We've identified this issue and will take immediate action. "
+                    f"Please visit us again soon so we can show you our improvements.",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
-                
+
         # Get top complaint keywords
         top_complaint_keywords = sorted(
-            complaint_keywords.items(),
-            key=lambda x: x[1],
-            reverse=True
+            complaint_keywords.items(), key=lambda x: x[1], reverse=True
         )[:5]
-        
+
         # Get top compliment keywords
         top_compliment_keywords = sorted(
-            compliment_keywords.items(),
-            key=lambda x: x[1],
-            reverse=True
+            compliment_keywords.items(), key=lambda x: x[1], reverse=True
         )[:5]
-        
+
         return {
             "status": "success",
             "tenant_id": current_user.tenant_id,
             "period": {
                 "days_analyzed": days,
                 "start_date": start_date_dt.isoformat(),
-                "end_date": end_date_dt.isoformat()
+                "end_date": end_date_dt.isoformat(),
             },
             "metrics": {
                 "total_reviews": total_reviews,
-                "processed_reviews": sum(1 for r, _ in scored_reviews if r.is_processed),
+                "processed_reviews": sum(
+                    1 for r, _ in scored_reviews if r.is_processed
+                ),
                 "average_rating": round(float(average_rating), 2),
                 "positive_reviews": positive_count,
                 "negative_reviews": negative_count,
                 "neutral_reviews": neutral_count,
                 "sentiment_trend": sentiment_trend,
-                "trend_strength_percent": trend_strength
+                "trend_strength_percent": trend_strength,
             },
             "recurring_complaints": [
                 {
                     "keyword": keyword,
                     "mentions": count,
-                    "severity": "High" if count >= 3 else "Medium" if count >= 2 else "Low"
+                    "severity": (
+                        "High" if count >= 3 else "Medium" if count >= 2 else "Low"
+                    ),
                 }
                 for keyword, count in top_complaint_keywords
             ],
             "recurring_compliments": [
-                {
-                    "keyword": keyword,
-                    "mentions": count
-                }
+                {"keyword": keyword, "mentions": count}
                 for keyword, count in top_compliment_keywords
             ],
             "compliments": compliments,
             "complaints": complaints,
             "response_draft": response_draft,
             "insights": {
-                "mood": "Happy" if sentiment_trend == "Positive" and average_rating >= 4.0 else
-                        "Concerned" if sentiment_trend == "Negative" or average_rating <= 2.0 else "Neutral",
+                "mood": (
+                    "Happy"
+                    if sentiment_trend == "Positive" and average_rating >= 4.0
+                    else (
+                        "Concerned"
+                        if sentiment_trend == "Negative" or average_rating <= 2.0
+                        else "Neutral"
+                    )
+                ),
                 "status_summary": f"Your restaurant has {total_reviews} reviews with "
-                                f"an average rating of {average_rating:.1f}/5.0. "
-                                f"Sentiment is {sentiment_trend.lower()} overall.",
+                f"an average rating of {average_rating:.1f}/5.0. "
+                f"Sentiment is {sentiment_trend.lower()} overall.",
                 "urgent_actions": [
-                    f"Address {negative_count} recent negative reviews" if negative_count > 0 else "Great news - no recent complaints!",
-                    f"Replicate success from {positive_count} positive reviews" if positive_count > 0 else "Focus on getting positive reviews",
-                ]
+                    (
+                        f"Address {negative_count} recent negative reviews"
+                        if negative_count > 0
+                        else "Great news - no recent complaints!"
+                    ),
+                    (
+                        f"Replicate success from {positive_count} positive reviews"
+                        if positive_count > 0
+                        else "Focus on getting positive reviews"
+                    ),
+                ],
             },
             "message": "AI Reputation Sentinel analysis complete. Monitor sentiment trends and respond to feedback.",
-            "recommendation": "Respond to negative reviews within 24 hours. Ask for specific details to improve."
+            "recommendation": "Respond to negative reviews within 24 hours. Ask for specific details to improve.",
         }
-    
+
     except HTTPException:
         raise
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate reputation analytics: {str(e)}"
+            detail=safe_error_detail(),
         )
 
 
@@ -1215,43 +1284,40 @@ async def get_staffing_plan(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     analysis_date: Optional[str] = None,
-    forecast_days: int = 1
+    forecast_days: int = Query(1, ge=1, le=7),
 ):
     """Get AI-powered staffing optimization and labor heatmap.
-    
+
     Analyzes historical labor costs vs. sales volume to create a 24-hour
     staffing efficiency heatmap. This tells the owner exactly when they
     are overstaffed (wasting money) or understaffed (losing customers).
-    
+
     The endpoint generates:
     - 24-hour efficiency heatmap (0-100 score for each hour)
     - Flagged inefficient hours (labor > 30% of sales)
     - Burnout risk hours (high sales, low staff)
     - AI-recommended schedule for next day based on revenue forecast
     - Specific staffing changes to implement
-    
+
     This solves the hardest problem in hospitality: Precision Staffing.
     Instead of "feeling" busy, owners now know the data.
-    
+
     Args:
         current_user: Authenticated user (injected)
         db: Database session (injected)
         analysis_date: Date to analyze (YYYY-MM-DD format). Defaults to yesterday.
         forecast_days: Days to forecast (default 1, max 7)
-        
+
     Returns:
         Comprehensive staffing optimization plan with heatmap
-        
+
     Raises:
         HTTPException 401: If user is not authenticated
         HTTPException 404: If no shift/sales data exists
         HTTPException 500: If analysis fails
     """
-    
+
     try:
-        # Validate forecast days
-        forecast_days = min(max(forecast_days, 1), 7)
-        
         # Parse analysis date
         if analysis_date:
             try:
@@ -1261,135 +1327,24 @@ async def get_staffing_plan(
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid analysis_date format. Use YYYY-MM-DD"
+                    detail="Invalid analysis_date format. Use YYYY-MM-DD",
                 )
         else:
             # Default to yesterday
             analysis_dt = (datetime.now(timezone.utc) - timedelta(days=1)).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
-        
-        analysis_end_dt = analysis_dt.replace(hour=23, minute=59, second=59)
-        
-        # Query hourly sales data for the analysis date
-        # Group sales by hour
-        sales_query = select(
-            func.strftime('%H', func.datetime(
-                'Sales.timestamp',
-                'utc',
-                '+00:00'
-            )).label('hour'),
-            func.sum(Sale.total_amount).label('hourly_sales'),
-            func.count(Sale.id).label('transaction_count')
-        ).select_from(Sale).where(
-            and_(
-                Sale.tenant_id == current_user.tenant_id,
-                Sale.timestamp >= analysis_dt,
-                Sale.timestamp <= analysis_end_dt
-            )
-        ).group_by(
-            func.strftime('%H', Sale.timestamp)
-        )
-        
-        # Query hourly labor costs
-        # Group shifts by start hour and calculate cost
-        labor_query = select(
-            func.strftime('%H', Shift.start_time).label('hour'),
-            func.sum(func.cast(
-                func.round(
-                    func.julianday(Shift.end_time) - func.julianday(Shift.start_time),
-                    4
-                ) * 24 * func.cast(Staff.hourly_rate, Decimal),
-                Decimal
-            )).label('hourly_labor_cost'),
-            func.count(func.distinct(Shift.staff_id)).label('staff_count')
-        ).select_from(Shift).join(
-            Staff, Shift.staff_id == Staff.id
-        ).where(
-            and_(
-                Staff.tenant_id == current_user.tenant_id,
-                Shift.start_time >= analysis_dt,
-                Shift.start_time <= analysis_end_dt
-            )
-        ).group_by(
-            func.strftime('%H', Shift.start_time)
-        )
-        
-        # Execute queries
-        # NOTE: SQLite syntax - may need adjustment for other databases
-        # Using a simpler approach with Python-side calculation
-        
-        # Get all shifts for the day
-        shifts_stmt = select(Shift).join(Staff).where(
-            and_(
-                Staff.tenant_id == current_user.tenant_id,
-                Shift.start_time >= analysis_dt,
-                Shift.start_time <= analysis_end_dt
-            )
-        )
-        shifts_result = await db.execute(shifts_stmt)
-        shifts = shifts_result.scalars().all()
-        
-        # Get all sales for the day
-        sales_stmt = select(Sale).where(
-            and_(
-                Sale.tenant_id == current_user.tenant_id,
-                Sale.timestamp >= analysis_dt,
-                Sale.timestamp <= analysis_end_dt
-            )
-        )
-        sales_result = await db.execute(sales_stmt)
-        sales = sales_result.scalars().all()
-        
-        if not shifts and not sales:
+
+        breakdown = await hourly_staffing(db, current_user.tenant_id, analysis_dt)
+        if not breakdown["shifts_total"]:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No shift or sales data found for this date. Please add shifts and sales first."
+                404,
+                "No shifts overlap this UTC date. Add staff shifts before requesting a staffing plan.",
             )
-        
-        # Build hourly breakdown
-        hourly_data = []
-        total_labor = Decimal("0.00")
-        total_sales = Decimal("0.00")
-        
-        for hour in range(24):
-            # Calculate sales for this hour
-            hour_sales = sum(
-                s.total_amount for s in sales
-                if s.timestamp.hour == hour
-            )
-            total_sales += hour_sales
-            
-            # Calculate labor cost for this hour
-            hour_labor = Decimal("0.00")
-            hour_staff = set()
-            
-            for shift in shifts:
-                # Check if shift overlaps with this hour
-                shift_start_hour = shift.start_time.hour
-                shift_end_hour = shift.end_time.hour
-                
-                # Handle shifts that span multiple hours
-                if shift_start_hour <= hour < shift_end_hour or \
-                   (shift_start_hour == hour and shift.start_time.minute > 0) or \
-                   (shift_end_hour == hour and shift.end_time.minute > 0):
-                    # Calculate fractional cost for this hour
-                    hour_labor += shift.total_cost / max(shift.duration_hours, 1)
-                    hour_staff.add(shift.staff_id)
-            
-            total_labor += hour_labor
-            
-            hourly_data.append({
-                "hour": hour,
-                "sales_amount": float(hour_sales),
-                "labor_cost": float(hour_labor),
-                "staff_count": len(hour_staff),
-                "labor_percent_of_sales": (
-                    (float(hour_labor) / float(hour_sales) * 100)
-                    if hour_sales > 0 else 0
-                )
-            })
-        
+        hourly_data = breakdown["hours"]
+        total_labor = breakdown["total_labor"]
+        total_sales = breakdown["total_sales"]
+
         # Use AI to analyze labor efficiency (with this tenant's chosen model)
         ai_model = await settings_service.resolve_ai_model(db, current_user.tenant_id)
         analysis_payload = {
@@ -1397,7 +1352,7 @@ async def get_staffing_plan(
             "hours": hourly_data,
             "daily_total_sales": float(total_sales),
             "daily_total_labor": float(total_labor),
-            "staff_scheduled": len(set(s.staff_id for s in shifts))
+            "staff_scheduled": breakdown["staff_scheduled"],
         }
 
         ai_analysis = await ai_usage_service.metered_ai_call(
@@ -1406,34 +1361,37 @@ async def get_staffing_plan(
             "labor_efficiency",
             lambda: calculate_labor_efficiency(analysis_payload, model=ai_model),
         )
-        
+
         if ai_analysis.get("status") == "error":
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=ai_analysis.get("message", "Failed to analyze labor efficiency")
+                detail=ai_analysis.get("message", "Failed to analyze labor efficiency"),
             )
-        
+
         # Get revenue forecast for next day to optimize schedule
         forecast_data = {}
         try:
             # Get recent 14-day trend for forecasting
             forecast_start = analysis_dt - timedelta(days=14)
-            forecast_stmt = select(
-                func.date(Sale.timestamp).label('sale_date'),
-                func.sum(Sale.total_amount).label('daily_revenue')
-            ).where(
-                and_(
-                    Sale.tenant_id == current_user.tenant_id,
-                    Sale.timestamp >= forecast_start,
-                    Sale.timestamp <= analysis_dt
+            forecast_stmt = (
+                select(
+                    utc_date(Sale.timestamp).label("sale_date"),
+                    func.sum(Sale.total_amount).label("daily_revenue"),
                 )
-            ).group_by(
-                func.date(Sale.timestamp)
+                .where(
+                    and_(
+                        Sale.tenant_id == current_user.tenant_id,
+                        Sale.timestamp >= forecast_start,
+                        Sale.timestamp < analysis_dt,
+                    )
+                )
+                .group_by(utc_date(Sale.timestamp))
             )
-            
+
+            forecast_stmt = forecast_stmt.order_by(utc_date(Sale.timestamp))
             forecast_result = await db.execute(forecast_stmt)
             forecast_rows = forecast_result.all()
-            
+
             if forecast_rows:
                 trend_data = {
                     f"day_{i}": float(row.daily_revenue or 0)
@@ -1451,95 +1409,105 @@ async def get_staffing_plan(
                 )
                 if forecast_result.get("status") == "success":
                     forecast_data = forecast_result.get("forecast", {})
-        except:
-            # Forecast is optional, don't fail if it errors
-            pass
-        
+        except Exception:
+            logger.exception("Optional staffing revenue forecast failed")
+
         # Generate recommended schedule
         efficiency_analysis = ai_analysis.get("efficiency_analysis", {})
         inefficient_hours = efficiency_analysis.get("inefficient_hours", [])
         burnout_risks = efficiency_analysis.get("burnout_risks", [])
-        
+
         recommended_adjustments = []
         for hour_data in hourly_data:
             hour = hour_data["hour"]
-            
+
             # Check if this hour was flagged as inefficient
             if any(ih.get("hour") == hour for ih in inefficient_hours):
-                recommended_adjustments.append({
-                    "hour": hour,
-                    "action": "REDUCE STAFF",
-                    "reason": "Labor cost exceeds optimal threshold (>30% of sales)",
-                    "suggested_reduction": 1,
-                    "estimated_savings": "$15-30/hour"
-                })
-            
+                recommended_adjustments.append(
+                    {
+                        "hour": hour,
+                        "action": "REDUCE STAFF",
+                        "reason": "Labor cost exceeds optimal threshold (>30% of sales)",
+                        "suggested_reduction": 1,
+                        "estimated_savings": "$15-30/hour",
+                    }
+                )
+
             # Check if this hour has burnout risk
             elif any(br.get("hour") == hour for br in burnout_risks):
-                recommended_adjustments.append({
-                    "hour": hour,
-                    "action": "ADD STAFF",
-                    "reason": "High sales with low staffing creates burnout risk",
-                    "suggested_addition": 1,
-                    "estimated_revenue_protection": "$50-100/hour"
-                })
-        
+                recommended_adjustments.append(
+                    {
+                        "hour": hour,
+                        "action": "ADD STAFF",
+                        "reason": "High sales with low staffing creates burnout risk",
+                        "suggested_addition": 1,
+                        "estimated_revenue_protection": "$50-100/hour",
+                    }
+                )
+
         return {
             "status": "success",
             "tenant_id": current_user.tenant_id,
             "analysis_period": {
                 "date": analysis_dt.strftime("%Y-%m-%d"),
                 "day_of_week": analysis_dt.strftime("%A"),
-                "generated_at": datetime.now(timezone.utc).isoformat()
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             },
             "metrics": {
                 "total_daily_sales": float(total_sales),
                 "total_daily_labor": float(total_labor),
                 "labor_as_percent_of_sales": (
                     (float(total_labor) / float(total_sales) * 100)
-                    if total_sales > 0 else 0
+                    if total_sales > 0
+                    else 0
                 ),
-                "staff_scheduled": len(set(s.staff_id for s in shifts)),
-                "shifts_total": len(shifts),
-                "transactions": len(sales)
+                "staff_scheduled": breakdown["staff_scheduled"],
+                "shifts_total": breakdown["shifts_total"],
+                "transactions": breakdown["transactions"],
             },
             "hourly_heatmap": hourly_data,
             "efficiency": {
                 "score": efficiency_analysis.get("efficiency_score", 50),
                 "label": efficiency_analysis.get("efficiency_label", "Fair"),
                 "inefficient_hours": inefficient_hours,
-                "burnout_risk_hours": burnout_risks
+                "burnout_risk_hours": burnout_risks,
             },
             "recommendations": {
-                "immediate_actions": efficiency_analysis.get("optimization_suggestions", []),
+                "immediate_actions": efficiency_analysis.get(
+                    "optimization_suggestions", []
+                ),
                 "scheduled_adjustments": recommended_adjustments,
-                "weekly_adjustments": efficiency_analysis.get("recommended_actions", [])
+                "weekly_adjustments": efficiency_analysis.get(
+                    "recommended_actions", []
+                ),
             },
             "forecast_insights": {
                 "next_day_forecast": forecast_data,
-                "recommendation": f"Adjust staffing based on forecasted {forecast_data.get('next_day_1_revenue', 'N/A')} revenue for tomorrow"
-                if forecast_data else "Enable revenue forecasting for schedule optimization"
+                "recommendation": (
+                    f"Adjust staffing based on forecasted {forecast_data.get('next_day_1_revenue', 'N/A')} revenue for tomorrow"
+                    if forecast_data
+                    else "Enable revenue forecasting for schedule optimization"
+                ),
             },
             "message": "AI Staffing Sentinel analysis complete. Review recommendations to optimize labor costs.",
             "action_items": [
                 f"Reduce staff in {len(inefficient_hours)} overstaffed hours",
                 f"Increase staff in {len(burnout_risks)} high-demand hours",
                 "Implement recommended schedule changes",
-                "Monitor actual vs. forecasted labor efficiency"
-            ]
+                "Monitor actual vs. forecasted labor efficiency",
+            ],
         }
-    
+
     except HTTPException:
         raise
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate staffing plan: {str(e)}"
+            detail=safe_error_detail(),
         )
 
 
@@ -1547,44 +1515,44 @@ async def get_staffing_plan(
 async def get_daily_tip(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    city: Optional[str] = None
+    city: Optional[str] = None,
 ):
     """Get AI-powered daily promotion based on weather context.
-    
+
     This endpoint combines real-world environmental data (weather) with
     restaurant sales patterns to generate a specific, weather-optimized
     promotion recommendation. It answers: "What should I push TODAY?"
-    
+
     The system:
     1. Fetches current weather for the restaurant's city
     2. Retrieves recent sales trends (7-day window)
     3. Correlates weather patterns with menu item demand
     4. Uses AI to generate a targeted promotion
-    
+
     Returns a "Daily Mood" analysis that tells the owner exactly which
     menu item to promote based on TODAY'S environmental conditions.
-    
+
     Example response:
     "It's 35°C and sunny in Mumbai! Customers crave cold beverages.
      PUSH: Iced Lattes - typically 15% higher margins on hot days.
      Staffing tip: +20% beverage bar staff to handle rush."
-    
+
     Args:
         current_user: Authenticated user (injected)
         db: Database session (injected)
         city: Restaurant city for weather lookup. If not provided,
               uses restaurant's primary location from settings.
-        
+
     Returns:
         Daily promotion tip with weather context, AI recommendation,
         estimated impact, and operational suggestions
-        
+
     Raises:
         HTTPException 401: If user is not authenticated
         HTTPException 400: If city is required but not provided
         HTTPException 500: If AI analysis fails
     """
-    
+
     try:
         # Respect this tenant's AI preferences (set on the Settings page).
         prefs = await settings_service.get_ai_flags(db, current_user.tenant_id)
@@ -1616,40 +1584,44 @@ async def get_daily_tip(
 
         # Fetch current weather
         weather_data = await get_current_weather(city)
-        
+
         if weather_data.get("status") == "fallback":
             # API unavailable, but we still have sensible defaults
             weather_note = f"(Using default weather data - API unavailable)"
         else:
             weather_note = "(Real-time weather data)"
-        
+
         # Get recent sales trend (7-day window)
         sales_trend_start = datetime.now(timezone.utc) - timedelta(days=7)
-        
-        sales_stmt = select(
-            func.date(Sale.timestamp).label('sale_date'),
-            func.sum(Sale.total_amount).label('daily_revenue'),
-            func.count(Sale.id).label('transaction_count')
-        ).where(
-            and_(
-                Sale.tenant_id == current_user.tenant_id,
-                Sale.timestamp >= sales_trend_start
+
+        sales_stmt = (
+            select(
+                utc_date(Sale.timestamp).label("sale_date"),
+                func.sum(Sale.total_amount).label("daily_revenue"),
+                func.count(Sale.id).label("transaction_count"),
             )
-        ).group_by(
-            func.date(Sale.timestamp)
+            .where(
+                and_(
+                    Sale.tenant_id == current_user.tenant_id,
+                    Sale.timestamp >= sales_trend_start,
+                )
+            )
+            .group_by(utc_date(Sale.timestamp))
         )
-        
+
         sales_result = await db.execute(sales_stmt)
         sales_rows = sales_result.all()
-        
+
         if not sales_rows:
             # No sales data available
             sales_summary = {
                 "total_7day_revenue": 0,
                 "avg_daily_revenue": 0,
-                "transaction_trend": []
+                "transaction_trend": [],
             }
-            sales_note = "(No sales data available - recommendations based on weather only)"
+            sales_note = (
+                "(No sales data available - recommendations based on weather only)"
+            )
         else:
             sales_values = [float(row.daily_revenue or 0) for row in sales_rows]
             sales_summary = {
@@ -1657,24 +1629,26 @@ async def get_daily_tip(
                 "avg_daily_revenue": sum(sales_values) / len(sales_values),
                 "max_daily_revenue": max(sales_values),
                 "min_daily_revenue": min(sales_values),
-                "transaction_trend": [int(row.transaction_count or 0) for row in sales_rows],
-                "days_with_data": len(sales_rows)
+                "transaction_trend": [
+                    int(row.transaction_count or 0) for row in sales_rows
+                ],
+                "days_with_data": len(sales_rows),
             }
             sales_note = f"(Based on {len(sales_rows)}-day sales history)"
-        
+
         # Correlate weather with sales patterns
         weather_impact = await correlate_weather_with_sales(weather_data, sales_summary)
-        
+
         # Get AI consultant recommendation (using this tenant's chosen model)
         ai_agent = get_ai_consultant(ai_model)
-        
+
         # Prepare performance data for AI
         performance_data = {
             "period": "7_days",
             "metrics": sales_summary,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        
+
         # Generate weather-aware strategy (metered: enforces cap + records usage)
         strategy_result = await ai_usage_service.metered_ai_call(
             db,
@@ -1685,7 +1659,7 @@ async def get_daily_tip(
                 weather_data,
             ),
         )
-        
+
         # Extract key recommendation from the nested weather-aware strategy.
         # generate_strategy_with_weather() returns {status, strategy, ...} where
         # the AI's actual fields live under "strategy" (see the weather-aware
@@ -1728,14 +1702,15 @@ async def get_daily_tip(
             inventory_focus = [inventory_raw]
         else:
             inventory_focus = []
-        
+
         # Format confidence score
         confidence = min(
             100,
-            80 + (5 if weather_data.get("status") == "success" else 0)
-            + (5 if len(sales_rows) >= 7 else 0)
+            80
+            + (5 if weather_data.get("status") == "success" else 0)
+            + (5 if len(sales_rows) >= 7 else 0),
         )
-        
+
         return {
             "status": "success",
             "tenant_id": current_user.tenant_id,
@@ -1749,78 +1724,88 @@ async def get_daily_tip(
                 "is_rainy": weather_data.get("is_rainy"),
                 "is_hot": weather_data.get("is_hot"),
                 "is_cold": weather_data.get("is_cold"),
-                "note": weather_note
+                "note": weather_note,
             },
-            "sales_context": {
-                **sales_summary,
-                "note": sales_note
-            },
+            "sales_context": {**sales_summary, "note": sales_note},
             "daily_mood": {
                 "primary_condition": weather_data.get("condition"),
-                "customer_mood": weather_data.get("suggestion", "Moderate customer appetite"),
-                "urgency": "High" if weather_data.get("is_rainy") or weather_data.get("is_hot") else "Normal"
+                "customer_mood": weather_data.get(
+                    "suggestion", "Moderate customer appetite"
+                ),
+                "urgency": (
+                    "High"
+                    if weather_data.get("is_rainy") or weather_data.get("is_hot")
+                    else "Normal"
+                ),
             },
             "recommendation": {
                 "headline": f"🌡️ {weather_context}",
                 "action_item": promotion_item,
                 "expected_impact": {
                     "impact_percentage": impact_percentage,
-                    "impact_description": f"+{impact_percentage:.1f}% expected uplift on {promotion_item}" if promotion_item else "Monitor customer behavior"
+                    "impact_description": (
+                        f"+{impact_percentage:.1f}% expected uplift on {promotion_item}"
+                        if promotion_item
+                        else "Monitor customer behavior"
+                    ),
                 },
                 "confidence_score": confidence,
-                "reasoning": "Correlation between weather patterns and historical sales demand"
+                "reasoning": "Correlation between weather patterns and historical sales demand",
             },
             "operational_insights": {
                 "staffing": {
                     "adjustment": staffing_recommendation.get("adjustment", ""),
                     "reason": staffing_recommendation.get("reason", ""),
-                    "areas_to_focus": staffing_recommendation.get("focus_areas", [])
+                    "areas_to_focus": staffing_recommendation.get("focus_areas", []),
                 },
                 "inventory": {
                     "primary_focus": inventory_focus[0] if inventory_focus else "",
                     "items_to_stock": inventory_focus,
-                    "reason": "Weather-correlated demand surge expected"
+                    "reason": "Weather-correlated demand surge expected",
                 },
                 "menu_optimization": {
                     "featured_item": promotion_item,
                     "display_suggestion": f"Feature {promotion_item} prominently on menu/signage",
-                    "bundling_idea": f"Pair {promotion_item} with complementary items for upsell"
-                }
+                    "bundling_idea": f"Pair {promotion_item} with complementary items for upsell",
+                },
             },
             "implementation": {
                 "immediate": [
                     f"Highlight {promotion_item} in digital menu",
                     f"Adjust {staffing_recommendation.get('focus_areas', ['front-of-house'])[0]} staffing",
-                    "Increase inventory for featured items"
+                    "Increase inventory for featured items",
                 ],
                 "ongoing": [
                     "Track sales lift for this promotion",
                     "Monitor customer feedback during weather change",
-                    "Log actual vs. predicted impact for model refinement"
-                ]
+                    "Log actual vs. predicted impact for model refinement",
+                ],
             },
             "message": f"Daily Context-Aware Promotion: In {weather_data.get('condition', 'current')} weather, promote {promotion_item} to capture {impact_percentage:.1f}% estimated uplift.",
             "context_aware": True,
             "data_quality": {
-                "weather_data_source": "Real-time API" if weather_data.get("status") == "success" else "Fallback defaults",
+                "weather_data_source": (
+                    "Real-time API"
+                    if weather_data.get("status") == "success"
+                    else "Fallback defaults"
+                ),
                 "sales_data_days": len(sales_rows),
-                "model_confidence": f"{confidence}%"
-            }
+                "model_confidence": f"{confidence}%",
+            },
         }
-    
+
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate daily tip: {str(e)}"
+            detail=safe_error_detail(),
         )
 
 
 @router.get("/model-performance")
 async def get_model_performance(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     Returns model performance backtesting metrics for the authenticated tenant:
@@ -1834,53 +1819,55 @@ async def get_model_performance(
     import pandas as pd
     import numpy as np
     from fastapi import HTTPException, status
-    
+
     tenant_id = current_user.tenant_id
-    
-    # Try tenant-isolated path first, then fall back to global reports/backtest.csv only for tenant 1
+
+    # A shared sample is never a tenant performance report.
     report_path = os.path.join("reports", str(tenant_id), "backtest.csv")
-    if not os.path.exists(report_path) and tenant_id == 1:
-        report_path = os.path.join("reports", "backtest.csv")
-        
+
     if not os.path.exists(report_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No backtest data available. Run POST /ml/retrain to generate metrics."
+            detail="No backtest data available. Run POST /ml/retrain to generate metrics.",
         )
-        
+
     try:
         df = pd.read_csv(report_path)
         if df.empty:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Backtest report is empty. Run POST /ml/retrain to generate metrics."
+                detail="Backtest report is empty. Run POST /ml/retrain to generate metrics.",
             )
-            
+
         # Parse weeks
         weeks = df.to_dict(orient="records")
-        
+
         # Calculate summary statistics
         naive_mae = float(df["naive_mae"].mean())
         xgboost_mae = float(df["xgb_mae"].mean())
         xgboost_rmse = float(df["xgb_rmse"].mean())
-        
+
         xgb_maes = df["xgb_mae"].values
         mean_mae = float(np.mean(xgb_maes))
         std_mae = float(np.std(xgb_maes))
         stability_ratio = std_mae / mean_mae if mean_mae > 0 else 0.0
-        
+
         return {
             "status": "success",
             "naive_mae": round(naive_mae, 2),
             "xgboost_mae": round(xgboost_mae, 2),
             "xgboost_rmse": round(xgboost_rmse, 2),
             "stability_ratio": round(stability_ratio, 4),
-            "weeks": weeks
+            "weeks": weeks,
         }
-    except Exception as e:
+    except pd.errors.EmptyDataError:
+        raise HTTPException(
+            404, "Backtest report is empty. Run POST /ml/retrain to generate metrics."
+        ) from None
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to load performance metrics: {str(e)}"
+            detail=safe_error_detail(),
         )
-
-

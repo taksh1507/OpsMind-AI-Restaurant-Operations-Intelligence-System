@@ -8,7 +8,7 @@ import os
 import json
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select, func

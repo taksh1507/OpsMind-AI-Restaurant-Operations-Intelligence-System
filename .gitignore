@@ -1,5 +1,6 @@
 # Virtual Environments
 .venv/
+.venv-step2/
 venv/
 ENV/
 env/
@@ -63,6 +64,9 @@ htmlcov/
 *.log
 
 # Temporary files
+# Generated tenant models and reports
+models/*/
+reports/*/
 *.tmp
 .temp/
 

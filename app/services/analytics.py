@@ -4,10 +4,11 @@ Business logic for calculating restaurant performance metrics.
 Handles revenue, profit, and sales aggregation for insights.
 """
 
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Optional, Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.sql_dates import utc_date
 from sqlalchemy import select, func, and_, desc
 
 from app.models import Sale, SaleItem, MenuItem
@@ -199,7 +200,7 @@ async def calculate_daily_revenue(
     try:
         result = await session.execute(
             select(
-                func.date(Sale.timestamp).label("sale_date"),
+                utc_date(Sale.timestamp).label("sale_date"),
                 func.sum(
                     SaleItem.quantity * SaleItem.unit_price_at_sale
                 ).label("daily_revenue"),
@@ -212,15 +213,15 @@ async def calculate_daily_revenue(
                     Sale.timestamp >= start_date,
                     Sale.timestamp <= end_date
                 )
-            ).group_by(func.date(Sale.timestamp)).order_by(
-                func.date(Sale.timestamp).asc()
+            ).group_by(utc_date(Sale.timestamp)).order_by(
+                utc_date(Sale.timestamp).asc()
             )
         )
         
         daily_data = []
-        for row in result.scalars().all():
+        for row in result.all():
             daily_data.append({
-                "date": str(row.sale_date),
+                "date": row.sale_date.isoformat(),
                 "revenue": row.daily_revenue or Decimal("0.00"),
                 "transactions": row.transaction_count or 0
             })
@@ -288,6 +289,8 @@ async def get_top_selling_items(
             ).where(
                 and_(
                     SaleItem.tenant_id == tenant_id,
+                    Sale.tenant_id == tenant_id,
+                    MenuItem.tenant_id == tenant_id,
                     Sale.timestamp >= start_date,
                     Sale.timestamp <= end_date
                 )
@@ -353,7 +356,7 @@ async def get_daily_sales_trend(
     try:
         result = await session.execute(
             select(
-                func.date(Sale.timestamp).label("sale_date"),
+                utc_date(Sale.timestamp).label("sale_date"),
                 func.sum(
                     SaleItem.quantity * SaleItem.unit_price_at_sale
                 ).label("daily_revenue")
@@ -365,15 +368,15 @@ async def get_daily_sales_trend(
                     Sale.timestamp >= start_date,
                     Sale.timestamp <= end_date
                 )
-            ).group_by(func.date(Sale.timestamp)).order_by(
-                func.date(Sale.timestamp).asc()
+            ).group_by(utc_date(Sale.timestamp)).order_by(
+                utc_date(Sale.timestamp).asc()
             )
         )
         
         # Build dictionary mapping date strings to revenue floats
         trend_data = {}
         for row in result:
-            date_key = str(row.sale_date)
+            date_key = row.sale_date.isoformat()
             revenue = float(row.daily_revenue or Decimal("0.00"))
             trend_data[date_key] = revenue
         
@@ -421,7 +424,7 @@ async def get_daily_revenue_and_cost(
     try:
         result = await session.execute(
             select(
-                func.date(Sale.timestamp).label("sale_date"),
+                utc_date(Sale.timestamp).label("sale_date"),
                 func.sum(
                     SaleItem.quantity * SaleItem.unit_price_at_sale
                 ).label("daily_revenue"),
@@ -435,11 +438,13 @@ async def get_daily_revenue_and_cost(
             ).where(
                 and_(
                     SaleItem.tenant_id == tenant_id,
+                    Sale.tenant_id == tenant_id,
+                    MenuItem.tenant_id == tenant_id,
                     Sale.timestamp >= start_date,
                     Sale.timestamp <= end_date
                 )
-            ).group_by(func.date(Sale.timestamp)).order_by(
-                func.date(Sale.timestamp).asc()
+            ).group_by(utc_date(Sale.timestamp)).order_by(
+                utc_date(Sale.timestamp).asc()
             )
         )
         
@@ -447,7 +452,7 @@ async def get_daily_revenue_and_cost(
         daily_data = []
         for row in result:
             daily_data.append({
-                "date": str(row.sale_date),
+                "date": row.sale_date.isoformat(),
                 "revenue": float(row.daily_revenue or Decimal("0.00")),
                 "cost": float(row.daily_cost or Decimal("0.00"))
             })

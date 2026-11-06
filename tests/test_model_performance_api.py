@@ -6,13 +6,11 @@ and multi-tenant directory scoping.
 
 import os
 import shutil
-import json
 import pytest
 from httpx import AsyncClient, ASGITransport
-from fastapi import FastAPI, status
+from fastapi import status
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
-from decimal import Decimal
 
 from app.main import create_app
 from app.database import get_db

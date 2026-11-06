@@ -6,6 +6,7 @@ data for machine learning models.
 
 import math
 import pandas as pd
+from app.core.sql_dates import utc_date
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.sales import Sale, SaleItem
@@ -42,13 +43,13 @@ async def build_training_frame(
     # 1. Fetch aggregated daily sales per item
     stmt = (
         select(
-            func.date(Sale.timestamp).label("date"),
+            utc_date(Sale.timestamp).label("date"),
             SaleItem.menu_item_id.label("item_id"),
             func.sum(SaleItem.quantity * SaleItem.unit_price_at_sale).label("revenue")
         )
         .join(Sale, SaleItem.sale_id == Sale.id)
         .where(Sale.tenant_id == tenant_id)
-        .group_by(func.date(Sale.timestamp), SaleItem.menu_item_id)
+        .group_by(utc_date(Sale.timestamp), SaleItem.menu_item_id)
     )
     
     result = await session.execute(stmt)

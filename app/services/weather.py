@@ -10,9 +10,11 @@ This allows OpsMind AI to understand external factors:
 - Clear days → Patio seating recommendations
 """
 
+import logging as _module_logging
+_module_logger = _module_logging.getLogger(__name__)
+
 import httpx
-import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime, timedelta
 from app.core.config import Settings
 
@@ -83,10 +85,10 @@ async def get_current_weather(city: str) -> Dict[str, Any]:
             return weather_data
     
     except httpx.HTTPError as e:
-        print(f"[Weather API Error] Failed to fetch weather for {city}: {str(e)}")
+        _module_logger.info(" ".join(str(value) for value in [f"[Weather API Error] Failed to fetch weather for {city}: {str(e)}"]))
         return _create_fallback_weather(city)
     except Exception as e:
-        print(f"[Weather Service Error] {str(e)}")
+        _module_logger.info(" ".join(str(value) for value in [f"[Weather Service Error] {str(e)}"]))
         return _create_fallback_weather(city)
 
 
@@ -132,7 +134,7 @@ def _parse_weather_response(data: Dict[str, Any], city: str) -> Dict[str, Any]:
         }
     
     except Exception as e:
-        print(f"[Weather Parse Error] {str(e)}")
+        _module_logger.info(" ".join(str(value) for value in [f"[Weather Parse Error] {str(e)}"]))
         return _create_fallback_weather(city)
 
 
@@ -215,7 +217,6 @@ async def correlate_weather_with_sales(
             - inventory_recommendation: What to stock up on
     """
     
-    condition = weather_data.get("condition", "").lower()
     temperature = weather_data.get("temperature", 20)
     is_rainy = weather_data.get("is_rainy", False)
     is_hot = weather_data.get("is_hot", False)

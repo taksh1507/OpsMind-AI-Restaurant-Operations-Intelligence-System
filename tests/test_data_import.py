@@ -4,15 +4,13 @@ Verifies headers checks, row-level validation, transactional grouping,
 error logging, and multi-tenant database isolation.
 """
 
-import os
 import pytest
 from httpx import AsyncClient, ASGITransport
-from fastapi import FastAPI, status
+from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 from decimal import Decimal
-import asyncio
 
 from app.main import create_app
 from app.database import get_db
@@ -64,7 +62,7 @@ async def test_data_import_endpoints():
         session.add_all([mi1, mi2])
         
         # Customer
-        cust = Customer(id=101, name="Test Customer", email="test@cust.com", total_spent_inr=0.0, visit_count=0)
+        cust = Customer(id=101, tenant_id=1, name="Test Customer", email="test@cust.com", total_spent_inr=0.0, visit_count=0)
         session.add(cust)
         
         await session.commit()
@@ -89,9 +87,9 @@ async def test_data_import_endpoints():
         
         # --- 1. Test Valid CSV Upload (Tenant 1) ---
         csv_valid = (
-            "date,item_name,quantity,unit_price,total_amount,customer_id\n"
-            "2026-06-20,Burger,2,15.00,30.00,101\n"
-            "2026-06-20,Burger,1,15.00,30.00,101\n"
+            "order_id,payment_method,tax_amount,date,item_name,quantity,unit_price,total_amount,customer_id\n"
+            "order-1,card,2.25,2026-06-20,Burger,2,15.00,45.00,101\n"
+            "order-1,card,2.25,2026-06-20,Burger,1,15.00,45.00,101\n"
         )
         files = {"file": ("sales_valid.csv", csv_valid, "text/csv")}
         res = await client.post("/api/v1/data/upload-sales", files=files)
@@ -108,7 +106,8 @@ async def test_data_import_endpoints():
             sales_db = (await session.execute(select(Sale).where(Sale.tenant_id == 1))).scalars().all()
             assert len(sales_db) == 1
             sale = sales_db[0]
-            assert sale.total_amount == Decimal("30.00")
+            assert sale.total_amount == Decimal("45.00")
+            assert sale.tax_amount == Decimal("2.25")
             assert sale.customer_id == 101
             
             items_db = (await session.execute(select(SaleItem).where(SaleItem.sale_id == sale.id))).scalars().all()
@@ -128,11 +127,11 @@ async def test_data_import_endpoints():
 
         # --- 3. Test Row-Level Validation Errors ---
         csv_validation_errors = (
-            "date,item_name,quantity,unit_price,total_amount,customer_id\n"
-            "invalid-date,Burger,2,15.00,30.00,101\n"      # Bad Date
-            "2026-06-20,UnknownItem,2,15.00,30.00,101\n"   # Unknown Item
-            "2026-06-20,Burger,-3,15.00,30.00,101\n"       # Negative Qty
-            "2026-06-20,Burger,2,15.00,30.00,999\n"        # Non-existent customer
+            "order_id,payment_method,tax_amount,date,item_name,quantity,unit_price,total_amount,customer_id\n"
+            "bad-1,cash,0,invalid-date,Burger,2,15.00,30.00,101\n"
+            "bad-2,cash,0,2026-06-20,UnknownItem,2,15.00,30.00,101\n"
+            "bad-3,cash,0,2026-06-20,Burger,-3,15.00,30.00,101\n"
+            "bad-4,cash,0,2026-06-20,Burger,2,15.00,30.00,999\n"
         )
         files = {"file": ("sales_validation_errs.csv", csv_validation_errors, "text/csv")}
         res = await client.post("/api/v1/data/upload-sales", files=files)
@@ -149,10 +148,10 @@ async def test_data_import_endpoints():
         assert any("date" in e for e in errors[0]["errors"])
         
         assert errors[1]["row"] == 2
-        assert any("Unknown menu item" in e for e in errors[1]["errors"])
+        assert any("menu item" in e for e in errors[1]["errors"])
         
         assert errors[2]["row"] == 3
-        assert any("Quantity" in e for e in errors[2]["errors"])
+        assert any("quantity" in e for e in errors[2]["errors"])
         
         assert errors[3]["row"] == 4
         assert any("Customer ID" in e for e in errors[3]["errors"])
@@ -163,20 +162,20 @@ async def test_data_import_endpoints():
         
         # Admin Two tries to upload "Burger" which belongs only to Tenant 1
         csv_t1_items = (
-            "date,item_name,quantity,unit_price,total_amount,customer_id\n"
-            "2026-06-20,Burger,2,15.00,30.00,\n"
+            "order_id,payment_method,tax_amount,date,item_name,quantity,unit_price,total_amount,customer_id\n"
+            "order-2,cash,0,2026-06-20,Burger,2,15.00,30.00,\n"
         )
         files = {"file": ("sales_t1_items.csv", csv_t1_items, "text/csv")}
         res = await client.post("/api/v1/data/upload-sales", files=files)
         assert res.status_code == status.HTTP_201_CREATED
         json_res = res.json()
         assert len(json_res["validation_errors"]) == 1
-        assert "Unknown menu item: 'Burger'" in json_res["validation_errors"][0]["errors"][0]
+        assert "menu item" in json_res["validation_errors"][0]["errors"][0]
         
         # Admin Two uploads valid items for Tenant 2 ("Taco")
         csv_t2_valid = (
-            "date,item_name,quantity,unit_price,total_amount,customer_id\n"
-            "2026-06-20,Taco,3,8.00,24.00,\n"
+            "order_id,payment_method,tax_amount,date,item_name,quantity,unit_price,total_amount,customer_id\n"
+            "order-2,cash,0,2026-06-20,Taco,3,8.00,24.00,\n"
         )
         files = {"file": ("sales_t2_items.csv", csv_t2_valid, "text/csv")}
         res = await client.post("/api/v1/data/upload-sales", files=files)

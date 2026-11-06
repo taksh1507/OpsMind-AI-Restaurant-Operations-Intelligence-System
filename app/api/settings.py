@@ -10,6 +10,8 @@ insights run at all) are the owner's domain, consistent with the "owner controls
 staff and configuration" product model.
 """
 
+from app.core.errors import safe_error_detail
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,7 +51,7 @@ async def update_settings(
             weather_enabled=request.weather_enabled,
             default_city=request.default_city,
         )
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST, detail=safe_error_detail()
         )

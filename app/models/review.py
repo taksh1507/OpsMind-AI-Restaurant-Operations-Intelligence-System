@@ -7,7 +7,7 @@ Supports reviews from multiple sources: Google, Yelp, or in-house feedback forms
 from typing import Optional
 from decimal import Decimal
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Numeric, DateTime, func, Text
+from sqlalchemy import String, ForeignKey, Numeric, DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
