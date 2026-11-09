@@ -15,12 +15,13 @@ from app.ml.train_forecast import train_model
 
 @pytest.fixture(scope="module")
 def trained_model_path():
-    model_path = os.path.join("models", "1", "forecast_v1.pkl")
     csv_path = os.path.join("tests", "data", "kaggle_restaurant_sales.csv")
     
     # Run the training script programmatically to guarantee model file exists
-    asyncio.run(train_model(csv_path, tenant_id=1))
+    result = asyncio.run(train_model(csv_path, tenant_id=1))
     
+    assert result, "Forecast training should return results"
+    model_path = result["model_path"]
     assert os.path.exists(model_path), f"Model path {model_path} should exist after training"
     return model_path
 

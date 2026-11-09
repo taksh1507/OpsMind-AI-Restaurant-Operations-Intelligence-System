@@ -284,8 +284,10 @@ async def build_raw_dataset(session: AsyncSession = None) -> pd.DataFrame:
     return pd.DataFrame(raw_records)
 
 
-def balance_and_export(df: pd.DataFrame, output_path: str = "data/sentiment_train.csv") -> pd.DataFrame:
+def balance_and_export(df: pd.DataFrame, output_path: str = None) -> pd.DataFrame:
     """Enforces class balance and minimum row count, upsamples minority classes, and exports CSV."""
+    if output_path is None:
+        output_path = os.path.join(os.environ.get("OPSMIND_DATA_DIR", "data"), "sentiment_train.csv")
     if df.empty:
         raise ValueError("Cannot balance and export an empty DataFrame.")
         

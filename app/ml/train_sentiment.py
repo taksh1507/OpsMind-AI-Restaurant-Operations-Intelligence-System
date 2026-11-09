@@ -15,8 +15,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 
-def train_sentiment_model(csv_path: str = "data/sentiment_train.csv", model_dir: str = "models"):
+def train_sentiment_model(csv_path: str = None, model_dir: str = None):
     """Load, split, train, score, and serialize the sentiment classifier pipeline."""
+    if csv_path is None:
+        csv_path = os.path.join(os.environ.get("OPSMIND_DATA_DIR", "data"), "sentiment_train.csv")
+    if model_dir is None:
+        model_dir = os.environ.get("OPSMIND_MODELS_DIR", "models")
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"Training dataset CSV not found at: {csv_path}")
         

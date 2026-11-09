@@ -120,9 +120,9 @@ def test_forecast_service_both_paths():
             
             # --- 2. Test Model Present Path (Tenant 1) ---
             # Programmatically train XGBoost model for Tenant 1
-            await train_model(csv_path, tenant_id=1)
-            
-            model_path = os.path.join("models", "1", "forecast_v1.pkl")
+            forecast_res = await train_model(csv_path, tenant_id=1)
+            assert forecast_res, "Forecast training should return results"
+            model_path = forecast_res["model_path"]
             assert os.path.exists(model_path), "Model must exist before calling service"
             
             # Generate forecast report - should route to ml_xgb

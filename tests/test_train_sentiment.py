@@ -15,7 +15,7 @@ from app.ml.train_sentiment import train_sentiment_model
 def test_sentiment_model_training_and_inference():
     """Verify that training outputs correct holdout performance and serializes inference-ready pipeline."""
     csv_path = "data/sentiment_train.csv"
-    model_dir = "models"
+    model_dir = os.environ.get("OPSMIND_MODELS_DIR", "models")
     model_path = os.path.join(model_dir, "sentiment_v1.pkl")
     
     assert os.path.exists(csv_path), "Training dataset must exist before running tests"

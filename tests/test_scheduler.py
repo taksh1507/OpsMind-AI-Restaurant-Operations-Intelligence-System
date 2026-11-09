@@ -51,7 +51,7 @@ async def test_scheduler_lifecycle_and_retraining():
     
     # 2. Setup database and override database session factory
     test_tenant_id = 888
-    model_dir = os.path.join("models", str(test_tenant_id))
+    model_dir = os.path.join(os.environ.get("OPSMIND_MODELS_DIR", "models"), str(test_tenant_id))
     manifest_path = os.path.join(model_dir, "manifest.json")
     
     # Clean up model directory before running

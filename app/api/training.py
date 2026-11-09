@@ -76,7 +76,7 @@ async def retrain_models(
             import os
             try:
                 results_df, _, _, _ = await run_backtest(tenant_id=tenant_id, session=db, num_weeks=8)
-                report_dir = os.path.join("reports", str(tenant_id))
+                report_dir = os.path.join(os.environ.get("OPSMIND_REPORTS_DIR", "reports"), str(tenant_id))
                 os.makedirs(report_dir, exist_ok=True)
                 results_df.to_csv(os.path.join(report_dir, "backtest.csv"), index=False)
             except Exception as e_bt:

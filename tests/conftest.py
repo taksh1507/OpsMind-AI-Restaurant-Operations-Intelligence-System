@@ -5,6 +5,10 @@ persistence-focused unit tests can run without a real Postgres instance and
 without leaking state between tests.
 """
 
+import os
+import shutil
+import tempfile
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import (
@@ -19,6 +23,19 @@ from app.models.base import Base
 # Importing the models package registers every table on Base.metadata, so
 # create_all below builds the full schema (users, tenants, ai_cache, ...).
 import app.models  # noqa: F401
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolate_ml_outputs():
+    root = tempfile.mkdtemp(prefix="opsmind-ml-outputs-")
+    os.environ["OPSMIND_MODELS_DIR"] = root
+    os.environ["OPSMIND_DATA_DIR"] = root
+    os.environ["OPSMIND_REPORTS_DIR"] = root
+    yield
+    shutil.rmtree(root, ignore_errors=True)
+    os.environ.pop("OPSMIND_MODELS_DIR", None)
+    os.environ.pop("OPSMIND_DATA_DIR", None)
+    os.environ.pop("OPSMIND_REPORTS_DIR", None)
 
 
 @pytest.fixture

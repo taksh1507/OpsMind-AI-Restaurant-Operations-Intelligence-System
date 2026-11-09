@@ -23,7 +23,7 @@ from app.ml.segmentation_features import build_segmentation_features
 def train_customer_segmentation(
     df_features: pd.DataFrame,
     tenant_id: int,
-    model_dir: str = "models",
+    model_dir: str = None,
     version: int = None,
     reason: str = "manual"
 ) -> Dict[str, Any]:
@@ -32,11 +32,13 @@ def train_customer_segmentation(
     Args:
         df_features: DataFrame containing customer behavioral features
         tenant_id: The tenant identifier
-        model_dir: Base directory to save models
+        model_dir: Base directory to save models (defaults to OPSMIND_MODELS_DIR or "models")
         
     Returns:
         Dict containing training metadata
     """
+    if model_dir is None:
+        model_dir = os.environ.get("OPSMIND_MODELS_DIR", "models")
     n_samples = len(df_features)
     if n_samples < 3:
         raise ValueError(

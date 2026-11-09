@@ -9,6 +9,12 @@ import re
 import json
 from datetime import datetime, timezone
 
+def _models_root() -> str:
+    return os.environ.get("OPSMIND_MODELS_DIR", "models")
+
+def _tenant_dir(tenant_id: int) -> str:
+    return os.path.join(_models_root(), str(tenant_id))
+
 def get_next_version(tenant_id: int, model_type: str) -> int:
     """Scan the tenant's model directory and determine the next version number.
     
@@ -19,7 +25,7 @@ def get_next_version(tenant_id: int, model_type: str) -> int:
     Returns:
         int: Next version number (starts at 1)
     """
-    model_dir = os.path.join("models", str(tenant_id))
+    model_dir = _tenant_dir(tenant_id)
     if not os.path.exists(model_dir):
         return 1
         
@@ -46,7 +52,7 @@ def update_manifest(tenant_id: int, model_type: str, filename: str, reason: str 
     Returns:
         dict: The updated manifest data
     """
-    model_dir = os.path.join("models", str(tenant_id))
+    model_dir = _tenant_dir(tenant_id)
     os.makedirs(model_dir, exist_ok=True)
     manifest_path = os.path.join(model_dir, "manifest.json")
     
@@ -81,7 +87,7 @@ def get_latest_model_path(tenant_id: int, model_type: str, fallback_filename: st
     Returns:
         str: Absolute or relative path to the model file
     """
-    model_dir = os.path.join("models", str(tenant_id))
+    model_dir = _tenant_dir(tenant_id)
     manifest_path = os.path.join(model_dir, "manifest.json")
     
     if os.path.exists(manifest_path):

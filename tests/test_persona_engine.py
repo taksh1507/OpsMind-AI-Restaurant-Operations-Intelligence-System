@@ -163,8 +163,8 @@ def test_persona_engine_model_present_path():
             # Build features
             df_features = await build_segmentation_features(session, tenant_id=1, reference_date=ref_date)
             
-            # Train model in custom dir and copy segments_v1.pkl to models/1/segments_v1.pkl
-            temp_model_dir = "models"
+            # Train model in the suite's output dir (hermetic: never touches committed models/)
+            temp_model_dir = os.environ.get("OPSMIND_MODELS_DIR", "models")
             model_subpath = os.path.join(temp_model_dir, "1", "segments_v1.pkl")
             if os.path.exists(model_subpath):
                 os.remove(model_subpath)

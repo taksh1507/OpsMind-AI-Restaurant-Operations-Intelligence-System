@@ -34,7 +34,7 @@ async def test_training_and_versioning_endpoints():
     """Run integration tests for ML retraining, versioning, manifest tracking, and model serving."""
     # Test Tenant ID
     test_tenant_id = 999
-    model_dir = os.path.join("models", str(test_tenant_id))
+    model_dir = os.path.join(os.environ.get("OPSMIND_MODELS_DIR", "models"), str(test_tenant_id))
     
     # 1. Setup in-memory SQLite database
     engine = create_async_engine(

@@ -228,12 +228,12 @@ def _fit_and_save_model(
     for col, imp in sorted(zip(feature_cols, importances), key=lambda x: x[1], reverse=True):
         print(f"  {col:<28}: {imp:.4f}")
     # Serialize model using manifest_helper
-    from app.ml.manifest_helper import get_next_version, update_manifest
+    from app.ml.manifest_helper import _tenant_dir, get_next_version, update_manifest
 
     if version is None:
         version = get_next_version(tenant_id, "forecast")
 
-    model_dir = os.path.join("models", str(tenant_id))
+    model_dir = _tenant_dir(tenant_id)
     os.makedirs(model_dir, exist_ok=True)
     filename = f"forecast_v{version}.pkl"
     model_path = os.path.join(model_dir, filename)

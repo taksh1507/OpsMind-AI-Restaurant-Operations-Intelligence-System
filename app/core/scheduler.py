@@ -19,6 +19,7 @@ from app.models.tenant import Tenant
 from app.models.sales import Sale
 from app.ml.train_forecast import train_model
 from app.ml.train_segmentation import train_customer_segmentation
+from app.ml.manifest_helper import _models_root
 from app.ml.segmentation_features import build_segmentation_features
 from app.services.forecast_service import clear_forecast_model_cache
 
@@ -53,7 +54,7 @@ async def check_and_retrain_tenants() -> None:
             tenant_id = tenant.id
             
             # 2. Look up manifest.json for last_trained timestamp
-            model_dir = os.path.join("models", str(tenant_id))
+            model_dir = os.path.join(_models_root(), str(tenant_id))
             manifest_path = os.path.join(model_dir, "manifest.json")
             last_trained = None
             
@@ -99,7 +100,7 @@ async def check_and_retrain_tenants() -> None:
                         try:
                             from app.ml.backtest import run_backtest
                             results_df, _, _, _ = await run_backtest(tenant_id=tenant_id, session=session, num_weeks=8)
-                            report_dir = os.path.join("reports", str(tenant_id))
+                            report_dir = os.path.join(os.environ.get("OPSMIND_REPORTS_DIR", "reports"), str(tenant_id))
                             os.makedirs(report_dir, exist_ok=True)
                             results_df.to_csv(os.path.join(report_dir, "backtest.csv"), index=False)
                             logger.info(f"Generated backtest report for tenant {tenant_id}.")
@@ -113,7 +114,7 @@ async def check_and_retrain_tenants() -> None:
                     if not df_features.empty and len(df_features) >= 3:
                         # CPU-bound K-Means training -> offload to worker thread
                         await asyncio.to_thread(
-                            train_customer_segmentation, df_features, tenant_id, "models", None, "scheduled"
+                            train_customer_segmentation, df_features, tenant_id, _models_root(), None, "scheduled"
                         )
                         logger.info(f"Customer segmentation model retrained successfully for tenant {tenant_id}.")
                     else:

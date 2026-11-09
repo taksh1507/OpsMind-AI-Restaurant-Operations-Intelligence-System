@@ -98,7 +98,7 @@ def test_balance_and_export_upsampling():
 def test_end_to_end_sentiment_data():
     """Run build_raw_dataset and balance_and_export to verify final CSV properties."""
     async def run():
-        output_csv = "data/sentiment_train.csv"
+        output_csv = os.path.join(os.environ.get("OPSMIND_DATA_DIR", "data"), "sentiment_train.csv")
         
         # Ensure we delete prior files if any
         if os.path.exists(output_csv):
