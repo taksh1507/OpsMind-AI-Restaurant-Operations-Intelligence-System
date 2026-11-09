@@ -19,7 +19,7 @@
 OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and operators to harness data-driven intelligence for real-time operational optimization. Using a multi-tenant architecture, advanced analytics, and autonomous AI agents, we empower restaurants to:
 
 - **Tracks Operations in Real-Time** — Monitor sales, inventory, and staffing with zero latency.
-- **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Gemini provides narrative reasoning.
+- **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Anthropic Claude provides narrative reasoning.
 - **Generate AI Insights** — Intelligent recommendations for pricing, labor, and menu optimization.
 - **Forecast Revenue** — Predictive analytics for 3-day revenue forecasting.
 - **Optimize Pricing** — Simulate price changes and analyze their impact on margins.
@@ -35,7 +35,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 ### Hybrid AI Intelligence
 - **Revenue Forecaster (XGBoost):** Predicts the next 3 days of sales with confidence scores grounded in statistical trend analysis.
 - **Customer Sentiment Engine (scikit-learn):** Processes customer feedback locally using TF-IDF and Logistic Regression.
-- **Strategy Agent (Gemini 2.0 Flash):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
+- **Strategy Agent (Anthropic Claude):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
 
 ### "The Pass" Design System
 - **Enterprise-Grade Dashboard:** Next.js frontend featuring the custom "The Pass" design aesthetic.
@@ -51,7 +51,7 @@ OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and op
 | **Backend** | FastAPI (Python) | Async, type-safe, auto-generated OpenAPI documentation |
 | **Database** | PostgreSQL / SQLite | SQLAlchemy 2.0 ORM with async connection pooling (`asyncpg`) |
 | **Auth** | JWT | Secure access token + refresh token pattern |
-| **AI Engine** | XGBoost, scikit-learn, Gemini | ML for forecasting/segmentation, Gemini for strategy narrative |
+| **AI Engine** | XGBoost, scikit-learn, Anthropic Claude | ML for forecasting/segmentation, Claude for strategy narrative |
 | **Frontend** | Next.js 16, React 19 | App Router, Server Components, TypeScript |
 | **Styling** | Tailwind CSS | Utility-first CSS with a custom dynamic theme |
 | **Data Fetching**| Axios + SWR | Authenticated HTTP client with intelligent client-side caching |
@@ -77,7 +77,7 @@ graph TB
     subgraph IntelligenceLayer [Intelligence Layer]
         XGB["XGBoost (Forecasting)"]
         Sklearn["scikit-learn (Sentiment)"]
-        Gemini["Google Gemini 1.5"]
+        Gemini["Anthropic Claude 3"]
     end
     
     User -->|OAuth/Request| Auth
@@ -162,7 +162,7 @@ DEBUG=True
 ENVIRONMENT=development
 
 # AI/ML APIs
-GEMINI_API_KEY=your-gemini-api-key-here
+ANTHROPIC_API_KEY=your-anthropic-api-key-here
 OPENWEATHER_API_KEY=your-openweather-api-key-here
 
 # Application
@@ -180,7 +180,7 @@ OpsMind AI features a comprehensive model backtesting pipeline that continuously
 - **Data Import:** Send historical sales records via `POST /api/v1/data/upload-sales`
 - **Model Retraining:** Trigger retraining on-demand via `POST /api/v1/ml/retrain?model_type=all`
 
-*Current Benchmark:* Forecasting MAE demonstrates a **+34.0% performance lift** over naive baseline predictions.
+*Backtest (reports/backtest.csv): XGBoost MAE beats the naive lag-7 baseline in all 8 rolling weeks.*
 
 ---
 
