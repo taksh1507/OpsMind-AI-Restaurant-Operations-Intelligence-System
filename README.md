@@ -1,169 +1,138 @@
-<div align="center">
-  <h1>OpsMind AI</h1>
-  <p><strong>Restaurant Operations Intelligence System</strong></p>
-  <p><i>Powered by Multi-Tenant SaaS Architecture & Agentic AI</i></p>
+# OpsMind AI
 
-  <div>
-    <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
-    <img src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
-    <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
-    <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-    <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
-  </div>
-</div>
+[![Backend: FastAPI](https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white)](app/main.py)
+[![Frontend: Next.js](https://img.shields.io/badge/frontend-Next.js-000000?logo=next.js&logoColor=white)](frontend)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
+[![TypeScript](https://img.shields.io/badge/typescript-5-3178C6?logo=typescript&logoColor=white)](frontend/tsconfig.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**OpsMind AI is a multi-tenant restaurant operations intelligence platform — real-time sales tracking, XGBoost revenue forecasting, customer sentiment analysis, K-Means segmentation, and Anthropic Claude strategy briefings — with strict per-tenant data isolation.**
 
 ---
 
-## Vision
+## Problem Statement
 
-OpsMind AI is a cutting-edge SaaS platform designed for restaurant owners and operators to harness data-driven intelligence for real-time operational optimization. Using a multi-tenant architecture, advanced analytics, and autonomous AI agents, we empower restaurants to:
+Restaurant operators juggle sales, inventory, staffing, and customer feedback across disconnected tools. OpsMind AI consolidates these into one multi-tenant SaaS platform where every restaurant (tenant) gets isolated data, role-based staff access, ML-driven forecasts, and AI-generated operational advice — without mixing data between customers.
 
-- **Tracks Operations in Real-Time** — Monitor sales, inventory, and staffing with zero latency.
-- **Deploy Hybrid ML + AI Core** — Local ML models (XGBoost, scikit-learn) generate hard metrics, while Anthropic Claude provides narrative reasoning.
-- **Generate AI Insights** — Intelligent recommendations for pricing, labor, and menu optimization.
-- **Forecast Revenue** — Predictive analytics for 3-day revenue forecasting.
-- **Optimize Pricing** — Simulate price changes and analyze their impact on margins.
+## Project Objectives
 
----
+1. **Multi-tenancy by design** — every table is scoped by `tenant_id`; no cross-tenant data leakage.
+2. **Hard metrics locally, narrative via AI** — XGBoost/scikit-learn generate forecasts and sentiment scores; Anthropic Claude turns them into plain-language strategy.
+3. **On-demand retraining** — versioned model artifacts with manifest tracking and rolling backtests.
+4. **Operable locally and deployable** — FastAPI backend + Next.js frontend, Docker compose, SQLite default for local dev.
 
-## Core Capabilities
+## Key Features
 
-### Enterprise Multi-Tenancy
-- **Isolated Data Architecture:** Secure JWT-based authentication ensuring complete data isolation per restaurant.
-- **Role-Based Access Control (RBAC):** Three-tier hierarchy (OWNER, MANAGER, STAFF) with strict permission guards.
+- **Multi-tenancy & RBAC** — JWT auth; three-tier roles (OWNER, MANAGER, STAFF); all queries scoped to the caller's tenant
+- **Sales tracking** — CSV upload (`POST /api/v1/data/upload-sales`) with row-level validation and transactional inserts
+- **Revenue forecasting** — XGBoost regressor predicts 3-day revenue; retrain on demand via `POST /api/v1/ml/retrain`
+- **Customer sentiment** — TF-IDF + Logistic Regression classifier on reviews, with Claude/heuristic fallback when the model is absent
+- **Customer segmentation** — K-Means clustering mapped to personas (VIP, At-Risk, Big Spender, Occasional)
+- **AI strategy briefing** — Anthropic Claude translates ML outputs into pricing/labor/menu recommendations
+- **Dashboards** — Next.js App Router UI with Recharts visualizations (revenue, top items, sentiment)
+- **Model governance** — versioned `.joblib` artifacts, `manifest.json` per tenant, rolling 8-week backtest vs. naive baseline
 
-### Hybrid AI Intelligence
-- **Revenue Forecaster (XGBoost):** Predicts the next 3 days of sales with confidence scores grounded in statistical trend analysis.
-- **Customer Sentiment Engine (scikit-learn):** Processes customer feedback locally using TF-IDF and Logistic Regression.
-- **Strategy Agent (Anthropic Claude):** Evaluates performance metrics and translates machine learning patterns into high-level business advice.
+## Technology Stack
 
-### "The Pass" Design System
-- **Enterprise-Grade Dashboard:** Next.js frontend featuring the custom "The Pass" design aesthetic.
-- **Dynamic CSS Variables:** Deep slate backgrounds, electric blue accents, and sharp ticket-style cards for a premium feel.
-- **Real-Time Data Visualization:** Dual-series AreaCharts and BarCharts built with Recharts.
+| Layer | Choice | Purpose |
+| --- | --- | --- |
+| Backend | FastAPI (Python 3.10+) | Async API, automatic OpenAPI docs |
+| Database | SQLAlchemy 2.0 async (SQLite default, PostgreSQL supported) | Multi-tenant ORM with `tenant_id` scoping |
+| Auth | JWT (access + refresh) | Stateless sessions, role guards |
+| Forecasting | XGBoost | 3-day revenue prediction |
+| Sentiment | scikit-learn TF-IDF + Logistic Regression | Review classification |
+| Segmentation | scikit-learn K-Means | Customer personas |
+| Strategy | Anthropic Claude | Narrative advice from metrics |
+| Frontend | Next.js 16, React 19, Tailwind CSS | App Router dashboard |
+| Charts | Recharts | Revenue, top items, sentiment visuals |
+| Data fetching | Axios + SWR | Authenticated client with caching |
+| Container | Docker + docker-compose.yml | Reproducible local/dev deployment |
 
----
-
-## Tech Stack
-
-| Domain | Technology | Description |
-|--------|-----------|-------------|
-| **Backend** | FastAPI (Python) | Async, type-safe, auto-generated OpenAPI documentation |
-| **Database** | PostgreSQL / SQLite | SQLAlchemy 2.0 ORM with async connection pooling (`asyncpg`) |
-| **Auth** | JWT | Secure access token + refresh token pattern |
-| **AI Engine** | XGBoost, scikit-learn, Anthropic Claude | ML for forecasting/segmentation, Claude for strategy narrative |
-| **Frontend** | Next.js 16, React 19 | App Router, Server Components, TypeScript |
-| **Styling** | Tailwind CSS | Utility-first CSS with a custom dynamic theme |
-| **Data Fetching**| Axios + SWR | Authenticated HTTP client with intelligent client-side caching |
-
----
-
-## Full-Stack Architecture Flow
+## Architecture Overview
 
 ```mermaid
-graph TB
-    User["Restaurant Owner<br/>(Web/Mobile Client)"]
-    Auth["JWT Authentication"]
-    FastAPI["FastAPI Backend"]
-    
-    subgraph CoreServices [Core Services]
-        Menu["Menu Management"]
-        Sales["Sales Tracking"]
-        Analytics["Analytics Engine"]
+flowchart TB
+    subgraph Client["Client (Next.js dashboard)"]
+        UI["React UI + Recharts"]
     end
-    
-    Database["PostgreSQL/SQLite<br/>(Multi-Tenant Data)"]
-    
-    subgraph IntelligenceLayer [Intelligence Layer]
-        XGB["XGBoost (Forecasting)"]
-        Sklearn["scikit-learn (Sentiment)"]
-        Gemini["Anthropic Claude 3"]
+
+    subgraph API["FastAPI Backend"]
+        Auth["JWT auth + RBAC guard"]
+        Routes["REST routes (/api/v1/*)"]
+        WS["WebSocket manager"]
     end
-    
-    User -->|OAuth/Request| Auth
-    Auth -->|Validated| FastAPI
-    FastAPI --> CoreServices
-    CoreServices <--> Database
-    Analytics --> IntelligenceLayer
-    IntelligenceLayer -->|Insights & Strategy| Analytics
-    Analytics -->|JSON Response| User
+
+    subgraph Services["Python services"]
+        Forecast["Forecast service (XGBoost)"]
+        Sentiment["Sentiment service (sklearn)"]
+        Persona["Persona engine (K-Means)"]
+        Strategy["AI agent briefing (Claude)"]
+    end
+
+    subgraph Models["Versioned model artifacts"]
+        XGB["models/<tenant>/forecast_vN.pkl + manifest.json"]
+        SK["models/sentiment_v1.pkl"]
+        KM["models/<tenant>/segments_vN.pkl"]
+    end
+
+    subgraph DB["Database (SQLite/PostgreSQL)"]
+        Tables["12 tables, all tenant-scoped"]
+    end
+
+    UI --> Routes
+    Routes --> Auth
+    Auth --> Routes
+    Routes --> Services
+    Services --> Models
+    Routes --> Tables
+    Services --> Tables
+    UI -.-> WS
 ```
 
----
+- **Tenant isolation:** every model/table read is scoped by `tenant_id`; the scheduler retrains per tenant only when new sales exist since `manifest.json`'s `last_trained`.
+- **Model serving:** `get_latest_model_path()` consults `manifest.json`, falls back to the pinned default (`forecast_v1.pkl`, `segments_v1.pkl`) if missing; sentiment degrades gracefully to Claude/heuristics when `sentiment_v1.pkl` is absent.
+- **Deterministic output:** NaN/Infinity metrics are coerced to `null` in retraining responses so a successful retrain never becomes a 500.
 
-## Database Schema
+## Repository Structure
 
-The system uses a robust 12-table relational schema. **All tables are strictly scoped by `tenant_id` for complete data isolation.**
-
-1. `tenants` — Restaurant organizations (parent)
-2. `users` — Staff/managers with JWT auth
-3. `categories` — Menu organization structure
-4. `menu_items` — Dishes with pricing & costs
-5. `ingredients` — Raw materials with unit costs
-6. `recipes` — Menu item ↔ Ingredient mapping
-7. `sales` — Completed transactions/bills
-8. `sale_items` — Line items within transactions
-9. `reviews` — Customer feedback & AI sentiment
-10. `staff` — Employee records & hourly rates
-11. `shifts` — Work shifts & cost calculations
-12. `recommendations` — AI suggestions with impact tracking
-
----
-
-## Getting Started
-
-### 1. Backend Setup
-
-**Prerequisites:** Python 3.10+, PostgreSQL 14+ (or SQLite3)
-
-```bash
-# Create and activate virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create database tables and seed demo data
-python scripts/seed_data.py
-
-# Start the API server
-uvicorn app.main:app --reload
+```text
+OpsMind-AI-Restaurant-Operations-Intelligence-System/
+├── app/                    # FastAPI backend
+│   ├── main.py             # App factory + route registration
+│   ├── database.py         # Async SQLAlchemy engine/session
+│   ├── api/                # REST routes (auth, sales, ml/retrain, data upload, ws, …)
+│   ├── core/               # Config, security, scheduler, rate limiting, math utils
+│   ├── ml/                 # Training pipelines (forecast, segmentation, sentiment), backtest, manifest helper
+│   ├── models/             # SQLAlchemy models (12 tables, all tenant-scoped)
+│   └── services/           # Business logic (forecast, sentiment, persona, strategy, analytics, …)
+├── frontend/               # Next.js 16 dashboard (App Router, Tailwind, Recharts)
+├── models/                 # Versioned ML artifacts + manifest.json (git-tracked checkpoints)
+├── tests/                  # 20 pytest suites (53 tests, in-memory SQLite)
+├── scripts/                # generate_sales_dataset.py, seed_data.py
+├── docs/                   # ARCHITECTURE.md, DEMO.md, deployment.md, getting-started.md, roadmap.md, security.md, features/
+├── Dockerfile / docker-compose.yml
+├── .env.example            # Copy to .env and fill in secrets (never commit .env)
+├── requirements.txt        # Pinned Python dependencies
+├── pytest.ini              # asyncio backend pinned
+└── README.md
 ```
-*Visit `http://localhost:8000/docs` for the interactive API documentation.*
 
-### 2. Frontend Setup
+## Environment Configuration
 
-**Prerequisites:** Node.js 18+
-
-```bash
-# Navigate to frontend directory
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
-```
-*Visit `http://localhost:3000` to access the Dashboard UI.*
-
-### 3. Environment Configuration
-
-Create a `.env` file in the root directory:
+Copy `.env.example` to `.env` and set at minimum:
 
 ```env
-# Database
+# Database (SQLite works out of the box; switch to PostgreSQL for production)
 DATABASE_URL=sqlite+aiosqlite:///./opsmind_demo.db
 
-# JWT Security
-SECRET_KEY=generate-a-strong-secret-key-here
+# JWT security — change these in production
+SECRET_KEY=<strong random secret>
 DEBUG=True
 ENVIRONMENT=development
 
 # AI/ML APIs
-ANTHROPIC_API_KEY=your-anthropic-api-key-here
-OPENWEATHER_API_KEY=your-openweather-api-key-here
+ANTHROPIC_API_KEY=<your-anthropic-key>   # strategy briefings; unset = heuristic fallback only
+OPENWEATHER_API_KEY=<your-openweather-key>
 
 # Application
 APP_NAME=OpsMind AI
@@ -171,50 +140,93 @@ APP_VERSION=1.0.0
 CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
 ```
 
----
+`SECRET_KEY` is required; `ANTHROPIC_API_KEY` is optional — strategy endpoints degrade to heuristic advice when unset. `.env` is gitignored and must never be committed.
 
-## Model Performance & Evaluation
+## Getting Started
 
-OpsMind AI features a comprehensive model backtesting pipeline that continuously measures the XGBoost forecaster performance against a naive baseline over a rolling 8-week window.
-
-- **Data Import:** Send historical sales records via `POST /api/v1/data/upload-sales`
-- **Model Retraining:** Trigger retraining on-demand via `POST /api/v1/ml/retrain?model_type=all`
-
-*Backtest (reports/backtest.csv): XGBoost MAE beats the naive lag-7 baseline in all 8 rolling weeks.*
-
----
-
-## Local Quality Checks
-
-Maintain high code quality with our standardized local checks:
+### Backend
 
 ```bash
-# Backend linting & formatting
-flake8 app
-black app --check
+# 1. Create virtual environment
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
 
-# Run unit & integration tests
-python -m pytest tests -v
+# 2. Install dependencies
+pip install -r requirements.txt
 
-# Frontend linting
-cd frontend && npm run lint
+# 3. Seed demo data (optional but recommended)
+python scripts/seed_data.py
+
+# 4. Start the API
+uvicorn app.main:app --reload
+# Visit http://localhost:8000/docs for the interactive OpenAPI reference
 ```
 
----
+### Frontend
 
-## License & Contributing
+```bash
+cd frontend
+npm install        # or: npm ci
+npm run dev        # http://localhost:3000
+```
 
-This project is licensed under the **MIT License** — See the [LICENSE](LICENSE) file for details.
+## ML Models & Evaluation
 
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m "feat: add amazing feature"`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+| Model | Algorithm | Purpose | Artifact |
+| --- | --- | --- | --- |
+| Revenue forecaster | XGBoost Regressor | 3-day sales forecast | `models/<tenant>/forecast_vN.pkl` |
+| Customer segmentation | K-Means | Persona clustering | `models/<tenant>/segments_vN.pkl` |
+| Sentiment classifier | TF-IDF + Logistic Regression | Review polarity | `models/sentiment_v1.pkl` |
+| Strategy reasoning | Anthropic Claude | Narrative advice | API call (no artifact) |
 
----
+Model artifacts are versioned per tenant; retraining increments the version and rewrites `manifest.json`. Old versions are retained so rollback is manual but possible.
 
-<div align="center">
-  <p>Built by <a href="https://github.com/taksh1507">Taksh Gandhi</a></p>
-  <p>Contact: taskshgandhi4@gmail.com</p>
-</div>
+**Backtest (verified against `reports/backtest.csv`):** across 8 rolling weekly windows, XGBoost MAE was below the naive lag-7 baseline in every window — no hardcoded "+34%" lift is claimed, since the CSV is the source of truth.
+
+## Testing & Verification
+
+Backend suite: **53/53 tests pass** (pytest, in-memory SQLite, asyncio pinned), covering auth cookies, RBAC, tenant isolation, sales import, forecast/service/persona/sentiment/training paths, backtest structure, scheduler lifecycle, and ML artifact loading.
+
+CI (`.github/workflows/ci.yml`): Python 3.11, `flake8 app tests --select=E9,F63,F7,F82` (clean), then `python -m pytest -q`.
+
+Frontend: `npm ci` + `npm run build` exit 0 (production build verified; `npm run lint` has pre-existing hook-dependency warnings not introduced here).
+
+Quick local checks:
+
+```bash
+# Backend
+flake8 app tests --count --select=E9,F63,F7,F82 --show-source --statistics
+python -m pytest -q
+
+# Frontend
+cd frontend && npm ci && npm run build
+```
+
+## Known Limitations
+
+1. **SQLite default** — fine for local dev/single-instance; production needs a durable PostgreSQL volume (ephemeral serverless storage will lose the DB on redeploy).
+2. **Claude optional** — strategy briefings fall back to heuristics when `ANTHROPIC_API_KEY` is unset; this is by design, not a defect.
+3. **No frontend test suite** — backend is fully tested; the Next.js dashboard has build verification but no unit/e2e tests yet.
+4. **Artifact size** — trained `.joblib` files can exceed GitHub's file limits; pinned checkpoints are committed, future heavyweights should use Git LFS or Releases.
+
+## Future Improvements
+
+- Frontend unit/integration tests (Playwright or Vitest + React Testing Library)
+- PostgreSQL migration path documented and tested
+- Scheduled retraining wired to a persistent scheduler (cron/APScheduler with a durable store)
+- Model artifact promotion gates (challenger vs. champion on backtest MAE)
+- API rate limiting backed by Redis in production (currently bounded per-process in dev)
+
+## Related Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full system design
+- [`docs/deployment.md`](docs/deployment.md) — deployment notes
+- [`docs/getting-started.md`](docs/getting-started.md) — step-by-step local setup
+- [`docs/roadmap.md`](docs/roadmap.md) — planned work
+- [`docs/security.md`](docs/security.md) — security model
+- [`docs/features/`](docs/features/) — feature specs (menu, staff, AI usage, preferences)
+
+## License
+
+Released under the [MIT License](LICENSE).
